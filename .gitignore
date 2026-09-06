@@ -30,3 +30,4 @@ storybook-static
 .config/generated/routes.ts
 
 *.local*
+.direnv/
