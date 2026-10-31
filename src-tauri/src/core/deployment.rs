@@ -114,6 +114,13 @@ pub fn plan(library: &Library) -> Result<DeploymentPlan, SError> {
                 })?;
                 if owners.len() == 1 {
                     let source = library.lib_paths.mods.join(id).join(&current_path);
+                    let target = library.deployment_target(&current_path);
+                    if methods.directory == ArtifactKind::Copy
+                        && source.is_dir()
+                        && should_expand_existing_directory(library, &target)?
+                    {
+                        continue;
+                    }
                     let kind = if source.is_dir() {
                         methods.directory
                     } else {
@@ -175,20 +182,55 @@ fn check_copy_directory_destination(library: &Library, target: &Utf8Path) -> Res
         return Ok(());
     }
 
-    let owned_prior = library
-        .deployment
-        .created_dirs
-        .contains(&target.to_path_buf())
-        || library.deployment.artifacts.iter().any(|old| {
-            old.target == target
-                && artifact_is_owned(library, old, &library.game_root.join(&old.target))
-                    .unwrap_or(false)
-        });
-    if owned_prior || legacy_repo_link(&absolute, &library.repo_root) {
+    if deployment_owns_directory(library, target)?
+        || legacy_repo_link(&absolute, &library.repo_root)
+    {
         return Ok(());
     }
 
     Err(collision(target))
+}
+
+/// Existing game directories may receive new files, but protected mod roots
+/// must retain their one-folder/one-owner collision behavior.
+fn should_expand_existing_directory(library: &Library, target: &Utf8Path) -> Result<bool, SError> {
+    let absolute = library.game_root.join(target);
+    let meta = match fs::symlink_metadata(&absolute) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if !meta.is_dir()
+        || deployment_owns_directory(library, target)?
+        || legacy_repo_link(&absolute, &library.repo_root)
+    {
+        return Ok(false);
+    }
+
+    let protected = get_protected_paths_absolute(&library.game_root, &library.game_rules);
+    Ok(!protected
+        .iter()
+        .any(|root| absolute == *root || absolute.starts_with(root)))
+}
+
+fn deployment_owns_directory(library: &Library, target: &Utf8Path) -> Result<bool, SError> {
+    if library
+        .deployment
+        .created_dirs
+        .iter()
+        .any(|path| path == target)
+    {
+        return Ok(true);
+    }
+
+    for old in &library.deployment.artifacts {
+        if old.target == target
+            && artifact_is_owned(library, old, &library.game_root.join(&old.target))?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Reconciles recorded artifacts, then creates only absent destinations.

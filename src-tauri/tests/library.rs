@@ -307,6 +307,56 @@ fn test_copy_deployment_reuses_owned_directories_and_normalizes_legacy_paths() {
 }
 
 #[test]
+fn test_copy_deployment_merges_into_existing_game_directory() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut lib = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Test Library".to_string(),
+    })
+    .unwrap();
+
+    let managed_dir = game_root.join("EscapeFromTarkov_Data/Managed");
+    fs::create_dir_all(&managed_dir).unwrap();
+    fs::write(managed_dir.join("game.dll"), "game data").unwrap();
+
+    let source = repo_root.join("dynamic_maps");
+    let rules = SPTPathRules::default();
+    let server_file = source
+        .join(&rules.server_mods)
+        .join("DynamicMaps/server.dll");
+    let managed_file = source.join("EscapeFromTarkov_Data/Managed/Unity.VectorGraphics.dll");
+    fs::create_dir_all(server_file.parent().unwrap()).unwrap();
+    fs::create_dir_all(managed_file.parent().unwrap()).unwrap();
+    fs::write(server_file, "server").unwrap();
+    fs::write(&managed_file, "mod dependency").unwrap();
+
+    let scanned = mod_fs::scan(&source, &rules).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(&mut lib, create_staged_mod_for_test(&source, scanned)).unwrap();
+    lib.mods.get_mut(&mod_id).unwrap().is_active = true;
+
+    lib.sync().unwrap();
+
+    assert_eq!(
+        fs::read_to_string(managed_dir.join("game.dll")).unwrap(),
+        "game data"
+    );
+    assert_eq!(
+        fs::read_to_string(managed_dir.join("Unity.VectorGraphics.dll")).unwrap(),
+        "mod dependency"
+    );
+    assert!(
+        !lib.deployment
+            .created_dirs
+            .iter()
+            .any(|path| path == Utf8Path::new("EscapeFromTarkov_Data"))
+    );
+
+    lib.sync().unwrap();
+}
+
+#[test]
 fn test_unowned_deployment_target_is_preserved_and_blocks_sync() {
     let (_tmp, game_root, repo_root) = setup_test_env();
     let mut lib = Library::create(LibraryCreationRequirement {
