@@ -80,9 +80,24 @@ pub fn is_protected_path_absolute(
 /// Builds the entire deployment plan and validates its destinations before any cleanup.
 pub fn plan(library: &Library) -> Result<DeploymentPlan, SError> {
     check_file_collisions(&library.mods, &library.cache)?;
-    let methods = linker::preflight(&library.repo_root, &library.game_root)?;
     let ownership = build_folder_ownership_map(&library.spt_rules, &library.mods, &library.cache);
     let mut selected = BTreeMap::new();
+    // Keep stored packages in the canonical SPT layout so the runtime cannot
+    // bypass the protected-path ownership rules or alias another mod's target.
+    if library.game_rules.server_mods != library.spt_rules.server_mods {
+        for (path, _) in iter_active_files(&library.mods, &library.cache) {
+            if path
+                .components()
+                .next()
+                .is_some_and(|component| component.as_str().eq_ignore_ascii_case("SPT_Runtime"))
+            {
+                return Err(SError::FileCollision(vec![format!(
+                    "Stored mod contains '{path}'; reimport the mod to normalize its server folder."
+                )]));
+            }
+        }
+    }
+    let methods = linker::preflight(&library.repo_root, &library.game_root)?;
 
     for (id, mod_fs) in library
         .cache
@@ -114,6 +129,7 @@ pub fn plan(library: &Library) -> Result<DeploymentPlan, SError> {
     let mut artifacts = Vec::new();
     let mut directories = BTreeSet::new();
     for (target, (source, kind)) in selected {
+        let target = library.deployment_target(&target);
         if kind == ArtifactKind::Copy && source.is_dir() {
             check_copy_directory_destination(library, &target)?;
             for entry in WalkDir::new(&source).into_iter().filter_map(Result::ok) {
@@ -190,7 +206,7 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
         }
     }
 
-    let protected = get_protected_paths_absolute(&library.game_root, &library.spt_rules);
+    let protected = get_protected_paths_absolute(&library.game_root, &library.game_rules);
     let desired_dirs: HashSet<_> = plan.directories.iter().cloned().collect();
     let mut old_dirs = old.created_dirs.clone();
     old_dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));

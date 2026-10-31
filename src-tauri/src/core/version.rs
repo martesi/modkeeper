@@ -5,9 +5,53 @@ use semver::{Version, VersionReq};
 use serde_json::Value;
 use std::fs;
 
-/// Fetches the version from the SPT registry file and validates it against supported ranges.
+/// Reads the installed server version, falling back to the registry on older installs.
 pub fn fetch_and_validate(config: &SPTPathRules) -> Result<String, SError> {
-    // Read the registry.json file
+    let deps_path = config.server_exe.with_file_name("SPT.Server.deps.json");
+    let version_number = match fs::read_to_string(&deps_path) {
+        Ok(content) => version_from_deps(&content)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            version_from_registry(config)?
+        }
+        Err(error) => {
+            return Err(SError::IOError(format!(
+                "Failed to read {deps_path}: {error}"
+            )));
+        }
+    };
+
+    let version = parse(&version_number)?;
+    validate(&version)?;
+    Ok(version.to_string())
+}
+
+fn version_from_deps(content: &str) -> Result<String, SError> {
+    let json: Value = serde_json::from_str(content)
+        .map_err(|e| SError::ParseError(format!("Failed to parse server dependencies: {e}")))?;
+    let runtime = json
+        .pointer("/runtimeTarget/name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| SError::ParseError("Server dependencies missing runtime target".into()))?;
+    let target = json
+        .get("targets")
+        .and_then(|targets| targets.get(runtime))
+        .and_then(Value::as_object)
+        .ok_or_else(|| SError::ParseError("Server dependencies missing target data".into()))?;
+    let mut versions = target
+        .keys()
+        .filter_map(|key| key.strip_prefix("SPT.Server/"));
+    let version = versions
+        .next()
+        .ok_or_else(|| SError::ParseError("Server version missing from dependencies".into()))?;
+    if versions.next().is_some() {
+        return Err(SError::ParseError(
+            "Multiple server versions in dependencies".into(),
+        ));
+    }
+    extract_version_number(version)
+}
+
+fn version_from_registry(config: &SPTPathRules) -> Result<String, SError> {
     let registry_path = &config.server_registry;
     let content = fs::read_to_string(registry_path)
         .map_err(|e| SError::IOError(format!("Failed to read registry file: {}", e)))?;
@@ -16,7 +60,7 @@ pub fn fetch_and_validate(config: &SPTPathRules) -> Result<String, SError> {
     let json: Value = serde_json::from_str(&content)
         .map_err(|e| SError::ParseError(format!("Failed to parse registry JSON: {}", e)))?;
 
-    // Look for SPT_Version or SPT_Vesion (handling potential typo)
+    // Look for SPT_Version.
     let version_str = json
         .get("SPT_Version")
         .and_then(|v| v.as_str())
@@ -26,13 +70,7 @@ pub fn fetch_and_validate(config: &SPTPathRules) -> Result<String, SError> {
 
     // Extract version number from string like "SPT 4.0.11 - 278e72"
     // Pattern: "SPT " followed by version number, then optional " - ..."
-    let version_number = extract_version_number(version_str)?;
-
-    // Parse and validate the version
-    let version = parse(&version_number)?;
-    validate(&version)?;
-
-    Ok(version.to_string())
+    extract_version_number(version_str)
 }
 
 /// Extracts version number from a string like "SPT 4.0.11 - 278e72" -> "4.0.11"

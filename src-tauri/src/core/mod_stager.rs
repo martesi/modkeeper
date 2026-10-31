@@ -1,8 +1,11 @@
 use crate::core::mod_fs::{self, ModFS};
 use crate::models::error::SError;
 use crate::models::paths::SPTPathRules;
-use crate::utils::{archive, file, process};
+#[cfg(target_os = "windows")]
+use crate::utils::process;
+use crate::utils::{archive, file};
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(target_os = "windows")]
 use sysinfo::System;
 use tracing::debug;
 use uuid::Uuid;
@@ -33,12 +36,13 @@ pub fn resolve(
     inputs
         .iter()
         .filter_map(|input| {
-            process_as_directory(input, rules, name)
+            process_as_directory(input, rules, root, name)
                 .or_else(|| process_as_archive(input, rules, root, name))
         })
         .collect()
 }
 
+#[cfg(target_os = "windows")]
 pub fn any_mod_tool_running(sys: &mut System, mods_to_install: &[StagedMod]) -> Result<(), SError> {
     let specific_paths: Vec<_> = mods_to_install
         .iter()
@@ -55,16 +59,25 @@ pub fn any_mod_tool_running(sys: &mut System, mods_to_install: &[StagedMod]) -> 
 fn process_as_directory(
     input: &Utf8PathBuf,
     rules: &SPTPathRules,
+    staging_root: &Utf8Path,
     unknown_mod_name: &str,
 ) -> Option<Result<StagedMod, SError>> {
     if !input.is_dir() {
         return None;
     }
 
+    if input.join("SPT_Runtime").exists() {
+        return Some(stage_directory(
+            input,
+            rules,
+            staging_root,
+            unknown_mod_name,
+        ));
+    }
+
     match folder_matches_game_structure(input, rules) {
         Ok(true) => Some(
-            mod_fs::scan(input, rules)
-                .map(|fs| staged_from_directory(input, fs, unknown_mod_name)),
+            mod_fs::scan(input, rules).map(|fs| staged_from_directory(input, fs, unknown_mod_name)),
         ),
         Ok(false) => match mod_fs::scan(input, rules) {
             Ok(fs) => Some(Ok(staged_from_directory(input, fs, unknown_mod_name))),
@@ -89,6 +102,7 @@ fn is_game_root_structure(inputs: &[Utf8PathBuf], rules: &SPTPathRules) -> bool 
     let roots = [
         get_root_component(&rules.server_mods),
         get_root_component(&rules.client_plugins),
+        Some("SPT_Runtime"),
     ];
 
     inputs.iter().any(|path| {
@@ -102,6 +116,7 @@ fn folder_matches_game_structure(folder: &Utf8Path, rules: &SPTPathRules) -> Res
     let roots = [
         get_root_component(&rules.server_mods),
         get_root_component(&rules.client_plugins),
+        Some("SPT_Runtime"),
     ];
 
     for entry in file::read_dir(folder)? {
@@ -136,6 +151,7 @@ fn stage_loose_files(
         file::copy_recursive(input, &dest_dir.join(name))?;
     }
 
+    normalize_server_root(&dest_dir)?;
     let fs = mod_fs::scan(&dest_dir, rules)?;
 
     Ok(StagedMod {
@@ -157,6 +173,7 @@ fn stage_archive(
     file::create_dir_all(&dest_dir)?;
 
     archive::extract(archive, &dest_dir)?;
+    normalize_server_root(&dest_dir)?;
     let fs = mod_fs::scan(&dest_dir, rules)?;
     let name = archive.file_stem().unwrap_or(unknown_mod_name).to_string();
 
@@ -166,6 +183,38 @@ fn stage_archive(
         is_staging: true,
         name,
     })
+}
+
+fn stage_directory(
+    input: &Utf8Path,
+    rules: &SPTPathRules,
+    staging_root: &Utf8Path,
+    unknown_mod_name: &str,
+) -> Result<StagedMod, SError> {
+    let dest_dir = staging_root.join(Uuid::new_v4().to_string());
+    file::copy_recursive(input, &dest_dir)?;
+    normalize_server_root(&dest_dir)?;
+    let fs = mod_fs::scan(&dest_dir, rules)?;
+    Ok(StagedMod {
+        fs,
+        source_path: dest_dir,
+        is_staging: true,
+        name: input.file_name().unwrap_or(unknown_mod_name).to_string(),
+    })
+}
+
+fn normalize_server_root(root: &Utf8Path) -> Result<(), SError> {
+    let runtime = root.join("SPT_Runtime");
+    if runtime.exists() {
+        let standard = root.join("SPT");
+        if standard.exists() {
+            return Err(SError::ParseError(
+                "Mod package contains both SPT and SPT_Runtime folders".into(),
+            ));
+        }
+        file::rename(&runtime, &standard)?;
+    }
+    Ok(())
 }
 
 fn staged_from_directory(input: &Utf8Path, fs: ModFS, unknown_mod_name: &str) -> StagedMod {

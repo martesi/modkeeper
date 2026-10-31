@@ -41,6 +41,26 @@ define_paths!(SPTPathRules {
     library_default: ".mod_keeper",
 });
 
+impl SPTPathRules {
+    /// Discover the server directory while retaining the game-root-relative paths.
+    pub fn for_game_root(base: &Utf8Path) -> Result<Self, SError> {
+        let standard = base.join("SPT/SPT.Server.exe").is_file();
+        let runtime = base.join("SPT_Runtime/SPT.Server.exe").is_file();
+        if standard && runtime {
+            return Err(SError::ParseError(
+                "Both SPT and SPT_Runtime contain a server; select an installation with only one server".into(),
+            ));
+        }
+        let mut rules = Self::default();
+        if runtime {
+            rules.server_mods = "SPT_Runtime/user/mods".into();
+            rules.server_exe = "SPT_Runtime/SPT.Server.exe".into();
+            rules.server_registry = "SPT_Runtime/user/sptRegistry/registry.json".into();
+        }
+        Ok(rules)
+    }
+}
+
 define_paths!(LibPathRules {
     backups: "backups",
     mods: "mods",

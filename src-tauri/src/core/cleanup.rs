@@ -23,7 +23,7 @@ pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
     }
 
     let protected =
-        deployment::get_protected_paths_absolute(&library.game_root, &library.spt_rules);
+        deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
     let mut directories = library.deployment.created_dirs.clone();
     directories.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     for path in directories {
@@ -48,7 +48,7 @@ pub fn purge(library: &Library) -> Result<(), SError> {
     let repo_root = dunce_canon(&library.repo_root)
         .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
         .unwrap_or_else(|_| library.repo_root.clone());
-    let roots = deployment::get_protected_paths_absolute(&library.game_root, &library.spt_rules);
+    let roots = deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
 
     for root in roots.iter().filter(|root| root.exists()) {
         for entry in WalkDir::new(root).follow_links(false) {
@@ -79,7 +79,7 @@ pub fn unlink_mod(
     shared_dirs: &HashSet<Utf8PathBuf>,
 ) -> Result<Vec<Utf8PathBuf>, SError> {
     let protected =
-        deployment::get_protected_paths_absolute(&library.game_root, &library.spt_rules);
+        deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
     let mut unlinked = Vec::new();
     let mut removed_targets = HashSet::new();
 

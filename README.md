@@ -35,7 +35,7 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 ### Known Limitations
 
 - Windows-focused (uses Windows junctions; Unix support exists but may have limitations)
-- SPT version validation requires registry file
+- SPT version validation reads the installed server metadata or its registry file
 - Single library instance active at a time (by design; may change if a strong use case emerges)
 - Link methods are selected per platform and volume; copies are used when links are unavailable
 

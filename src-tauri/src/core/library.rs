@@ -56,6 +56,7 @@ pub struct Library {
     pub repo_root: Utf8PathBuf,
     pub game_root: Utf8PathBuf,
     pub spt_rules: SPTPathRules,
+    pub game_rules: SPTPathRules,
     pub lib_paths: LibPathRules,
     pub spt_paths_canonical: SPTPathCanonical,
     pub cache: LibraryCache,
@@ -83,7 +84,8 @@ impl Library {
             file::create_dir_all(dir)?;
         }
 
-        let spt_paths = SPTPathRules::new(&requirement.game_root);
+        let game_rules = SPTPathRules::for_game_root(&requirement.game_root)?;
+        let spt_paths = game_rules.clone().to_absolute(&requirement.game_root);
         let spt_version = version::fetch_and_validate(&spt_paths)?;
 
         let inst = Self {
@@ -98,6 +100,7 @@ impl Library {
             spt_paths_canonical: SPTPathCanonical::from_spt_paths(spt_paths.clone())?,
             lib_paths,
             spt_rules: SPTPathRules::default(),
+            game_rules,
             is_dirty: false,
         };
 
@@ -113,7 +116,8 @@ impl Library {
 
         let lib_paths = LibPathRules::new(repo_root);
         let game_root = resolve_game_root(repo_root, &dto.game_root)?;
-        let spt_paths = SPTPathRules::new(&game_root);
+        let game_rules = SPTPathRules::for_game_root(&game_root)?;
+        let spt_paths = game_rules.clone().to_absolute(&game_root);
         // Validate current physical version using the game_root from the loaded library
         let spt_version = version::fetch_and_validate(&spt_paths)?;
 
@@ -137,6 +141,7 @@ impl Library {
             spt_paths_canonical: SPTPathCanonical::from_spt_paths(spt_paths.clone())?,
             game_root,
             spt_rules: SPTPathRules::default(),
+            game_rules,
             cache,
             deployment,
             lib_paths,
@@ -189,6 +194,19 @@ impl Library {
             root: self.lib_paths.staging.clone(),
             name: unknown_mod_name,
         }
+    }
+
+    /// Stored mods use SPT as their normalized server root.
+    pub(crate) fn deployment_target(&self, path: &Utf8Path) -> Utf8PathBuf {
+        if let Ok(relative) = path.strip_prefix("SPT") {
+            return self
+                .game_rules
+                .server_exe
+                .parent()
+                .unwrap_or(Utf8Path::new("SPT"))
+                .join(relative);
+        }
+        path.to_owned()
     }
 
     pub fn spt_canonical_paths(&self) -> Vec<PathBuf> {
