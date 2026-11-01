@@ -50,7 +50,7 @@ export function ModTitleCard({ mod }: { mod: ModSummary }) {
   return (
     <FidelityPanel
       className={cn(
-        'flex items-center gap-3.5 px-4 py-4 transition-[opacity,border-color]',
+        'flex items-center gap-3 px-3 py-3 transition-[opacity,border-color]',
         mod.isEnabled ? 'border-primary/20' : 'opacity-60',
       )}
     >

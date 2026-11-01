@@ -15,6 +15,7 @@ function seedMods(): ModSummary[] {
   return [
     {
       id: 'mod-sain',
+      installedAt: '2026-07-10T10:00:00Z',
       libraryId: LIBRARY_ID,
       name: 'SAIN — Solarint AI',
       type: 'server',
@@ -25,6 +26,7 @@ function seedMods(): ModSummary[] {
     },
     {
       id: 'mod-realism',
+      installedAt: '2026-07-11T10:00:00Z',
       libraryId: LIBRARY_ID,
       name: 'Realism Mod',
       type: 'both',
@@ -35,6 +37,7 @@ function seedMods(): ModSummary[] {
     },
     {
       id: 'mod-questing',
+      installedAt: '2026-07-12T10:00:00Z',
       libraryId: LIBRARY_ID,
       name: 'Questing Bots',
       type: 'server',
@@ -45,6 +48,7 @@ function seedMods(): ModSummary[] {
     },
     {
       id: 'mod-ui-fixes',
+      installedAt: '2026-07-13T10:00:00Z',
       libraryId: LIBRARY_ID,
       name: 'UI Fixes',
       type: 'client',

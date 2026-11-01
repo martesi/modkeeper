@@ -66,10 +66,12 @@ export const selectedModIdsAtom = atom<ReadonlySet<ModId>>(new Set<ModId>())
 
 export const librarySearchAtom = atom('')
 
-// Sort/filter vocabulary follows the reference toolbar (Modkeeper.dc.html): sort by name or
-// recency, filter by enabled state. ("Recently installed" from the reference has no backing
-// field — ModSummary only carries updatedAt — so recency means last updated.)
-export type LibrarySort = 'name-asc' | 'name-desc' | 'updated-desc'
+export type LibrarySort =
+  | 'name-asc'
+  | 'name-desc'
+  | 'updated-desc'
+  | 'installed-desc'
+  | 'installed-asc'
 export const librarySortAtom = atom<LibrarySort>('name-asc')
 
 export type LibraryStatusFilter = 'all' | 'enabled' | 'disabled'
@@ -88,10 +90,28 @@ export const visibleModsAtom = atom<ModSummary[]>((get) => {
     )
     .filter((mod) => search === '' || mod.name.toLowerCase().includes(search))
     .sort((a, b) => {
+      if (sort === 'installed-desc' || sort === 'installed-asc') {
+        return compareInstallationTime(a, b, sort === 'installed-desc')
+      }
       if (sort === 'updated-desc') return b.updatedAt.localeCompare(a.updatedAt)
       return sort === 'name-asc' ? compareByName(a, b) : compareByName(b, a)
     })
 })
+
+function compareInstallationTime(
+  a: ModSummary,
+  b: ModSummary,
+  newestFirst: boolean,
+): number {
+  const aTime = Date.parse(a.installedAt ?? '')
+  const bTime = Date.parse(b.installedAt ?? '')
+  // Missing or unreadable legacy dates stay last in either direction.
+  if (!Number.isFinite(aTime))
+    return Number.isFinite(bTime) ? 1 : compareByName(a, b)
+  if (!Number.isFinite(bTime)) return -1
+  const difference = newestFirst ? bTime - aTime : aTime - bTime
+  return difference || compareByName(a, b)
+}
 
 /** An accepted-but-not-yet-completed fire-and-track operation. */
 export type PendingTask = { taskId: string; libraryId: LibraryId }

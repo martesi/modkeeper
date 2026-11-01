@@ -262,6 +262,7 @@ export type ModSummary = {
   isEnabled: boolean
   sourcePath?: string | null
   installedPath?: string | null
+  installedAt?: string | null
   updatedAt: string
 }
 export type ModType = 'client' | 'server' | 'both' | 'unknown'

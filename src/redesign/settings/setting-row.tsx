@@ -14,7 +14,7 @@ export function SettingRow({
   children: ReactNode
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-6 px-6 py-4">
+    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
         <p className="font-heading mb-0.5 text-[15px] font-bold text-foreground">
           {label}

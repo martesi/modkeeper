@@ -6,6 +6,7 @@ use crate::core::mod_stager::StagedMod;
 use crate::models::error::SError;
 use crate::models::mod_dto::Mod;
 use crate::utils::file;
+use crate::utils::time::{file_created_at, now_iso8601_utc};
 
 /// Adds or updates a mod in the library.
 /// Overwriting an existing mod is guarded by a transient snapshot (§7f): a
@@ -18,6 +19,12 @@ pub fn add_mod(
 ) -> Result<(), SError> {
     let mod_id = staged.fs.id.clone();
     let dst = library.lib_paths.mods.join(&mod_id);
+    // Read legacy timestamps before an overwrite can change the folder metadata.
+    let installed_at = library
+        .mods
+        .get(&mod_id)
+        .and_then(|m| m.installed_at.clone().or_else(|| file_created_at(&dst)))
+        .unwrap_or_else(now_iso8601_utc);
 
     let has_snapshot = if dst.exists() {
         mod_snapshot::take(library, &mod_id)?;
@@ -42,14 +49,16 @@ pub fn add_mod(
         .mods
         .entry(mod_id.clone())
         .and_modify(|m| {
-            // Preserve existing name when updating - only update mod_type
+            // Preserve the existing name and first installation time on updates.
             m.mod_type = staged.fs.mod_type.clone();
+            m.installed_at = Some(installed_at.clone());
         })
         .or_insert_with(|| Mod {
             id: mod_id.clone(),
             is_active: enable_on_install,
             mod_type: staged.fs.mod_type.clone(),
             name: staged.name.clone(),
+            installed_at: Some(installed_at),
         });
 
     library.cache.add(staged.fs);

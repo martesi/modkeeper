@@ -85,6 +85,8 @@ pub struct ModSummary {
     pub source_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub installed_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_at: Option<String>,
     pub updated_at: String,
 }
 

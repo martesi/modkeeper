@@ -403,6 +403,7 @@ export async function installModArchives(input: {
           isEnabled: workspace.settings.enableModsOnInstall,
           sourcePath: path,
           installedPath: null,
+          installedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })
       }

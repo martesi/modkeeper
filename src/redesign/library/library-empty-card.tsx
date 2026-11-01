@@ -22,7 +22,7 @@ export function LibraryEmptyCard({
       onClick={onClick}
       className={cn(
         'mk-glass-standard relative flex w-full max-w-[60rem] flex-col items-center gap-2',
-        'rounded-[1.25rem] border-2 border-dashed border-border bg-card px-6 py-6',
+        'rounded-[1.25rem] border-2 border-dashed border-border bg-card px-4 py-4',
         'text-center text-foreground',
         onClick &&
           'cursor-pointer outline-none transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:ring-[3px] focus-visible:ring-ring/50',

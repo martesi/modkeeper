@@ -93,6 +93,13 @@ export const libraryText = {
     t({ id: 'library.toolbar.sortNameDesc', message: 'Name (Z-A)' }),
   sortUpdatedDesc: () =>
     t({ id: 'library.toolbar.sortUpdatedDesc', message: 'Recently updated' }),
+  sortInstalledDesc: () =>
+    t({
+      id: 'library.toolbar.sortInstalledDesc',
+      message: 'Recently installed',
+    }),
+  sortInstalledAsc: () =>
+    t({ id: 'library.toolbar.sortInstalledAsc', message: 'Oldest installed' }),
   filterLabel: () =>
     t({ id: 'library.toolbar.filterLabel', message: 'Filter' }),
   filterAll: () => t({ id: 'library.toolbar.filterAll', message: 'All mods' }),

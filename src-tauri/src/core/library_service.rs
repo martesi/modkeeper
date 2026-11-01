@@ -6,6 +6,7 @@ use crate::models::error::SError;
 use crate::models::paths::LibPathRules;
 use crate::models::workspace::{ArchiveFailure, BulkModAction};
 use crate::utils::thread::with_lib_arc_mut;
+use crate::utils::time::file_created_at;
 use camino::{Utf8Path, Utf8PathBuf};
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -187,12 +188,12 @@ pub fn rebuild_library_cache(library: &mut Library) -> Result<(), SError> {
     // 1. Normalize folder names to match resolved IDs
     let result = normalize_mod_folders(&library.lib_paths.mods, &library.spt_rules, &library.mods)?;
 
-    // 2. Drop stale mod entries for renamed folders, keeping display names for step 4.
+    // 2. Drop stale mod entries, keeping their names and installation times for step 4.
     // Backups are intentionally left on disk (C8).
-    let mut old_names = std::collections::BTreeMap::new();
+    let mut old_mods = std::collections::BTreeMap::new();
     for renamed in &result.renamed {
         if let Some(old) = library.mods.remove(&renamed.old_name) {
-            old_names.insert(renamed.new_name.clone(), old.name);
+            old_mods.insert(renamed.new_name.clone(), old);
         }
     }
 
@@ -203,10 +204,13 @@ pub fn rebuild_library_cache(library: &mut Library) -> Result<(), SError> {
     for renamed in &result.renamed {
         if let Some(cached_fs) = library.cache.mods.get(&renamed.new_name) {
             // Keep the previous display name or fall back to the folder name
-            let name = old_names
-                .get(&renamed.new_name)
-                .cloned()
+            let old = old_mods.get(&renamed.new_name);
+            let name = old
+                .map(|m| m.name.clone())
                 .unwrap_or_else(|| renamed.new_name.clone());
+            let installed_at = old
+                .and_then(|m| m.installed_at.clone())
+                .or_else(|| file_created_at(&library.lib_paths.mods.join(&renamed.new_name)));
 
             library.mods.insert(
                 renamed.new_name.clone(),
@@ -215,6 +219,7 @@ pub fn rebuild_library_cache(library: &mut Library) -> Result<(), SError> {
                     is_active: renamed.was_active,
                     mod_type: cached_fs.mod_type.clone(),
                     name,
+                    installed_at,
                 },
             );
         }

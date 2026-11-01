@@ -58,6 +58,8 @@ export function ModGridToolbar() {
     { value: 'name-asc', label: libraryText.sortNameAsc() },
     { value: 'name-desc', label: libraryText.sortNameDesc() },
     { value: 'updated-desc', label: libraryText.sortUpdatedDesc() },
+    { value: 'installed-desc', label: libraryText.sortInstalledDesc() },
+    { value: 'installed-asc', label: libraryText.sortInstalledAsc() },
   ]
   const filterOptions: { value: LibraryStatusFilter; label: string }[] = [
     { value: 'all', label: libraryText.filterAll() },
@@ -71,7 +73,7 @@ export function ModGridToolbar() {
     filterOptions.find((option) => option.value === statusFilter)?.label ?? ''
 
   return (
-    <FidelityPanel className="flex flex-wrap items-center gap-4 px-5 py-3.5">
+    <FidelityPanel className="flex flex-wrap items-center gap-3 px-3 py-2">
       <label className="flex cursor-pointer items-center gap-2 text-[13px] font-bold text-muted-foreground">
         <FidelityCheckbox
           checked={allVisibleSelected}

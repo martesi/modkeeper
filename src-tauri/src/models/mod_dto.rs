@@ -24,4 +24,7 @@ pub struct Mod {
     #[serde(rename = "type")]
     pub mod_type: ModType,
     pub name: String,
+    /// First installation into this library; absent in older manifests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_at: Option<String>,
 }

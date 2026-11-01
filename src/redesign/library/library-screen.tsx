@@ -57,7 +57,7 @@ export function LibraryScreen() {
         mods.length === 0 ? (
           <LibraryDropEmptyState />
         ) : (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             <ModGridToolbar />
             <ModGrid />
           </div>

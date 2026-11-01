@@ -1,4 +1,15 @@
+use camino::Utf8Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Best-effort installation time for mods written before timestamps were recorded.
+pub fn file_created_at(path: &Utf8Path) -> Option<String> {
+    let metadata = path.metadata().ok()?;
+    metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .ok()
+        .map(to_iso8601_utc)
+}
 
 pub fn get_unix_timestamp() -> u64 {
     SystemTime::now()

@@ -12,7 +12,7 @@ use crate::models::workspace::{
 use crate::store::AppConfigStore;
 use crate::store::app_config::{AppConfig, AppSettings, KnownLibrary};
 use crate::utils::file;
-use crate::utils::time::{now_iso8601_utc, to_iso8601_utc};
+use crate::utils::time::{file_created_at, now_iso8601_utc, to_iso8601_utc};
 use crate::utils::toml;
 use camino::{Utf8Path, Utf8PathBuf};
 use parking_lot::Mutex;
@@ -102,6 +102,10 @@ pub fn assemble_workspace(
                     is_enabled: m.is_active,
                     source_path: None,
                     installed_path: Some(installed.to_string()),
+                    installed_at: m
+                        .installed_at
+                        .clone()
+                        .or_else(|| file_created_at(&installed)),
                     updated_at: if installed.exists() {
                         mtime_iso(&installed)
                     } else {

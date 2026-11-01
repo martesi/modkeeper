@@ -19,7 +19,7 @@ export function ModGrid() {
   }
 
   return (
-    <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
       {mods.map((mod) => (
         <ModTitleCard key={mod.id} mod={mod} />
       ))}

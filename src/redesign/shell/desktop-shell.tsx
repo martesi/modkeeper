@@ -13,7 +13,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-full flex-col text-foreground">
       <AppBackground />
-      <main className="mk-scrollbar relative flex-1 overflow-y-auto px-10 pb-5 pt-3">
+      <main className="mk-scrollbar relative flex-1 overflow-y-auto px-4 py-3">
         {children}
       </main>
       <BottomNavigation />
