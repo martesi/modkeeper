@@ -2,6 +2,15 @@
 
 A modern desktop mod manager for **SPT (Single Player Tarkov)**, built with Tauri, React, and TypeScript. Modkeeper provides an intuitive interface for managing mods, handling deployment through file system links, and maintaining multiple mod library instances.
 
+## Installation and requirements
+
+Download the appropriate file from [Releases](https://github.com/martesi/modkeeper/releases/latest). Modkeeper manages an existing SPT installation; it does not install SPT or its game files.
+
+- **Windows x64 or ARM64:** Run the matching NSIS setup executable. Modkeeper uses the Microsoft Edge WebView2 Runtime; the installer can download it if it is missing, so an internet connection may be needed during setup.
+- **Linux x86-64:** Download the Linux executable, make it executable with `chmod +x Modkeeper_*_linux_x86_64`, and run it from a desktop session. The binary is built on Ubuntu 22.04 and dynamically links system libraries. On Ubuntu 22.04 or compatible Debian-based systems, install `libwebkit2gtk-4.1-0` and `libgtk-3-0` (for example, `sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0`). Other distributions need the equivalent WebKitGTK 4.1 and GTK 3 libraries and a compatible glibc. `xdg-utils` is needed to open external links. The binary does not install dependencies or create a desktop shortcut.
+
+Linux support is experimental. The game/server-running check only works on Windows, so close the game and server before deploying or changing mods on Linux.
+
 ## Purpose
 
 Modkeeper is designed to solve common problems when managing mods for SPT:
@@ -28,7 +37,7 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 - ✅ Mod documentation viewer (Markdown support)
 - ✅ Mod type detection (Client/Server/Both)
 - ✅ File collision detection
-- ✅ Process checking (prevents sync while game/server is running)
+- ✅ Process checking on Windows (prevents sync while game/server is running)
 - ✅ Internationalization support (English currently)
 - ✅ Modern UI with shadcn/ui components
 
