@@ -39,7 +39,7 @@ fn extract_zip(archive_path: &Utf8Path, destination: &Utf8Path) -> Result<(), SE
     let mut seen = HashMap::new();
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        let safe_path = validate_entry_path(&mut seen, file.name(), file.is_dir())?;
+        let safe_path = validate_entry_path(&mut seen, &file.name()?, file.is_dir())?;
         entries.push((safe_path, i));
     }
 
@@ -72,7 +72,8 @@ fn extract_zip(archive_path: &Utf8Path, destination: &Utf8Path) -> Result<(), SE
         {
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = file.unix_mode() {
-                let _ = fs::set_permissions(&output_path, fs::Permissions::from_mode(mode));
+                // Archive permissions are untrusted; preserve executable bits, never SUID/SGID.
+                fs::set_permissions(&output_path, fs::Permissions::from_mode(mode & 0o777))?;
             }
         }
     }
@@ -85,7 +86,18 @@ fn normalize_entry_path(name: &str) -> Option<PathBuf> {
     let mut path = PathBuf::new();
     for component in Path::new(&normalized).components() {
         match component {
-            Component::Normal(part) => path.push(part),
+            Component::Normal(part) => {
+                // Reject Windows stream names and aliases on every host so importing a
+                // package on Linux cannot hide a collision that occurs on Windows.
+                let part = part.to_str()?;
+                if part.contains(':')
+                    || part.ends_with(['.', ' '])
+                    || part.chars().any(char::is_control)
+                {
+                    return None;
+                }
+                path.push(part);
+            }
             Component::CurDir => {}
             Component::RootDir | Component::Prefix(_) | Component::ParentDir => return None,
         }
@@ -114,14 +126,16 @@ fn validate_entry_path(
         return Err(SError::ParseError(format!("Unsafe archive path: {name}")));
     };
 
-    let duplicate = seen.insert(safe_path.clone(), is_dir).is_some();
+    // SPT packages target Windows too, where ASCII case variants name the same file.
+    let collision_key = PathBuf::from(safe_path.to_string_lossy().to_ascii_lowercase());
+    let duplicate = seen.insert(collision_key.clone(), is_dir).is_some();
     let file_parent = seen.iter().any(|(path, existing_is_dir)| {
-        !*existing_is_dir && path != &safe_path && safe_path.starts_with(path)
+        !*existing_is_dir && path != &collision_key && collision_key.starts_with(path)
     });
     let directory_parent = !is_dir
         && seen
             .keys()
-            .any(|path| path.starts_with(&safe_path) && path != &safe_path);
+            .any(|path| path.starts_with(&collision_key) && path != &collision_key);
 
     if duplicate || file_parent || directory_parent {
         return Err(SError::ParseError(format!(
@@ -147,6 +161,71 @@ mod tests {
         assert_eq!(
             normalize_entry_path(r"BepInEx\plugins\mod.dll"),
             Some(PathBuf::from("BepInEx/plugins/mod.dll"))
+        );
+    }
+
+    #[test]
+    fn rejects_traversal_and_windows_path_aliases() {
+        for name in [
+            "../outside.dll",
+            r"..\outside.dll",
+            "/outside.dll",
+            r"C:\outside.dll",
+            "plugins/mod.dll:payload",
+            "plugins./mod.dll",
+            "plugins /mod.dll",
+            "plugins/mod\0.dll",
+        ] {
+            assert!(normalize_entry_path(name).is_none(), "accepted {name:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_case_insensitive_collisions_and_file_parents() {
+        for names in [
+            ["plugins/mod.dll", "PLUGINS/MOD.dll"],
+            ["plugins/mod.dll", "PLUGINS/mod.dll/payload"],
+            ["plugins/mod.dll/payload", "PLUGINS/mod.dll"],
+        ] {
+            let mut seen = HashMap::new();
+            validate_entry_path(&mut seen, names[0], false).unwrap();
+            assert!(validate_entry_path(&mut seen, names[1], false).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn strips_privileged_zip_permissions_and_preserves_executability() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempdir().unwrap();
+        let archive_path = temp.path().join("mods.zip");
+        let mut writer = ZipWriter::new(File::create(&archive_path).unwrap());
+        writer
+            .start_file("tool", SimpleFileOptions::default().unix_permissions(0o755))
+            .unwrap();
+        writer.write_all(b"payload").unwrap();
+        drop(writer.finish().unwrap());
+        // The ZIP writer itself strips special bits, so simulate a hostile central
+        // directory from another producer rather than relying on its safe defaults.
+        let mut bytes = fs::read(&archive_path).unwrap();
+        let central = bytes.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
+        bytes[central + 38..central + 42].copy_from_slice(&(0o106755_u32 << 16).to_le_bytes());
+        fs::write(&archive_path, bytes).unwrap();
+
+        let destination = Utf8PathBuf::from_path_buf(temp.path().join("out")).unwrap();
+        extract(
+            &Utf8PathBuf::from_path_buf(archive_path).unwrap(),
+            &destination,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::metadata(destination.join("tool"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o755
         );
     }
 

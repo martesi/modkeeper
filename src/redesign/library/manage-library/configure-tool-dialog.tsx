@@ -10,7 +10,11 @@ import {
 import { FidelityButton } from '../../shared/components/fidelity-button'
 import { FidelityInput } from '../../shared/components/fidelity-input'
 import { ToolIconGlyph } from '../tool-icon-glyph'
-import { saveTool, deleteTool, type ToolDraft } from '../../data/tools-repository'
+import {
+  saveTool,
+  deleteTool,
+  type ToolDraft,
+} from '../../data/tools-repository'
 import { libraryText } from '../../i18n/library-text'
 import { commonText } from '../../i18n/common-text'
 import type { LibraryId, ToolSummary } from '../../data/redesign-types'
@@ -72,8 +76,7 @@ function ConfigureToolForm({
     iconDataUrl: tool?.iconDataUrl ?? '',
   })
 
-  const valid =
-    draft.name.trim() !== '' && draft.executablePath.trim() !== ''
+  const valid = draft.name.trim() !== '' && draft.executablePath.trim() !== ''
 
   function set(field: keyof ToolDraft) {
     return (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -101,8 +104,8 @@ function ConfigureToolForm({
     libraryId,
     name: draft.name,
     executablePath: draft.executablePath,
-    iconDataUrl: draft.iconDataUrl.trim() || null,
-    launchArgs: draft.launchArgs.trim() || null,
+    iconDataUrl: draft.iconDataUrl.trim() || undefined,
+    launchArgs: draft.launchArgs.trim() || undefined,
     updatedAt: tool?.updatedAt ?? '',
   }
 

@@ -49,7 +49,11 @@ fn export_typescript_bindings(builder: &Builder<tauri::Wry>) {
     {
         builder
             .export(
-                Typescript::default().formatter(specta_typescript::formatter::prettier),
+                // Recent tauri-specta emits inline results; keep the public helper
+                // type used by the repository and Result-unwrapping utilities.
+                Typescript::default().with_raw(
+                    "export type Result<T, E> = { status: 'ok'; data: T } | { status: 'error'; error: E };",
+                ),
                 "../src/gen/bindings.ts",
             )
             .expect("Failed to export typescript bindings");

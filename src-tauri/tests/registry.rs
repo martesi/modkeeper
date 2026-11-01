@@ -91,7 +91,7 @@ fn test_process_guard_detects_running_process() {
 
     // The guard machinery detects a genuinely running process (this test binary)
     let current = std::env::current_exe().unwrap();
-    assert!(registry.is_running(&[current]));
+    assert!(registry.is_running(&[current]).unwrap());
 
     // With an active library whose game/server exes are dummy files (not running),
     // the GameOrServerRunning guard stays quiet
@@ -102,5 +102,26 @@ fn test_process_guard_detects_running_process() {
     })
     .unwrap();
     *registry.active_instance.lock() = Some(library);
-    assert!(!registry.is_game_or_server_running());
+    assert!(!registry.is_game_or_server_running().unwrap());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn test_process_initialization_failure_does_not_report_safe_to_deploy() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let registry = test_registry(&tmp);
+    *registry.sys.lock() = Err(sysinfo::Error::Unsupported);
+    *registry.active_instance.lock() = Some(
+        Library::create(LibraryCreationRequirement {
+            repo_root: Some(repo_root),
+            game_root,
+            name: "Lib".to_string(),
+        })
+        .unwrap(),
+    );
+
+    assert!(matches!(
+        registry.is_game_or_server_running(),
+        Err(SError::IOError(message)) if message.contains("Unable to inspect running processes")
+    ));
 }

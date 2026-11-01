@@ -216,8 +216,7 @@ export async function createLibrary(input: {
         name,
         gameRoot: input.gameRoot,
         libraryRoot: input.libraryRoot ?? `${input.gameRoot}/.mod_keeper`,
-        sptVersion: null,
-        cacheStatus: { state: 'ready', message: null, lastRebuiltAt: null },
+        cacheStatus: { state: 'ready' },
         deployStale: false,
         updatedAt: new Date().toISOString(),
       })
@@ -275,7 +274,7 @@ export async function deleteLibrary(input: {
       delete workspace.modsByLibraryId[input.libraryId]
       delete workspace.toolsByLibraryId[input.libraryId]
       if (workspace.activeLibraryId === input.libraryId) {
-        workspace.activeLibraryId = null
+        delete workspace.activeLibraryId
       }
     },
   )
@@ -364,7 +363,6 @@ export async function rebuildLibraryCache(
       const library = findSummary(workspace, libraryId)
       const cacheStatus = {
         state: 'ready' as const,
-        message: null,
         lastRebuiltAt: new Date().toISOString(),
       }
       if (library) library.cacheStatus = cacheStatus
@@ -402,7 +400,6 @@ export async function installModArchives(input: {
           type: 'unknown',
           isEnabled: workspace.settings.enableModsOnInstall,
           sourcePath: path,
-          installedPath: null,
           installedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })

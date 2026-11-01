@@ -49,8 +49,8 @@ export function saveTool(input: {
     const fields = {
       name: input.draft.name.trim(),
       executablePath: input.draft.executablePath.trim(),
-      launchArgs: input.draft.launchArgs.trim() || null,
-      iconDataUrl: input.draft.iconDataUrl.trim() || null,
+      launchArgs: input.draft.launchArgs.trim() || undefined,
+      iconDataUrl: input.draft.iconDataUrl.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
     const existing = input.toolId

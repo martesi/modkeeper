@@ -1,8 +1,8 @@
 use std::path::Path;
-use sysinfo::System;
+use sysinfo::{ProcessesToUpdate, System};
 
 pub fn is_running<P: AsRef<Path>>(sys: &mut System, target_paths: &[P]) -> bool {
-    sys.refresh_processes();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
 
     sys.processes()
         .values()

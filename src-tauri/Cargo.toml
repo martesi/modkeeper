@@ -28,26 +28,27 @@ tauri-build = { version = "2", features = [] }
 tempfile = "3"
 
 [dependencies]
-tauri = { version = "2.0", features = [] }
+tauri = { version = "2.12", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-specta = "=2.0.0-rc.22"
-specta-typescript = "0.0.9"
-tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+# Keep these aligned with tauri-specta's exact prerelease dependencies.
+specta = "=2.0.0-rc.26"
+specta-typescript = "0.0.13"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
 directories = "6.0.0"
-camino = { version = "1.2.2", features = ["serde1"] }
+camino = { version = "1.2.6", features = ["serde1"] }
 
-toml = "0.7"
+toml = "1.1"
 walkdir = "2"
-regex = "1.10"
-uuid = { version = "1.19.0", features = ["v4"] }
-semver = "1.0.27"
+regex = "1.13"
+uuid = { version = "1.29.0", features = ["v4"] }
+semver = "1.0.28"
 
 dunce = "1.0.5"
-parking_lot = "0.12.5"
-zip = "7.0.0"
-sevenz-rust2 = { version = "0.21.5", default-features = false, features = [
+parking_lot = "0.13.0"
+zip = "9.2.1"
+sevenz-rust2 = { version = "0.24.2", default-features = false, features = [
     "aes256",
     "brotli",
     "bzip2",
@@ -57,21 +58,21 @@ sevenz-rust2 = { version = "0.21.5", default-features = false, features = [
     "util",
     "zstd",
 ] }
-tokio = { version = "1.49.0", features = ["macros", "time"] }
+tokio = { version = "1.54.1", features = ["macros", "time"] }
 derive_more = { version = "2.1.1", features = ["display"] }
 # The "log" feature forwards tracing events to the `log` facade (no tracing
 # subscriber is installed), so tauri-plugin-log's sinks receive them.
 tracing = { version = "0.1.44", features = ["log"] }
 tauri-plugin-dialog = "2"
-base64 = "0.22"
-blake3 = "1.5"
+base64 = "0.23"
+blake3 = "1.8"
 tauri-plugin-log = "2"
-window-vibrancy = "0.7.1"
-junction = "1.2"
+window-vibrancy = "0.8.1"
+junction = "2.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-sysinfo = "0.30"
+sysinfo = "0.40"
 
 [dev-dependencies]
 tempfile = "3"
-sevenz-rust2 = { version = "0.21.5", default-features = false, features = ["compress"] }
+sevenz-rust2 = { version = "0.24.2", default-features = false, features = ["compress"] }

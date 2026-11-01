@@ -4,21 +4,23 @@
  * The UI and repositories type against THIS module, never `@gen/bindings` directly, so the redesign
  * has one stable vocabulary even as the generated bindings churn. The generated shapes already match
  * §9 (camelCase via tauri-specta), so we re-export them here rather than redefine — a single source,
- * no drift. Names/ids are the spec's; the mapping to generated names lives only in this file.
+ * no drift. The UI consumes serialized output; deserialization types also accept legacy aliases
+ * and omitted defaults that do not describe returned state. Names/ids are the spec's; the mapping
+ * to generated names lives only in this file.
  */
 import type {
-  LibraryWorkspace,
-  LibraryEntry,
-  LibrarySummary,
+  LibraryWorkspace_Serialize as LibraryWorkspace,
+  LibraryEntry_Serialize as LibraryEntry,
+  LibrarySummary_Serialize as LibrarySummary,
   LibraryStub,
-  ModSummary,
-  ModType,
-  ToolSummary,
-  CacheStatus,
+  ModSummary_Serialize as ModSummary,
+  ModType_Serialize as ModType,
+  ToolSummary_Serialize as ToolSummary,
+  CacheStatus_Serialize as CacheStatus,
   CacheState,
-  AppSettings,
+  AppSettings_Serialize as AppSettings,
   OperationAccepted,
-  WorkspaceEvent,
+  WorkspaceEvent_Serialize as WorkspaceEvent,
   SError,
 } from '@gen/bindings'
 

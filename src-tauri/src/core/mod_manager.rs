@@ -72,6 +72,18 @@ pub fn add_mod(
 /// Always attempts to unlink regardless of active status, as library state may not be synced.
 /// Does not mark library dirty as sync status already reflects unlinked state.
 pub fn remove_mod(library: &mut Library, id: &str) -> Result<(), SError> {
+    // IDs arrive through IPC and are joined to both the mods and backup roots.
+    // Check before any cleanup, including when persisted metadata was tampered with.
+    if !library.mods.contains_key(id)
+        || id.is_empty()
+        || matches!(id, "." | "..")
+        || id.contains(['/', '\\', ':'])
+        || id.ends_with(['.', ' '])
+        || id.chars().any(char::is_control)
+    {
+        return Err(SError::ModNotFound(id.to_string()));
+    }
+
     // Get mod's ModFS from cache before removing
     let mod_fs_exists = library.cache.mods.contains_key(id);
 

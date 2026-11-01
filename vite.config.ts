@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import babel from '@rolldown/plugin-babel'
 import router from '@tanstack/router-plugin/vite'
 import autoImports from 'unplugin-auto-import/vite'
 import tailwindcss from '@tailwindcss/vite'
@@ -11,15 +12,9 @@ const host = process.env.TAURI_DEV_HOST
 export default defineConfig(() => ({
   envDir: '.config',
   plugins: [
-    react({
-      babel: {
-        plugins: [
-          '@lingui/babel-plugin-lingui-macro',
-          'babel-plugin-react-compiler',
-        ],
-      },
-    }),
-    lingui(),
+    lingui({ macroTransform: true }),
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
     autoImports({
       include: [/\.tsx?$/],
       imports: [

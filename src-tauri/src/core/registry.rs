@@ -23,15 +23,19 @@ pub struct AppRegistry {
     /// Fire-and-track tasks currently in flight, keyed by client-minted taskId (§7e).
     pub in_flight_tasks: Arc<Mutex<HashSet<String>>>,
     #[cfg(target_os = "windows")]
-    pub sys: Mutex<System>,
+    pub sys: Mutex<Result<System, sysinfo::Error>>,
     /// Tracks whether the startup command has been called (watchdog handoff, C11)
     pub init_called: Arc<AtomicBool>,
 }
 
 impl AppRegistry {
     #[cfg(target_os = "windows")]
-    pub fn is_running<P: AsRef<Path>>(&self, canonical_paths: &[P]) -> bool {
-        process::is_running(&mut self.sys.lock(), canonical_paths)
+    pub fn is_running<P: AsRef<Path>>(&self, canonical_paths: &[P]) -> Result<bool, SError> {
+        let mut system = self.sys.lock();
+        let system = system.as_mut().map_err(|error| {
+            SError::IOError(format!("Unable to inspect running processes: {error}"))
+        })?;
+        Ok(process::is_running(system, canonical_paths))
     }
 
     #[cfg(target_os = "windows")]
@@ -47,15 +51,15 @@ impl AppRegistry {
     /// executable on Linux, so treating a failed match there as "not running"
     /// would provide false confidence.
     #[cfg(target_os = "windows")]
-    pub fn is_game_or_server_running(&self) -> bool {
+    pub fn is_game_or_server_running(&self) -> Result<bool, SError> {
         self.get_canonical_spt_paths()
             .map(|v| self.is_running(&v))
-            .unwrap_or(false)
+            .unwrap_or(Ok(false))
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn is_game_or_server_running(&self) -> bool {
-        false
+    pub fn is_game_or_server_running(&self) -> Result<bool, SError> {
+        Ok(false)
     }
 
     pub fn get_stage_material(&self, unknown_mod_name: String) -> Result<StageMaterial, SError> {

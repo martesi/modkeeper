@@ -64,7 +64,7 @@ pub async fn delete_library(
     state: State<'_, AppRegistry>,
     input: DeleteLibraryInput,
 ) -> Result<LibraryWorkspace, SError> {
-    if input.delete_files && state.is_game_or_server_running() {
+    if input.delete_files && log_err(state.is_game_or_server_running())? {
         return log_err(Err(SError::GameOrServerRunning));
     }
 
@@ -132,7 +132,7 @@ pub async fn sync_mods(
     input: SyncModsInput,
 ) -> Result<OperationAccepted, SError> {
     log_err((|| {
-        if state.is_game_or_server_running() {
+        if state.is_game_or_server_running()? {
             return Err(SError::GameOrServerRunning);
         }
         state.assert_active_library(&input.library_id)?;

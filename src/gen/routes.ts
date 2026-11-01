@@ -11,28 +11,28 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './../routes/__root'
-import { Route as LibraryRouteImport } from './../routes/library'
 import { Route as IndexRouteImport } from './../routes/index'
+import { Route as LibraryRouteImport } from './../routes/library'
 import { Route as LibraryIndexRouteImport } from './../routes/library.index'
 import { Route as LibraryIdRouteImport } from './../routes/library.$id'
 
 const SettingsLazyRouteImport = createFileRoute('/settings')()
 
-const SettingsLazyRoute = SettingsLazyRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./../routes/settings.lazy').then((d) => d.Route))
-const LibraryRoute = LibraryRouteImport.update({
-  id: '/library',
-  path: '/library',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LibraryRoute = LibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsLazyRoute = SettingsLazyRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./../routes/settings.lazy').then((d) => d.Route))
 const LibraryIndexRoute = LibraryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -83,11 +83,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsLazyRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library': {
@@ -97,11 +97,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsLazyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library/': {

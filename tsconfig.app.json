@@ -9,6 +9,7 @@
       "DOM",
       "DOM.Iterable"
     ],
+    "types": ["bun"],
     "module": "ESNext",
     "skipLibCheck": true,
     /* Bundler mode */

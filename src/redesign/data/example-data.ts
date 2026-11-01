@@ -20,8 +20,6 @@ function seedMods(): ModSummary[] {
       name: 'SAIN — Solarint AI',
       type: 'server',
       isEnabled: true,
-      sourcePath: null,
-      installedPath: null,
       updatedAt: now(),
     },
     {
@@ -31,8 +29,6 @@ function seedMods(): ModSummary[] {
       name: 'Realism Mod',
       type: 'both',
       isEnabled: false,
-      sourcePath: null,
-      installedPath: null,
       updatedAt: now(),
     },
     {
@@ -42,8 +38,6 @@ function seedMods(): ModSummary[] {
       name: 'Questing Bots',
       type: 'server',
       isEnabled: true,
-      sourcePath: null,
-      installedPath: null,
       updatedAt: now(),
     },
     {
@@ -53,8 +47,6 @@ function seedMods(): ModSummary[] {
       name: 'UI Fixes',
       type: 'client',
       isEnabled: true,
-      sourcePath: null,
-      installedPath: null,
       updatedAt: now(),
     },
   ]
@@ -72,7 +64,7 @@ function seedWorkspace(): LibraryWorkspace {
         gameRoot: 'C:/SPT',
         libraryRoot: 'C:/SPT/.mod_keeper',
         sptVersion: '3.9.0',
-        cacheStatus: { state: 'ready', message: null, lastRebuiltAt: now() },
+        cacheStatus: { state: 'ready', lastRebuiltAt: now() },
         deployStale: false,
         updatedAt: now(),
       },
@@ -83,7 +75,7 @@ function seedWorkspace(): LibraryWorkspace {
         gameRoot: 'D:/SPT-testing',
         libraryRoot: 'D:/SPT-testing/.mod_keeper',
         sptVersion: '3.9.0',
-        cacheStatus: { state: 'ready', message: null, lastRebuiltAt: now() },
+        cacheStatus: { state: 'ready', lastRebuiltAt: now() },
         deployStale: false,
         updatedAt: now(),
       },
@@ -98,7 +90,6 @@ function seedWorkspace(): LibraryWorkspace {
       language: 'en-US',
       enableModsOnInstall: true,
     },
-    configWarning: null,
   }
 }
 
