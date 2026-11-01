@@ -7,7 +7,7 @@
 ### Development Guidelines
 - **Testing**: Add tests for new features, refactor existing tests after changes
 - **Code Duplication**: Check for existing logic before adding new code, prefer extraction
-- **Tooling**: Use `cargo run --bin export_types` to update frontend bindings
+- **Tooling**: Use `cargo run --bin export_types --features export-types` to update frontend bindings
 
 ### Frontend Specifics
 - Bun is used as the package manager and dev runtime

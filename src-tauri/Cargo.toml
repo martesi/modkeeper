@@ -1,6 +1,6 @@
 [package]
 name = "mod_keeper"
-version = "0.3.0"
+version = "0.3.1"
 description = "A mod manager for SPT."
 authors = ["martes"]
 edition = "2024"
@@ -15,9 +15,13 @@ default-run = "mod_keeper"
 name = "mod_keeper_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+export-types = []
+
 [[bin]]
 name = "export_types"
-path = "src/bin/export_types.rs"
+path = "tools/export_types.rs"
+required-features = ["export-types"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
