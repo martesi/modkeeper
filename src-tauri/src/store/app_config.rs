@@ -37,6 +37,7 @@ pub struct AppSettings {
     pub theme: ThemeMode,
     pub accent_color: String,
     pub language: String,
+    pub enable_mods_on_install: bool,
 }
 
 impl Default for AppSettings {
@@ -47,6 +48,7 @@ impl Default for AppSettings {
             // Must match a lingui catalog name (package.json `lingui.locales`) — the frontend
             // dynamic-imports `locales/<language>.po` from this value verbatim.
             language: "en-US".to_string(),
+            enable_mods_on_install: true,
         }
     }
 }

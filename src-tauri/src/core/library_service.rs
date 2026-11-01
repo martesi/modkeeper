@@ -126,12 +126,17 @@ pub fn install_mod_archives(
     library_id: &str,
     material: &StageMaterial,
     archive_paths: &[Utf8PathBuf],
+    enable_on_install: bool,
 ) -> Vec<ArchiveFailure> {
     let mut failures = Vec::new();
     for path in archive_paths {
-        if let Err(error) =
-            install_single_archive(instance_handle.clone(), library_id, material, path)
-        {
+        if let Err(error) = install_single_archive(
+            instance_handle.clone(),
+            library_id,
+            material,
+            path,
+            enable_on_install,
+        ) {
             failures.push(ArchiveFailure {
                 archive_path: path.to_string(),
                 error,
@@ -146,6 +151,7 @@ fn install_single_archive(
     library_id: &str,
     material: &StageMaterial,
     archive_path: &Utf8PathBuf,
+    enable_on_install: bool,
 ) -> Result<(), SError> {
     // Staging (extraction) runs outside the lock; only the install holds it.
     let staged_mods = mod_stager::resolve(std::slice::from_ref(archive_path), material)?;
@@ -156,7 +162,7 @@ fn install_single_archive(
             debug!("installing: {:?}", staged);
             let is_staging = staged.is_staging;
             let source_path = staged.source_path.clone();
-            mod_manager::add_mod(inst, staged)
+            mod_manager::add_mod(inst, staged, enable_on_install)
                 .and_then(|_| mod_stager::clean_up(is_staging, &source_path))
         })
     })?

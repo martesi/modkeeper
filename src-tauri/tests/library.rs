@@ -63,7 +63,7 @@ fn test_library_init_and_add_mod() {
     // 3. Add mod to library
     let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).expect("Failed to parse mod");
     let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
-    mod_manager::add_mod(&mut lib, staged).expect("Failed to add mod");
+    mod_manager::add_mod(&mut lib, staged, false).expect("Failed to add mod");
 
     // 4. Verify persistence (id is the hash of the server mod folder name)
     let mod_id = hash_id("mymod");
@@ -132,7 +132,7 @@ fn test_collision_detection() {
         let fs = mod_fs::scan(&p, &rules).expect("Failed to parse mod");
         let mod_id = fs.id.clone();
         let staged = create_staged_mod_for_test(&p, fs);
-        mod_manager::add_mod(&mut lib, staged).expect("Failed to add mod");
+        mod_manager::add_mod(&mut lib, staged, false).expect("Failed to add mod");
         lib.mods.get_mut(&mod_id).unwrap().is_active = true;
     };
 
@@ -191,7 +191,7 @@ fn test_recursive_linking_logic() {
         let fs = mod_fs::scan(&p, &rules).unwrap();
         let mod_id = fs.id.clone();
         let staged = create_staged_mod_for_test(&p, fs);
-        mod_manager::add_mod(lib, staged).unwrap();
+        mod_manager::add_mod(lib, staged, false).unwrap();
 
         lib.mods.get_mut(&mod_id).unwrap().is_active = true;
     };
@@ -224,7 +224,7 @@ fn test_purge_removes_deactivated_mods() {
     let fs = mod_fs::scan(&repo_root.join("src"), &rules).unwrap();
     let mod_id = fs.id.clone();
     let staged = create_staged_mod_for_test(&repo_root.join("src"), fs);
-    mod_manager::add_mod(&mut lib, staged).unwrap();
+    mod_manager::add_mod(&mut lib, staged, false).unwrap();
     lib.mods.get_mut(&mod_id).unwrap().is_active = true;
 
     // Sync
@@ -272,7 +272,12 @@ fn test_copy_deployment_reuses_owned_directories_and_normalizes_legacy_paths() {
     create_test_mod(&source, "CopyMod", true);
     let scanned = mod_fs::scan(&source, &SPTPathRules::default()).unwrap();
     let mod_id = scanned.id.clone();
-    mod_manager::add_mod(&mut lib, create_staged_mod_for_test(&source, scanned)).unwrap();
+    mod_manager::add_mod(
+        &mut lib,
+        create_staged_mod_for_test(&source, scanned),
+        false,
+    )
+    .unwrap();
     lib.mods.get_mut(&mod_id).unwrap().is_active = true;
 
     lib.sync().unwrap();
@@ -333,7 +338,12 @@ fn test_copy_deployment_merges_into_existing_game_directory() {
 
     let scanned = mod_fs::scan(&source, &rules).unwrap();
     let mod_id = scanned.id.clone();
-    mod_manager::add_mod(&mut lib, create_staged_mod_for_test(&source, scanned)).unwrap();
+    mod_manager::add_mod(
+        &mut lib,
+        create_staged_mod_for_test(&source, scanned),
+        false,
+    )
+    .unwrap();
     lib.mods.get_mut(&mod_id).unwrap().is_active = true;
 
     lib.sync().unwrap();
@@ -370,7 +380,12 @@ fn test_unowned_deployment_target_is_preserved_and_blocks_sync() {
     create_test_mod(&source, "OwnedByUser", true);
     let scanned = mod_fs::scan(&source, &SPTPathRules::default()).unwrap();
     let mod_id = scanned.id.clone();
-    mod_manager::add_mod(&mut lib, create_staged_mod_for_test(&source, scanned)).unwrap();
+    mod_manager::add_mod(
+        &mut lib,
+        create_staged_mod_for_test(&source, scanned),
+        false,
+    )
+    .unwrap();
     lib.mods.get_mut(&mod_id).unwrap().is_active = true;
 
     let target = game_root.join("SPT/user/mods/OwnedByUser");
@@ -408,7 +423,7 @@ fn test_to_dto_uses_hash_id() {
     // 2. Add mod to library
     let fs = mod_fs::scan(mod_src_utf8, &rules).unwrap();
     let staged = create_staged_mod_for_test(mod_src_utf8, fs);
-    mod_manager::add_mod(&mut lib, staged).expect("Add mod failed");
+    mod_manager::add_mod(&mut lib, staged, false).expect("Add mod failed");
 
     // 3. Check Frontend DTO: mod is keyed by the hash ID, name from the source directory
     let dto = lib.to_dto();
@@ -445,7 +460,7 @@ fn test_upgrade_success_leaves_no_snapshot() {
     // 1. Initial Add
     let fs1 = mod_fs::scan(&src, &rules).unwrap();
     let staged1 = create_staged_mod_for_test(&src, fs1);
-    mod_manager::add_mod(&mut lib, staged1).unwrap();
+    mod_manager::add_mod(&mut lib, staged1, false).unwrap();
 
     // 2. Overwrite Add
     let src2 = repo_root.join("src_v2");
@@ -460,7 +475,7 @@ fn test_upgrade_success_leaves_no_snapshot() {
 
     let fs2 = mod_fs::scan(&src2, &rules).unwrap();
     let staged2 = create_staged_mod_for_test(&src2, fs2);
-    mod_manager::add_mod(&mut lib, staged2).unwrap();
+    mod_manager::add_mod(&mut lib, staged2, false).unwrap();
 
     // 3. Upgrade landed and the transient snapshot was discarded (§7f)
     let mod_dir = lib.lib_paths.mods.join(&mod_id);
@@ -497,7 +512,7 @@ fn test_upgrade_snapshot_restores_prior_contents() {
 
     let fs1 = mod_fs::scan(&src, &rules).unwrap();
     let staged1 = create_staged_mod_for_test(&src, fs1);
-    mod_manager::add_mod(&mut lib, staged1).unwrap();
+    mod_manager::add_mod(&mut lib, staged1, false).unwrap();
 
     // Simulate a failed overwrite: snapshot taken, then the mod dir mangled
     mod_keeper_lib::core::mod_snapshot::take(&lib, &mod_id).unwrap();
@@ -559,7 +574,7 @@ fn test_untracked_file_safety_in_shared_folder() {
         let mod_id = fs.id.clone();
         let staged = create_staged_mod_for_test(&p, fs);
 
-        mod_manager::add_mod(lib, staged).unwrap();
+        mod_manager::add_mod(lib, staged, false).unwrap();
 
         // Access the mod using the actual ID generated by ModFS
         lib.mods.get_mut(&mod_id).unwrap().is_active = true;
@@ -626,7 +641,7 @@ fn test_persistence_cycle() {
 
     let mod_fs = mod_fs::scan(&src, &rules).unwrap();
     let staged = create_staged_mod_for_test(&src, mod_fs);
-    mod_manager::add_mod(&mut lib, staged).unwrap();
+    mod_manager::add_mod(&mut lib, staged, false).unwrap();
 
     let mod_id = hash_id("persistmod");
     lib.mods.get_mut(&mod_id).unwrap().is_active = true;
@@ -1147,7 +1162,7 @@ fn test_delete_library_files_removes_directory() {
         let mut instance = instance_handle.lock();
         let lib = instance.as_mut().unwrap();
         let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
-        mod_manager::add_mod(lib, staged).unwrap();
+        mod_manager::add_mod(lib, staged, false).unwrap();
         lib.mods.get_mut(&mod_id).unwrap().is_active = true;
         lib.sync().unwrap();
     }
@@ -1202,7 +1217,7 @@ fn setup_active_library_with_mod(
         let mut instance = instance_handle.lock();
         let lib = instance.as_mut().unwrap();
         let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
-        mod_manager::add_mod(lib, staged).unwrap();
+        mod_manager::add_mod(lib, staged, false).unwrap();
         // add_mod marks dirty; clear via sync so the test observes bulk_update's dirty flag
         lib.sync().unwrap();
         lib.id.clone()

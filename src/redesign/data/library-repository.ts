@@ -400,7 +400,7 @@ export async function installModArchives(input: {
           libraryId,
           name: stripSupportedArchiveExtension(fileName),
           type: 'unknown',
-          isEnabled: false,
+          isEnabled: workspace.settings.enableModsOnInstall,
           sourcePath: path,
           installedPath: null,
           updatedAt: new Date().toISOString(),

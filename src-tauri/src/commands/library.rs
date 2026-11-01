@@ -189,6 +189,12 @@ pub async fn install_mod_archives(
         Ok(material)
     })())?;
 
+    let enable_on_install = state
+        .app_config
+        .lock()
+        .config
+        .settings
+        .enable_mods_on_install;
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
     let tasks = state.in_flight_tasks.clone();
@@ -202,6 +208,7 @@ pub async fn install_mod_archives(
             &input.library_id,
             &material,
             &archives,
+            enable_on_install,
         );
         for failure in &failures {
             tracing::error!("{}: {}", failure.archive_path, failure.error);

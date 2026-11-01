@@ -10,6 +10,17 @@ export const settingsText = {
       id: 'settings.header.subtitle',
       message: 'Find and configure settings instantly.',
     }),
+  enableOnInstall: () =>
+    t({
+      id: 'settings.install.enable.label',
+      message: 'Enable mods after installation',
+    }),
+  enableOnInstallDescription: () =>
+    t({
+      id: 'settings.install.enable.description',
+      message:
+        'Newly installed mods are enabled automatically. Sync the library to deploy them.',
+    }),
   appearance: () =>
     t({ id: 'settings.appearance.label', message: 'App Theme' }),
   appearanceDescription: () =>

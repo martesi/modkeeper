@@ -48,7 +48,7 @@ fn spt_416_imports_deploys_and_removes_mods() {
         .pop()
         .unwrap();
     let id = staged.fs.id.clone();
-    mod_manager::add_mod(&mut library, staged).unwrap();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
     mod_manager::toggle_mod(&mut library, &id, true).unwrap();
     drop(library);
     let mut library = Library::load(&repo).unwrap();
@@ -75,7 +75,7 @@ fn spt_416_imports_deploys_and_removes_mods() {
         name: "unsafe".into(),
     };
     let unsafe_id = unsafe_mod.fs.id.clone();
-    mod_manager::add_mod(&mut library, unsafe_mod).unwrap();
+    mod_manager::add_mod(&mut library, unsafe_mod, false).unwrap();
     mod_manager::toggle_mod(&mut library, &unsafe_id, true).unwrap();
     assert!(matches!(library.sync(), Err(SError::FileCollision(_))));
     assert_eq!(

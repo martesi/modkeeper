@@ -140,10 +140,9 @@ export const commands = {
     }
   },
   /**
-   * Apply window vibrancy effect based on OS and theme
-   * - Windows 11: Mica effect with dark mode support
-   * - Windows 10: Acrylic effect with tint color
-   * - macOS: Vibrancy effect (follows system appearance)
+   * Apply window vibrancy effect based on OS and theme.
+   * Windows tries Mica first and falls back to Acrylic when unavailable.
+   * macOS uses the system appearance-based vibrancy material.
    */
   async applyWindowEffect(isDark: boolean | null): Promise<void> {
     await TAURI_INVOKE('apply_window_effect', { isDark })
@@ -188,6 +187,7 @@ export type AppSettings = {
   theme: ThemeMode
   accentColor: string
   language: string
+  enableModsOnInstall: boolean
 }
 export type ArchiveFailure = { archivePath: string; error: SError }
 export type BulkModAction = 'enable' | 'disable' | 'delete'

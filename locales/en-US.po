@@ -61,7 +61,7 @@ msgid "A parsing error occurred. The file may be corrupted or in an invalid form
 msgstr "A parsing error occurred. The file may be corrupted or in an invalid format."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:23
+#: src/redesign/i18n/settings-text.ts:34
 msgid "settings.accent.label"
 msgstr "Accent Color"
 
@@ -155,12 +155,12 @@ msgid "error.configSaveFailed"
 msgstr "App configuration could not be saved: {detail}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:34
+#: src/redesign/i18n/settings-text.ts:45
 msgid "settings.language.description"
 msgstr "App display language"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:14
+#: src/redesign/i18n/settings-text.ts:25
 msgid "settings.appearance.label"
 msgstr "App Theme"
 
@@ -225,11 +225,6 @@ msgstr "Backups"
 msgid "library.tools.browse"
 msgstr "Browse"
 
-#. js-lingui-explicit-id
-#: src/redesign/i18n/common-text.ts:21
-msgid "common.action.cancel"
-msgstr "Cancel"
-
 #: src/components/ui/confirm-popover.tsx:53
 #: src/modules/mod-list/close-library-dialog.tsx:46
 #: src/modules/mod-list/remove-library-dialog.tsx:47
@@ -237,6 +232,11 @@ msgstr "Cancel"
 #: src/routes/library.$id.lazy.tsx:294
 #: src/routes/library.$id.lazy.tsx:331
 msgid "Cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/common-text.ts:21
+msgid "common.action.cancel"
 msgstr "Cancel"
 
 #: src/modules/settings/theme-settings.tsx:113
@@ -340,12 +340,12 @@ msgid "Create Simulation Game Root"
 msgstr "Create Simulation Game Root"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:25
+#: src/redesign/i18n/settings-text.ts:36
 msgid "settings.accent.description"
 msgstr "Custom branding color"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:22
+#: src/redesign/i18n/settings-text.ts:33
 msgid "settings.appearance.dark"
 msgstr "Dark"
 
@@ -428,6 +428,11 @@ msgstr "Effects"
 #: src/redesign/i18n/library-text.ts:32
 msgid "library.card.enableMod"
 msgstr "Enable {name}"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/settings-text.ts:14
+msgid "settings.install.enable.label"
+msgstr "Enable mods after installation"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:113
@@ -531,7 +536,7 @@ msgid "library.manage.pathsSection"
 msgstr "Installation Paths"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:32
+#: src/redesign/i18n/settings-text.ts:43
 msgid "settings.language.label"
 msgstr "Interface Language"
 
@@ -592,7 +597,7 @@ msgid "library.manage.libraryRootLabel"
 msgstr "Library root"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:21
+#: src/redesign/i18n/settings-text.ts:32
 msgid "settings.appearance.light"
 msgstr "Light"
 
@@ -601,7 +606,7 @@ msgid "Light"
 msgstr "Light"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:16
+#: src/redesign/i18n/settings-text.ts:27
 msgid "settings.appearance.description"
 msgstr "Light, dark, or system preference"
 
@@ -679,6 +684,11 @@ msgstr "Name (A-Z)"
 #: src/redesign/i18n/library-text.ts:93
 msgid "library.toolbar.sortNameDesc"
 msgstr "Name (Z-A)"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/settings-text.ts:19
+msgid "settings.install.enable.description"
+msgstr "Newly installed mods are enabled automatically. Sync the library to deploy them."
 
 #: src/modules/mod-details/mod-detail-sidebar.tsx:209
 msgid "No backups yet"
@@ -941,7 +951,7 @@ msgid "library.status.syncing"
 msgstr "Syncing…"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:20
+#: src/redesign/i18n/settings-text.ts:31
 msgid "settings.appearance.system"
 msgstr "System"
 
@@ -1066,7 +1076,7 @@ msgid "Unsupported SPT version. Please check the supported version of this Mod M
 msgstr "Unsupported SPT version. Please check the supported version of this Mod Manager. If you think this is an error, please report the issue to the developer."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/settings-text.ts:30
+#: src/redesign/i18n/settings-text.ts:41
 msgid "settings.accent.swatch"
 msgstr "Use {name} accent"
 

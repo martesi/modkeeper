@@ -9,11 +9,13 @@ import { SettingRow } from './setting-row'
 import { ThemeModeControl } from './theme-mode-control'
 import { AccentSwatches } from './accent-swatches'
 import { LanguageSelect } from './language-select'
+import { FidelitySwitch } from '../shared/components/fidelity-switch'
 
 const FALLBACK_SETTINGS: AppSettings = {
   theme: 'system',
   accentColor: DEFAULT_ACCENT,
   language: 'en-US',
+  enableModsOnInstall: true,
 }
 
 /**
@@ -30,6 +32,20 @@ export function SettingsScreen() {
   }
 
   const rows = [
+    {
+      key: 'enable-on-install',
+      label: settingsText.enableOnInstall(),
+      description: settingsText.enableOnInstallDescription(),
+      control: (
+        <FidelitySwitch
+          aria-label={settingsText.enableOnInstall()}
+          checked={settings.enableModsOnInstall}
+          onCheckedChange={(enableModsOnInstall) =>
+            save({ enableModsOnInstall })
+          }
+        />
+      ),
+    },
     {
       key: 'theme',
       label: settingsText.appearance(),

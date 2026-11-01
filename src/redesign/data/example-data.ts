@@ -88,7 +88,12 @@ function seedWorkspace(): LibraryWorkspace {
     ],
     modsByLibraryId: { [LIBRARY_ID]: seedMods(), [SECOND_LIBRARY_ID]: [] },
     toolsByLibraryId: { [LIBRARY_ID]: [], [SECOND_LIBRARY_ID]: [] },
-    settings: { theme: 'system', accentColor: '#e91e63', language: 'en-US' },
+    settings: {
+      theme: 'system',
+      accentColor: '#e91e63',
+      language: 'en-US',
+      enableModsOnInstall: true,
+    },
     configWarning: null,
   }
 }

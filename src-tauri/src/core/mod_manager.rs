@@ -11,7 +11,11 @@ use crate::utils::file;
 /// Overwriting an existing mod is guarded by a transient snapshot (§7f): a
 /// failed overwrite restores the mod exactly as it was; a successful one
 /// leaves no snapshot behind.
-pub fn add_mod(library: &mut Library, staged: StagedMod) -> Result<(), SError> {
+pub fn add_mod(
+    library: &mut Library,
+    staged: StagedMod,
+    enable_on_install: bool,
+) -> Result<(), SError> {
     let mod_id = staged.fs.id.clone();
     let dst = library.lib_paths.mods.join(&mod_id);
 
@@ -43,7 +47,7 @@ pub fn add_mod(library: &mut Library, staged: StagedMod) -> Result<(), SError> {
         })
         .or_insert_with(|| Mod {
             id: mod_id.clone(),
-            is_active: false,
+            is_active: enable_on_install,
             mod_type: staged.fs.mod_type.clone(),
             name: staged.name.clone(),
         });
