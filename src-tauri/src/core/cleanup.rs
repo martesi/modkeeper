@@ -275,6 +275,20 @@ pub(crate) fn purge_unlocked(library: &Library) -> Result<(), SError> {
 
     let mut failures = Vec::new();
     for entry in &batch.links {
+        // Revalidate immediately before unlinking this object. The batch
+        // preflight above only proves the state at the start of the removal
+        // pass; a replacement at a later quarantine path must be preserved.
+        match verify_purge_link_at(&entry.link, &entry.path) {
+            Ok(true) => {}
+            Ok(false) => {
+                failures.push(purge_link_changed(&entry.path).to_string());
+                break;
+            }
+            Err(error) => {
+                failures.push(error.to_string());
+                break;
+            }
+        }
         if let Err(error) = linker::unlink(&entry.path) {
             failures.push(format!("'{}': {error}", entry.path));
         }
@@ -405,10 +419,21 @@ fn persist_purge_recovery(
         .write(true)
         .create_new(true)
         .open(recovery_path.as_std_path())?;
-    file.write_all(serialized.as_bytes())?;
-    file.sync_all()?;
-    if let Some(parent) = recovery_path.parent() {
-        sync_directory(parent)?;
+    let write_result = (|| {
+        file.write_all(serialized.as_bytes())?;
+        file.sync_all()?;
+        Ok::<(), SError>(())
+    })();
+    drop(file);
+    if let Err(error) = write_result {
+        let cleanup = remove_recovery_file(recovery_path);
+        return Err(with_rollback_error(error, cleanup));
+    }
+    if let Some(parent) = recovery_path.parent()
+        && let Err(error) = sync_directory(parent)
+    {
+        let cleanup = remove_recovery_file(recovery_path);
+        return Err(with_rollback_error(error, cleanup));
     }
     Ok(token)
 }
@@ -460,6 +485,10 @@ fn clear_purge_recovery(
             "the recovery manifest is owned by another purge operation",
         ));
     }
+    remove_recovery_file(recovery_path)
+}
+
+fn remove_recovery_file(recovery_path: &Utf8Path) -> Result<(), SError> {
     match fs::remove_file(recovery_path) {
         Ok(()) => {
             if let Some(parent) = recovery_path.parent() {

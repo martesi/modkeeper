@@ -2242,6 +2242,48 @@ fn test_delete_library_files_removes_directory() {
 }
 
 #[test]
+fn deleting_a_library_keeps_files_when_config_save_fails() {
+    let (tmp, game_root, _repo_root) = setup_test_env();
+    let (config_handle, instance_handle) = test_handles(&tmp);
+
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: Some("Config failure library".to_string()),
+        },
+    )
+    .unwrap();
+    let library_id = instance_handle.lock().as_ref().unwrap().id.clone();
+    let library_root = game_root.join(".mod_keeper");
+    let blocked_config_path = tmp.path().join("blocked-config");
+    fs::create_dir(&blocked_config_path).unwrap();
+    config_handle.lock().path = Utf8PathBuf::from_path_buf(blocked_config_path).unwrap();
+
+    let result =
+        global_service::delete_library_files(&config_handle, &instance_handle, &library_id);
+    assert!(result.is_err());
+    assert!(library_root.exists());
+    assert!(
+        config_handle
+            .lock()
+            .config
+            .known_libraries
+            .iter()
+            .any(|known| known.id == library_id)
+    );
+    assert_eq!(
+        instance_handle
+            .lock()
+            .as_ref()
+            .map(|library| library.id.as_str()),
+        Some(library_id.as_str())
+    );
+}
+
+#[test]
 fn deleting_a_library_leaves_nonempty_recorded_directories_in_place() {
     let (_tmp, game_root, _repo_root) = setup_test_env();
     let (config_handle, instance_handle) = test_handles(&_tmp);

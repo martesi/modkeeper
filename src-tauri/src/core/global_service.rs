@@ -250,6 +250,11 @@ pub fn create_library(
     let name = input
         .name
         .unwrap_or_else(|| game_root.file_name().unwrap_or("Library").to_string());
+    // Use the same config -> active lock order as deletion and workspace
+    // assembly. Keep both guards through library discovery and activation so a
+    // concurrent sync cannot update the library between its load and swap.
+    let mut store = config_handle.lock();
+    let mut instance = instance_handle.lock();
 
     let library = if library_root.exists() {
         // Existing dir: adopt when valid, error when not - never overwrite.
@@ -259,7 +264,6 @@ pub fn create_library(
             if existing.has_spt_major_mismatch()? {
                 let compatible =
                     find_compatible_versioned_library(&game_root, &existing.spt_version)?;
-                let _active_guard = instance_handle.lock();
                 cleanup::with_exclusive(|| {
                     cleanup::validate_purge_unlocked(&existing)?;
                     cleanup::remove_recorded_deployment_for_transition(&existing)?;
@@ -307,17 +311,13 @@ pub fn create_library(
         })?
     };
 
-    {
-        let mut store = config_handle.lock();
-        store.config.upsert_library(KnownLibrary {
-            id: library.id.clone(),
-            library_root,
-        });
-        store.config.app_state.active_library_id = Some(library.id.clone());
-        store.save()?;
-    }
-
-    *instance_handle.lock() = Some(library);
+    store.config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root,
+    });
+    store.config.app_state.active_library_id = Some(library.id.clone());
+    store.save()?;
+    *instance = Some(library);
     Ok(())
 }
 
@@ -383,11 +383,26 @@ pub fn delete_library_files(
         cleanup::purge_unlocked(&library)
     })?;
 
-    if library_root.exists() {
-        file::remove_dir_all(&library_root)?;
-    }
+    // Persist the registry change before deleting the directory. If the
+    // filesystem removal fails, restore the old config so the active library
+    // remains discoverable and usable.
+    let previous_config = store.config.clone();
     store.config.remove_library(&registered_id);
-    store.save()?;
+    if let Err(error) = store.save() {
+        store.config = previous_config.clone();
+        return Err(error);
+    }
+    if library_root.exists()
+        && let Err(error) = file::remove_dir_all(&library_root)
+    {
+        store.config = previous_config;
+        return match store.save() {
+            Ok(()) => Err(error),
+            Err(rollback_error) => Err(SError::IOError(format!(
+                "{error}; app config rollback failed: {rollback_error}"
+            ))),
+        };
+    }
     if instance.as_ref().map(|lib| lib.id.as_str()) == Some(registered_id.as_str()) {
         *instance = None;
     }
