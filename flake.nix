@@ -35,6 +35,12 @@
             webkitgtk_4_1
           ];
           basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs;
+          cargoCacheHook = ''
+            if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
+              export CARGO_HOME=/agt/xdg/cache/rust
+            fi
+            export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-''${CARGO_HOME:-$HOME/.cargo}/target/modkeeper}"
+          '';
           tauriHook = ''
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath tauriLibs}:$LD_LIBRARY_PATH"
             export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-${pkgs.mesa}/share/glvnd/egl_vendor.d}"
@@ -51,7 +57,7 @@
         {
           default = pkgs.mkShell {
             packages = basePackages;
-            shellHook = tauriHook;
+            shellHook = cargoCacheHook + tauriHook;
           };
 
           e2e = pkgs.mkShell {
@@ -61,7 +67,7 @@
               xdotool
               xvfb
             ]);
-            shellHook = tauriHook + ''
+            shellHook = cargoCacheHook + tauriHook + ''
               export DISPLAY="''${DISPLAY:-:99}"
               export FONTCONFIG_FILE="''${FONTCONFIG_FILE:-${
                 pkgs.makeFontsConf {
@@ -78,7 +84,7 @@
               pkgs.bun
               pkgs.nsis
             ];
-            shellHook = ''
+            shellHook = cargoCacheHook + ''
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=${mingw.stdenv.cc.targetPrefix}cc
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L ${mingw.windows.pthreads}/lib"
             '';
