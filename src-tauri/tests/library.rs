@@ -281,6 +281,58 @@ fn deleting_a_library_refuses_a_deployment_path_redirected_outside_the_game_root
 }
 
 #[test]
+fn updating_a_deployed_mod_refreshes_and_removal_unlinks_stale_copies() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root),
+        game_root: game_root.clone(),
+        name: "Update test".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &mod_id, true).unwrap();
+    library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/Example/content.txt");
+    assert_eq!(fs::read_to_string(&deployed).unwrap(), "Example");
+
+    fs::write(
+        mod_src_utf8.join("SPT/user/mods/Example/content.txt"),
+        "updated",
+    )
+    .unwrap();
+    let updated_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(mod_src_utf8, updated_fs),
+        false,
+    )
+    .unwrap();
+    library.sync().unwrap();
+    assert_eq!(fs::read_to_string(&deployed).unwrap(), "updated");
+
+    fs::write(
+        mod_src_utf8.join("SPT/user/mods/Example/content.txt"),
+        "updated again",
+    )
+    .unwrap();
+    let latest_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(mod_src_utf8, latest_fs),
+        false,
+    )
+    .unwrap();
+    mod_manager::remove_mod(&mut library, &mod_id).unwrap();
+    assert!(!deployed.exists());
+}
+
+#[test]
 fn creating_a_new_major_library_removes_the_old_deployment_first() {
     let (tmp, game_root, _) = setup_test_env();
     let old_root = game_root.join(".mod_keeper");
@@ -326,10 +378,81 @@ fn creating_a_new_major_library_removes_the_old_deployment_first() {
 
     assert!(!deployed.exists());
     assert!(old_root.exists());
-    let instance = instance_handle.lock();
-    let new_library = instance.as_ref().unwrap();
-    assert_eq!(new_library.spt_version, "5.0.0");
-    assert!(new_library.mods.is_empty());
+    {
+        let instance = instance_handle.lock();
+        let new_library = instance.as_ref().unwrap();
+        assert_eq!(new_library.spt_version, "5.0.0");
+        assert!(new_library.mods.is_empty());
+    }
+
+    {
+        let mut instance = instance_handle.lock();
+        let new_library = instance.as_mut().unwrap();
+        let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+        let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+        let mod_id = staged.fs.id.clone();
+        mod_manager::add_mod(new_library, staged, false).unwrap();
+        mod_manager::toggle_mod(new_library, &mod_id, true).unwrap();
+        new_library.sync().unwrap();
+    }
+    assert!(deployed.exists());
+
+    global_service::delete_library_files(&config_handle, &instance_handle, &old_library.id)
+        .unwrap();
+    assert!(deployed.exists());
+}
+
+#[test]
+fn creating_a_new_major_library_allows_an_already_removed_old_tree() {
+    let (tmp, game_root, _) = setup_test_env();
+    let old_root = game_root.join(".mod_keeper");
+    let mut old_library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(old_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut old_library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut old_library, &mod_id, true).unwrap();
+    old_library.sync().unwrap();
+    fs::remove_dir_all(game_root.join("SPT")).unwrap();
+
+    let runtime = game_root.join("SPT_Runtime");
+    fs::create_dir_all(&runtime).unwrap();
+    fs::write(runtime.join("SPT.Server.exe"), "server").unwrap();
+    fs::write(
+        runtime.join("SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: old_library.id,
+        library_root: old_root,
+    });
+
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    assert!(
+        game_root
+            .join(".mod_keeper-spt-5.0.0/manifest.toml")
+            .exists()
+    );
 }
 
 #[test]
@@ -1390,6 +1513,46 @@ fn test_delete_library_files_removes_directory() {
     assert!(!deployed.exists(), "deployed links should be purged");
     assert!(config_handle.lock().config.known_libraries.is_empty());
     assert!(instance_handle.lock().is_none());
+}
+
+#[test]
+fn deleting_a_library_leaves_nonempty_recorded_directories_in_place() {
+    let (_tmp, game_root, _repo_root) = setup_test_env();
+    let (config_handle, instance_handle) = test_handles(&_tmp);
+
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: Some("Lib".to_string()),
+        },
+    )
+    .unwrap();
+    let library_id = instance_handle.lock().as_ref().unwrap().id.clone();
+    let library_root = game_root.join(".mod_keeper");
+    let mod_src = _tmp.path().join("test_mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "TestMod", true);
+    {
+        let mut instance = instance_handle.lock();
+        let lib = instance.as_mut().unwrap();
+        let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+        let mod_id = mod_fs.id.clone();
+        mod_manager::add_mod(lib, create_staged_mod_for_test(mod_src_utf8, mod_fs), false).unwrap();
+        mod_manager::toggle_mod(lib, &mod_id, true).unwrap();
+        lib.sync().unwrap();
+    }
+    let content = game_root.join("SPT/user/mods/TestMod/content.txt");
+    let untracked = game_root.join("SPT/user/mods/TestMod/untracked.txt");
+    fs::write(&untracked, "keep me").unwrap();
+
+    global_service::delete_library_files(&config_handle, &instance_handle, &library_id).unwrap();
+
+    assert!(!library_root.exists());
+    assert!(!content.exists());
+    assert_eq!(fs::read_to_string(&untracked).unwrap(), "keep me");
 }
 
 #[test]

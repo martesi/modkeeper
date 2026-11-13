@@ -259,6 +259,13 @@ impl Library {
         Ok(())
     }
 
+    /// Retires deployment ownership after all recorded artifacts have been
+    /// reconciled, without rewriting the historical library manifest.
+    pub(crate) fn retire_deployment(&self) -> Result<(), SError> {
+        toml::write(&self.lib_paths.deployment, &DeploymentState::default())?;
+        Ok(())
+    }
+
     /// Plan/preflight → compatibility purge → Deploy → Mark Clean → Persist.
     /// The canonical way to apply mod activation changes to the game directory.
     pub fn sync(&mut self) -> Result<(), SError> {

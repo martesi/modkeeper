@@ -64,9 +64,12 @@ pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
         linker::remove(&target, kind)?;
     }
     for directory in directory_removals {
-        fs::remove_dir(&directory)?;
+        if fs::read_dir(&directory)?.next().is_none() {
+            fs::remove_dir(&directory)?;
+        }
     }
 
+    library.retire_deployment()?;
     Ok(())
 }
 
@@ -131,7 +134,7 @@ pub fn unlink_mod(
         let target = path.clone();
         match fs::symlink_metadata(&target) {
             Ok(_) => {
-                if !deployment::artifact_is_owned(library, &artifact, &target)? {
+                if !deployment::artifact_is_recorded(library, &artifact, &target)? {
                     continue;
                 }
                 linker::remove(&target, artifact.kind)?;

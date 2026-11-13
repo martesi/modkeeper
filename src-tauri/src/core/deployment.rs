@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
-use std::path::Component;
+use std::path::{Component, PathBuf};
 use walkdir::WalkDir;
 
 type OwnershipMap = HashMap<Utf8PathBuf, Vec<String>>;
@@ -63,7 +63,7 @@ pub(crate) fn recorded_path_is_contained(base: &Utf8Path, relative: &Utf8Path) -
     };
     let absolute = base.join(relative);
     let parent = absolute.parent().unwrap_or(base);
-    let Ok(parent_canonical) = dunce::canonicalize(parent.as_std_path()) else {
+    let Some(parent_canonical) = canonicalize_nearest_existing(parent) else {
         return false;
     };
     parent_canonical.starts_with(base_canonical)
@@ -94,6 +94,19 @@ fn is_safe_relative_path(path: &Utf8Path) -> bool {
                 Component::Prefix(_) | Component::RootDir | Component::ParentDir
             )
         })
+}
+
+fn canonicalize_nearest_existing(path: &Utf8Path) -> Option<PathBuf> {
+    let mut current = path;
+    loop {
+        match fs::symlink_metadata(current.as_std_path()) {
+            Ok(_) => return dunce::canonicalize(current.as_std_path()).ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                current = current.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 // --- Protected Path Helpers ---
@@ -274,7 +287,7 @@ fn deployment_owns_directory(library: &Library, target: &Utf8Path) -> Result<boo
 
     for old in &library.deployment.artifacts {
         if old.target == target
-            && artifact_is_owned(library, old, &library.game_root.join(&old.target))?
+            && artifact_is_recorded(library, old, &library.game_root.join(&old.target))?
         {
             return Ok(true);
         }
@@ -288,11 +301,11 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
     let desired: HashSet<_> = plan.artifacts.iter().cloned().collect();
 
     for artifact in &old.artifacts {
-        if desired.contains(artifact) {
+        let target = library.game_root.join(&artifact.target);
+        if desired.contains(artifact) && artifact_is_owned(library, artifact, &target)? {
             continue;
         }
-        let target = library.game_root.join(&artifact.target);
-        if artifact_is_owned(library, artifact, &target)? {
+        if artifact_is_recorded(library, artifact, &target)? {
             linker::remove(&target, artifact.kind)?;
         }
     }
@@ -344,7 +357,7 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
             .iter()
             .find(|old| old.target == artifact.target)
             && previous == artifact
-            && fs::symlink_metadata(&target).is_ok()
+            && artifact_is_owned(library, previous, &target)?
         {
             new_artifacts.push(artifact.clone());
             continue;
@@ -381,7 +394,7 @@ fn check_destinations(library: &Library, artifacts: &[DeploymentArtifact]) -> Re
         }
         let owned_prior = library.deployment.artifacts.iter().any(|old| {
             (old.target == artifact.target || artifact.target.starts_with(&old.target))
-                && artifact_is_owned(library, old, &library.game_root.join(&old.target))
+                && artifact_is_recorded(library, old, &library.game_root.join(&old.target))
                     .unwrap_or(false)
         });
         if owned_prior || legacy_repo_link(&target, &library.repo_root) {
@@ -411,7 +424,7 @@ fn legacy_repo_link(path: &Utf8Path, repo_root: &Utf8Path) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn artifact_is_owned(
+pub(crate) fn artifact_is_recorded(
     library: &Library,
     artifact: &DeploymentArtifact,
     target: &Utf8Path,
@@ -423,7 +436,7 @@ pub(crate) fn artifact_is_owned(
         return Ok(false);
     }
 
-    let Some(source) = contained_source_path(library, &artifact.source) else {
+    let Some(source) = recorded_source_path(library, &artifact.source) else {
         return Ok(false);
     };
     let meta = match fs::symlink_metadata(target) {
@@ -435,44 +448,77 @@ pub(crate) fn artifact_is_owned(
         artifact.kind,
         ArtifactKind::Symlink | ArtifactKind::Junction
     ) {
-        let Ok(expected) = dunce::canonicalize(source.as_std_path()) else {
-            return Ok(false);
-        };
-        let Ok(actual) = linker::read_link_target(target) else {
-            return Ok(false);
-        };
-        let actual = if actual.is_absolute() {
-            actual
-        } else {
-            target.parent().unwrap_or(Utf8Path::new(".")).join(actual)
-        };
-        return Ok(dunce::canonicalize(actual.as_std_path())
-            .map(|actual| actual == expected)
-            .unwrap_or(false));
+        return Ok(link_target_matches(&source, target));
     }
+    Ok(meta.is_file())
+}
 
-    if !meta.is_file() {
+pub(crate) fn artifact_is_owned(
+    library: &Library,
+    artifact: &DeploymentArtifact,
+    target: &Utf8Path,
+) -> Result<bool, SError> {
+    if !artifact_is_recorded(library, artifact, target)? {
         return Ok(false);
     }
 
+    let Some(source) = contained_source_path(library, &artifact.source) else {
+        return Ok(false);
+    };
+    if matches!(
+        artifact.kind,
+        ArtifactKind::Symlink | ArtifactKind::Junction
+    ) {
+        return Ok(true);
+    }
+
     match artifact.kind {
-        ArtifactKind::Hardlink => Ok(same_file_identity(&source, target)?),
+        ArtifactKind::Hardlink => Ok(file_contents_match(&source, target)?),
         ArtifactKind::Copy => Ok(file_contents_match(&source, target)?),
         ArtifactKind::Symlink | ArtifactKind::Junction => unreachable!(),
     }
 }
 
-fn contained_source_path(library: &Library, source: &Utf8Path) -> Option<Utf8PathBuf> {
+fn recorded_source_path(library: &Library, source: &Utf8Path) -> Option<Utf8PathBuf> {
     if !is_safe_relative_path(source) {
         return None;
     }
 
     let repo_canonical = dunce::canonicalize(library.repo_root.as_std_path()).ok()?;
     let source_path = library.repo_root.join(source);
+    let source_parent = source_path.parent().unwrap_or(&library.repo_root);
+    let source_parent_canonical = canonicalize_nearest_existing(source_parent)?;
+    source_parent_canonical
+        .starts_with(repo_canonical)
+        .then_some(source_path)
+}
+
+fn contained_source_path(library: &Library, source: &Utf8Path) -> Option<Utf8PathBuf> {
+    let source_path = recorded_source_path(library, source)?;
+    let repo_canonical = dunce::canonicalize(library.repo_root.as_std_path()).ok()?;
     let source_canonical = dunce::canonicalize(source_path.as_std_path()).ok()?;
     source_canonical
         .starts_with(repo_canonical)
         .then_some(source_path)
+}
+
+fn link_target_matches(source: &Utf8Path, target: &Utf8Path) -> bool {
+    let Ok(actual) = linker::read_link_target(target) else {
+        return false;
+    };
+    let actual = if actual.is_absolute() {
+        actual
+    } else {
+        target.parent().unwrap_or(Utf8Path::new(".")).join(actual)
+    };
+    if actual == source {
+        return true;
+    }
+    dunce::canonicalize(actual.as_std_path())
+        .and_then(|actual| {
+            dunce::canonicalize(source.as_std_path()).map(|expected| actual == expected)
+        })
+        .unwrap_or(false)
 }
 
 fn file_contents_match(left: &Utf8Path, right: &Utf8Path) -> io::Result<bool> {
@@ -499,31 +545,6 @@ fn file_contents_match(left: &Utf8Path, right: &Utf8Path) -> io::Result<bool> {
         if left_buffer[..left_read] != right_buffer[..right_read] {
             return Ok(false);
         }
-    }
-}
-
-fn same_file_identity(left: &Utf8Path, right: &Utf8Path) -> io::Result<bool> {
-    let left_meta = fs::metadata(left)?;
-    let right_meta = fs::metadata(right)?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        Ok(left_meta.dev() == right_meta.dev() && left_meta.ino() == right_meta.ino())
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        Ok(
-            left_meta.volume_serial_number() == right_meta.volume_serial_number()
-                && left_meta.file_index() == right_meta.file_index(),
-        )
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        file_contents_match(left, right)
     }
 }
 
