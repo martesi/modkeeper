@@ -7,6 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use dunce::canonicalize as dunce_canon;
 use std::collections::HashSet;
 use std::fs;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Removes recorded deployment artifacts that are still owned by the library.
@@ -95,8 +96,9 @@ fn remove_recorded_deployment_with_identity(
 }
 
 /// Validates the compatibility purge without leaving game-tree mutations.
-/// Each candidate link is actually removed and restored so its delete
-/// permission is checked before deployment records are retired elsewhere.
+/// Each candidate is moved aside as the original filesystem object, its delete
+/// permission is checked, and the object is moved back before records are
+/// retired elsewhere.
 pub fn validate_purge(library: &Library) -> Result<(), SError> {
     let links = plan_purge(library)?;
     preflight_link_removals(&links)
@@ -138,14 +140,18 @@ fn validated_purge_roots(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> 
 #[derive(Clone)]
 struct PurgeLink {
     path: Utf8PathBuf,
-    target: Utf8PathBuf,
+    target: PathBuf,
     kind: linker::ArtifactKind,
+}
+
+struct QuarantinedLink {
+    link: PurgeLink,
+    path: Utf8PathBuf,
 }
 
 fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
     let repo_root = dunce_canon(&library.repo_root)
-        .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
-        .unwrap_or_else(|_| library.repo_root.clone());
+        .unwrap_or_else(|_| library.repo_root.as_std_path().to_path_buf());
     let roots = validated_purge_roots(library)?;
     let mut links = Vec::new();
 
@@ -159,14 +165,15 @@ fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
             if !entry.file_type().is_symlink() {
                 continue;
             }
-            let Ok(raw_target) = linker::read_link_target(path) else {
+            let Ok(raw_target) = linker::read_link_target_native(path) else {
                 continue;
             };
             let target = if raw_target.is_absolute() {
                 raw_target.clone()
             } else {
-                path.parent()
-                    .unwrap_or(Utf8Path::new("."))
+                path.as_std_path()
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
                     .join(&raw_target)
             };
             let Ok(target) = dunce_canon(&target) else {
@@ -175,7 +182,6 @@ fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
                 // prefix that may still contain `..` components.
                 continue;
             };
-            let target = Utf8PathBuf::from(target.to_string_lossy().into_owned());
             if target.starts_with(&repo_root) {
                 links.push(PurgeLink {
                     path: path.to_path_buf(),
@@ -189,79 +195,122 @@ fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
 }
 
 fn preflight_link_removals(links: &[PurgeLink]) -> Result<(), SError> {
-    for link in links {
-        if !verify_purge_link(link)? {
-            continue;
-        }
-        if let Err(error) = linker::unlink(&link.path) {
-            return Err(error.into());
-        }
-        if let Err(error) = linker::recreate_link(&link.target, &link.path, link.kind) {
-            let rollback = restore_removed_links(std::slice::from_ref(link));
-            return Err(with_rollback_error(error.into(), rollback));
-        }
-    }
-    Ok(())
+    let quarantined = quarantine_links(links)?;
+    restore_quarantined_links(&quarantined)
 }
 
 pub fn purge(library: &Library) -> Result<(), SError> {
-    let links = plan_purge(library)?;
-    let mut removed = Vec::new();
-    for link in links {
-        match verify_purge_link(&link) {
-            Ok(false) => continue,
-            Ok(true) => {}
-            Err(error) => {
-                let rollback = restore_removed_links(&removed);
-                return Err(with_rollback_error(error, rollback));
-            }
-        }
-        match linker::unlink(&link.path) {
-            Ok(()) => removed.push(link),
-            Err(error) => {
-                let rollback = restore_removed_links(&removed);
-                return Err(with_rollback_error(error.into(), rollback));
-            }
+    let quarantined = quarantine_links(&plan_purge(library)?)?;
+    let mut failures = Vec::new();
+    for entry in &quarantined {
+        if let Err(error) = linker::unlink(&entry.path) {
+            failures.push(format!("'{}': {error}", entry.path));
         }
     }
-    Ok(())
+    if failures.is_empty() {
+        return Ok(());
+    }
+    Err(SError::IOError(format!(
+        "Unable to remove all quarantined deployment links; failed objects remain at temporary paths: {}",
+        failures.join(", ")
+    )))
 }
 
 fn verify_purge_link(link: &PurgeLink) -> Result<bool, SError> {
-    let meta = match fs::symlink_metadata(&link.path) {
+    verify_purge_link_at(link, &link.path)
+}
+
+fn verify_purge_link_at(link: &PurgeLink, path: &Utf8Path) -> Result<bool, SError> {
+    let meta = match fs::symlink_metadata(path) {
         Ok(meta) => meta,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error.into()),
     };
     if !meta.file_type().is_symlink() {
-        return Err(purge_link_changed(&link.path));
+        return Err(purge_link_changed(path));
     }
-    if linker::read_link_target(&link.path)? != link.target
-        || linker::link_kind(&link.path)? != link.kind
+    if linker::read_link_target_native(path)? != link.target
+        || linker::link_kind(path)? != link.kind
     {
-        return Err(purge_link_changed(&link.path));
+        return Err(purge_link_changed(path));
     }
     Ok(true)
 }
 
-fn restore_removed_links(links: &[PurgeLink]) -> Result<(), SError> {
-    let mut failures = Vec::new();
-    for link in links.iter().rev() {
+fn quarantine_links(links: &[PurgeLink]) -> Result<Vec<QuarantinedLink>, SError> {
+    let mut quarantined = Vec::new();
+    for link in links {
         match verify_purge_link(link) {
-            Ok(true) => continue,
-            Ok(false) => {
-                if let Err(error) = linker::recreate_link(&link.target, &link.path, link.kind) {
-                    failures.push(format!("'{}': {error}", link.path));
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(error) => {
+                let rollback = restore_quarantined_links(&quarantined);
+                return Err(with_rollback_error(error, rollback));
+            }
+        }
+        let path = match quarantine_path(&link.path) {
+            Ok(path) => path,
+            Err(error) => {
+                let rollback = restore_quarantined_links(&quarantined);
+                return Err(with_rollback_error(error, rollback));
+            }
+        };
+        if let Err(error) = fs::rename(link.path.as_std_path(), path.as_std_path()) {
+            let rollback = restore_quarantined_links(&quarantined);
+            return Err(with_rollback_error(error.into(), rollback));
+        }
+        quarantined.push(QuarantinedLink {
+            link: link.clone(),
+            path,
+        });
+    }
+
+    for entry in &quarantined {
+        if let Err(error) = linker::can_unlink(&entry.path) {
+            let rollback = restore_quarantined_links(&quarantined);
+            return Err(with_rollback_error(error.into(), rollback));
+        }
+    }
+    Ok(quarantined)
+}
+
+fn quarantine_path(path: &Utf8Path) -> Result<Utf8PathBuf, SError> {
+    let parent = path.parent().ok_or(SError::Unexpected)?;
+    let name = path.file_name().ok_or(SError::Unexpected)?;
+    Ok(parent.join(format!(".modkeeper-purge-{}-{name}", uuid::Uuid::new_v4())))
+}
+
+fn restore_quarantined_links(links: &[QuarantinedLink]) -> Result<(), SError> {
+    let mut failures = Vec::new();
+    for entry in links.iter().rev() {
+        match fs::symlink_metadata(&entry.link.path) {
+            Ok(_) => {
+                if fs::symlink_metadata(&entry.path).is_ok()
+                    || !matches!(verify_purge_link(&entry.link), Ok(true))
+                {
+                    failures.push(format!("'{}' is occupied", entry.link.path));
                 }
             }
-            Err(error) => failures.push(format!("'{}': {error}", link.path)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match fs::symlink_metadata(&entry.path) {
+                    Ok(_) => {
+                        if let Err(error) =
+                            fs::rename(entry.path.as_std_path(), entry.link.path.as_std_path())
+                        {
+                            failures.push(format!("'{}': {error}", entry.link.path));
+                        }
+                    }
+                    Err(error) => failures.push(format!("'{}': {error}", entry.path)),
+                }
+            }
+            Err(error) => failures.push(format!("'{}': {error}", entry.link.path)),
         }
     }
     if failures.is_empty() {
         Ok(())
     } else {
         Err(SError::IOError(format!(
-            "Unable to restore removed deployment links: {}",
+            "Unable to restore quarantined deployment links: {}",
             failures.join(", ")
         )))
     }

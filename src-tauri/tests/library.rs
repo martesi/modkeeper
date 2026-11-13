@@ -650,6 +650,32 @@ fn purge_keeps_dangling_external_targets_unverified() {
 
 #[cfg(unix)]
 #[test]
+fn purge_handles_non_utf8_link_targets_without_recreating_them() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Non-UTF-8 purge link test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let target = repo_root
+        .as_std_path()
+        .join(std::ffi::OsStr::from_bytes(b"repo-\xff.txt"));
+    fs::write(&target, "repo").unwrap();
+    let link = legacy_root.join("non-utf8-repo-link");
+    std::os::unix::fs::symlink(&target, link.as_std_path()).unwrap();
+
+    library.sync().unwrap();
+    assert!(fs::symlink_metadata(&link).is_err());
+    assert!(target.exists());
+}
+
+#[cfg(unix)]
+#[test]
 fn purge_preflights_link_parent_permissions_before_unlinking() {
     use std::os::unix::fs::PermissionsExt;
 

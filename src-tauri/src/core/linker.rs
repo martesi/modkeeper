@@ -1,6 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
 use std::io;
+use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -13,9 +14,17 @@ pub enum ArtifactKind {
 
 /// Reads a symlink or junction target without following it.
 pub fn read_link_target(path: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    Ok(Utf8PathBuf::from(
-        fs::read_link(path)?.to_string_lossy().into_owned(),
-    ))
+    Utf8PathBuf::from_path_buf(read_link_target_native(path)?).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "link target is not representable as UTF-8",
+        )
+    })
+}
+
+/// Reads a symlink or junction target without lossy encoding.
+pub fn read_link_target_native(path: &Utf8Path) -> io::Result<PathBuf> {
+    fs::read_link(path.as_std_path())
 }
 
 /// Creates one deployment artifact. The destination must not already exist.
@@ -122,8 +131,8 @@ pub fn unlink(target: &Utf8Path) -> io::Result<()> {
     }
 }
 
-/// Identifies a legacy reparse link so cleanup can restore it without changing
-/// a Windows junction into a symbolic link during a removal preflight.
+/// Identifies a legacy reparse link so cleanup can move it without changing a
+/// Windows junction into a symbolic link during a removal preflight.
 pub(crate) fn link_kind(path: &Utf8Path) -> io::Result<ArtifactKind> {
     #[cfg(windows)]
     if junction::exists(path.as_std_path())? {
@@ -135,69 +144,42 @@ pub(crate) fn link_kind(path: &Utf8Path) -> io::Result<ArtifactKind> {
     Ok(ArtifactKind::Symlink)
 }
 
-/// Recreates a legacy link from the target string returned by `read_link`.
-/// Relative targets must remain relative to the destination rather than the
-/// process working directory.
-pub(crate) fn recreate_link(
-    target: &Utf8Path,
-    destination: &Utf8Path,
-    kind: ArtifactKind,
-) -> io::Result<()> {
-    match kind {
-        ArtifactKind::Symlink => recreate_symlink(target, destination),
-        ArtifactKind::Junction => {
-            #[cfg(windows)]
-            {
-                let resolved = resolve_link_target(target, destination)?;
-                junction::create(resolved.as_std_path(), destination.as_std_path())
-            }
-            #[cfg(not(windows))]
-            {
-                Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "junctions are only supported on Windows",
-                ))
-            }
-        }
-        ArtifactKind::Hardlink | ArtifactKind::Copy => Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "only symbolic links and junctions can be recreated",
-        )),
-    }
-}
-
-fn recreate_symlink(target: &Utf8Path, destination: &Utf8Path) -> io::Result<()> {
+/// Checks whether the operating system will allow the existing link object to
+/// be removed, without deleting or recreating that object.
+pub(crate) fn can_unlink(path: &Utf8Path) -> io::Result<()> {
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(target.as_std_path(), destination.as_std_path())
+        use std::os::unix::fs::PermissionsExt;
+
+        let parent = path
+            .parent()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "link has no parent"))?;
+        let mode = fs::metadata(parent)?.permissions().mode();
+        if mode & 0o222 == 0 || mode & 0o111 == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("link parent is not writable: {parent}"),
+            ));
+        }
     }
     #[cfg(windows)]
     {
-        let resolved = resolve_link_target(target, destination)?;
-        if resolved.is_dir() {
-            std::os::windows::fs::symlink_dir(target.as_std_path(), destination.as_std_path())
-        } else {
-            std::os::windows::fs::symlink_file(target.as_std_path(), destination.as_std_path())
-        }
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "symbolic links are not supported on this platform",
-        ))
-    }
-}
+        use std::os::windows::fs::OpenOptionsExt;
 
-#[cfg(windows)]
-fn resolve_link_target(target: &Utf8Path, destination: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    if target.is_absolute() {
-        return Ok(target.to_path_buf());
+        const DELETE: u32 = 0x0001_0000;
+        const FILE_FLAG_OPEN_NO_RECALL: u32 = 0x0010_0000;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
+        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+
+        fs::OpenOptions::new()
+            .access_mode(DELETE)
+            .share_mode(FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_NO_RECALL | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path.as_std_path())?;
     }
-    destination
-        .parent()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "link has no parent"))
-        .map(|parent| parent.join(target))
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
