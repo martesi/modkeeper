@@ -530,28 +530,92 @@ fn removing_a_mod_preflights_shared_directories_before_unlinking_artifacts() {
 
 #[cfg(unix)]
 #[test]
-fn purge_refuses_a_redirected_protected_root_before_traversal() {
+fn purge_preflights_all_protected_roots_before_traversal() {
     let (_tmp, game_root, repo_root) = setup_test_env();
     let mut library = Library::create(LibraryCreationRequirement {
         repo_root: Some(repo_root.clone()),
         game_root: game_root.clone(),
-        name: "Purge root redirect test".to_string(),
+        name: "Purge root preflight test".to_string(),
     })
     .unwrap();
-    let redirected_root = game_root.join("redirected-mods");
-    fs::create_dir_all(&redirected_root).unwrap();
     let repo_file = repo_root.join("foreign.txt");
     fs::write(&repo_file, "foreign").unwrap();
-    let foreign_link = redirected_root.join("foreign-link");
-    std::os::unix::fs::symlink(repo_file.as_std_path(), foreign_link.as_std_path()).unwrap();
 
-    let protected_root = game_root.join("SPT/user/mods");
-    fs::create_dir_all(protected_root.parent().unwrap()).unwrap();
-    std::os::unix::fs::symlink(redirected_root.as_std_path(), protected_root.as_std_path())
-        .unwrap();
+    let valid_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&valid_root).unwrap();
+    let valid_link = valid_root.join("valid-link");
+    std::os::unix::fs::symlink(repo_file.as_std_path(), valid_link.as_std_path()).unwrap();
+
+    let redirected_root = game_root.join("redirected-plugins");
+    fs::create_dir_all(&redirected_root).unwrap();
+    let redirected_link = redirected_root.join("foreign-link");
+    std::os::unix::fs::symlink(repo_file.as_std_path(), redirected_link.as_std_path()).unwrap();
+    let invalid_root = game_root.join("BepInEx/plugins");
+    fs::create_dir_all(invalid_root.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(redirected_root.as_std_path(), invalid_root.as_std_path()).unwrap();
 
     assert!(matches!(library.sync(), Err(SError::InvalidLibrary(_, _))));
-    assert!(foreign_link.exists());
+    assert!(valid_link.exists());
+    assert!(redirected_link.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn deleting_a_library_validates_purge_before_removing_deployment() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Delete purge preflight test".to_string(),
+    })
+    .unwrap();
+    let source_path = tmp.path().join("source");
+    let source = Utf8Path::from_path(&source_path).unwrap();
+    create_test_mod(source, "KeepDeployment", true);
+    let scanned = mod_fs::scan(source, &SPTPathRules::default()).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(source, scanned),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/KeepDeployment/content.txt");
+
+    let redirected_root = game_root.join("redirected-plugins");
+    fs::create_dir_all(&redirected_root).unwrap();
+    let invalid_root = game_root.join("BepInEx/plugins");
+    fs::create_dir_all(invalid_root.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(redirected_root.as_std_path(), invalid_root.as_std_path()).unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root: repo_root.clone(),
+    });
+    let error = global_service::delete_library_files(&config_handle, &instance_handle, &library.id)
+        .unwrap_err();
+
+    assert!(matches!(error, SError::InvalidLibrary(_, _)));
+    assert!(deployed.exists());
+    assert!(repo_root.exists());
+    assert!(
+        !Library::load(&repo_root)
+            .unwrap()
+            .deployment
+            .artifacts
+            .is_empty()
+    );
+    assert!(
+        config_handle
+            .lock()
+            .config
+            .known_libraries
+            .iter()
+            .any(|known| known.id == library.id)
+    );
+    assert!(library.mods.contains_key(&mod_id));
 }
 
 #[test]
@@ -676,6 +740,53 @@ fn creating_a_new_major_library_allows_an_already_removed_old_tree() {
             .join(".mod_keeper-spt-5.0.0/manifest.toml")
             .exists()
     );
+}
+
+#[test]
+fn cross_major_migration_purges_legacy_links_from_the_old_server_root() {
+    let (tmp, game_root, _) = setup_test_env();
+    let old_root = game_root.join(".mod_keeper");
+    let old_library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(old_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let legacy_target = old_root.join("legacy-target.txt");
+    fs::write(&legacy_target, "legacy").unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let legacy_link = legacy_root.join("LegacyLink");
+    std::os::unix::fs::symlink(legacy_target.as_std_path(), legacy_link.as_std_path()).unwrap();
+
+    fs::remove_file(game_root.join("SPT/SPT.Server.exe")).unwrap();
+    let runtime = game_root.join("SPT_Runtime");
+    fs::create_dir_all(&runtime).unwrap();
+    fs::write(runtime.join("SPT.Server.exe"), "server").unwrap();
+    fs::write(
+        runtime.join("SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: old_library.id,
+        library_root: old_root,
+    });
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    assert!(fs::symlink_metadata(&legacy_link).is_err());
+    assert!(legacy_target.exists());
 }
 
 #[test]

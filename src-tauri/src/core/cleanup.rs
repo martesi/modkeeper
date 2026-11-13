@@ -2,6 +2,7 @@ use crate::core::deployment;
 use crate::core::library::Library;
 use crate::core::linker;
 use crate::models::error::SError;
+use crate::models::paths::SPTPathRules;
 use camino::{Utf8Path, Utf8PathBuf};
 use dunce::canonicalize as dunce_canon;
 use std::collections::HashSet;
@@ -95,26 +96,50 @@ fn remove_recorded_deployment_with_identity(
 
 /// Compatibility cleanup for deployments made before deployment.toml existed.
 /// Recorded artifacts are removed by reconciliation, not by scanning the cache.
-pub fn purge(library: &Library) -> Result<(), SError> {
-    let repo_root = dunce_canon(&library.repo_root)
-        .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
-        .unwrap_or_else(|_| library.repo_root.clone());
-    let roots = deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
+pub fn validate_purge_roots(library: &Library) -> Result<(), SError> {
+    validated_purge_roots(library).map(|_| ())
+}
 
-    for root in &roots {
-        let meta = match fs::symlink_metadata(root) {
+fn purge_roots(library: &Library) -> Vec<Utf8PathBuf> {
+    let mut roots =
+        deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
+    let legacy_server_root = library.game_root.join(SPTPathRules::default().server_mods);
+    if !roots.iter().any(|root| root == &legacy_server_root) {
+        roots.push(legacy_server_root);
+    }
+    roots
+}
+
+fn validated_purge_roots(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
+    let mut valid_roots = Vec::new();
+    for root in purge_roots(library) {
+        let meta = match fs::symlink_metadata(&root) {
             Ok(meta) => meta,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error.into()),
         };
-        if !meta.is_dir() || meta.file_type().is_symlink() || linker::read_link_target(root).is_ok()
+        if !meta.is_dir()
+            || meta.file_type().is_symlink()
+            || linker::read_link_target(&root).is_ok()
         {
-            return Err(ownership_error(library, root));
+            return Err(ownership_error(library, &root));
         }
         let relative = root.strip_prefix(&library.game_root)?;
         if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
-            return Err(ownership_error(library, root));
+            return Err(ownership_error(library, &root));
         }
+        valid_roots.push(root);
+    }
+    Ok(valid_roots)
+}
+
+pub fn purge(library: &Library) -> Result<(), SError> {
+    let repo_root = dunce_canon(&library.repo_root)
+        .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
+        .unwrap_or_else(|_| library.repo_root.clone());
+    let roots = validated_purge_roots(library)?;
+
+    for root in roots {
         // The root was verified as a real directory above; min_depth avoids
         // treating it as a link traversal root, while follow_links keeps child
         // links from being traversed.
