@@ -259,9 +259,12 @@ pub fn create_library(
             if existing.has_spt_major_mismatch()? {
                 let compatible =
                     find_compatible_versioned_library(&game_root, &existing.spt_version)?;
-                cleanup::validate_purge(&existing)?;
-                cleanup::remove_recorded_deployment_for_transition(&existing)?;
-                cleanup::purge(&existing)?;
+                let _active_guard = instance_handle.lock();
+                cleanup::with_exclusive(|| {
+                    cleanup::validate_purge_unlocked(&existing)?;
+                    cleanup::remove_recorded_deployment_for_transition(&existing)?;
+                    cleanup::purge_unlocked(&existing)
+                })?;
                 if let Some((compatible_root, library)) = compatible {
                     library_root = compatible_root;
                     library
@@ -354,31 +357,39 @@ pub fn delete_library_files(
     instance_handle: &Arc<Mutex<Option<Library>>>,
     library_id: &str,
 ) -> Result<(), SError> {
-    let library_root = {
-        let store = config_handle.lock();
-        store
-            .config
-            .find_library_by_handle(library_id)
-            .map(|known| known.library_root.clone())
-            .ok_or_else(|| {
-                SError::InvalidLibrary(library_id.to_string(), "Library not registered".to_string())
-            })?
-    };
+    // Keep the same config -> active lock order as the other library mutations,
+    // and hold both through cleanup so sync cannot race deployment retirement.
+    let mut store = config_handle.lock();
+    let known = store
+        .config
+        .find_library_by_handle(library_id)
+        .ok_or_else(|| {
+            SError::InvalidLibrary(library_id.to_string(), "Library not registered".to_string())
+        })?;
+    let registered_id = known.id.clone();
+    let library_root = known.library_root.clone();
+    let mut instance = instance_handle.lock();
 
     // Remove recorded deployment artifacts before the mod sources disappear.
     let library = Library::load_for_cleanup(&library_root)?;
-    cleanup::validate_purge(&library)?;
-    if library.has_spt_major_mismatch()? {
-        cleanup::remove_recorded_deployment_for_transition(&library)?;
-    } else {
-        cleanup::remove_recorded_deployment(&library)?;
-    }
-    cleanup::purge(&library)?;
-
-    delete_library_entry(config_handle, instance_handle, library_id)?;
+    let major_mismatch = library.has_spt_major_mismatch()?;
+    cleanup::with_exclusive(|| {
+        cleanup::validate_purge_unlocked(&library)?;
+        if major_mismatch {
+            cleanup::remove_recorded_deployment_for_transition(&library)?;
+        } else {
+            cleanup::remove_recorded_deployment(&library)?;
+        }
+        cleanup::purge_unlocked(&library)
+    })?;
 
     if library_root.exists() {
         file::remove_dir_all(&library_root)?;
+    }
+    store.config.remove_library(&registered_id);
+    store.save()?;
+    if instance.as_ref().map(|lib| lib.id.as_str()) == Some(registered_id.as_str()) {
+        *instance = None;
     }
     Ok(())
 }

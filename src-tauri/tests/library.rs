@@ -738,9 +738,9 @@ fn purge_blocks_a_retained_recovery_manifest_on_retry() {
     fs::write(
         &recovery,
         format!(
-            "version = 1\n\n[[entries]]\noriginal = {:?}\nquarantine = {:?}\n",
-            original.to_string(),
-            quarantine.to_string()
+            "version = 2\ntoken = \"test-token\"\n\n[[entries]]\noriginal = {:?}\nquarantine = {:?}\n",
+            original.strip_prefix(&game_root).unwrap().to_string(),
+            quarantine.strip_prefix(&game_root).unwrap().to_string()
         ),
     )
     .unwrap();
@@ -749,6 +749,37 @@ fn purge_blocks_a_retained_recovery_manifest_on_retry() {
     assert!(matches!(result, Err(SError::InvalidLibrary(_, _))));
     assert!(recovery.exists());
     assert!(fs::symlink_metadata(&quarantine).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_keeps_a_recovery_manifest_when_its_quarantine_is_missing() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Missing purge recovery test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let original = legacy_root.join("original-link");
+    let quarantine = legacy_root.join(".mkp-missing");
+    let recovery = repo_root.join(".modkeeper-purge-recovery.toml");
+    fs::write(
+        &recovery,
+        format!(
+            "version = 2\ntoken = \"test-token\"\n\n[[entries]]\noriginal = {:?}\nquarantine = {:?}\n",
+            original.strip_prefix(&game_root).unwrap().to_string(),
+            quarantine.strip_prefix(&game_root).unwrap().to_string()
+        ),
+    )
+    .unwrap();
+
+    let result = library.sync();
+    assert!(matches!(result, Err(SError::InvalidLibrary(_, _))));
+    assert!(recovery.exists());
+    assert!(fs::symlink_metadata(&quarantine).is_err());
 }
 
 #[cfg(unix)]
