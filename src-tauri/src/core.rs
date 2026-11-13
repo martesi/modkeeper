@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod cleanup;
+pub mod deletion;
 pub mod deployment;
 pub mod global_service;
 pub mod library;

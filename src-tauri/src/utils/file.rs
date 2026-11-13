@@ -1,5 +1,6 @@
 use crate::models::error::SError;
 use camino::Utf8Path;
+use std::io::Write;
 use walkdir::WalkDir;
 
 pub fn create_dir_all(path: &Utf8Path) -> Result<(), SError> {
@@ -44,10 +45,29 @@ pub fn atomic_write(path: &Utf8Path, contents: impl AsRef<[u8]>) -> Result<(), S
     let file_name = path.file_name().unwrap_or("file");
     let tmp = parent.join(format!("{}.tmp-{}", file_name, std::process::id()));
 
-    std::fs::write(&tmp, contents)?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
+    let result = (|| {
+        let mut file = std::fs::File::create(&tmp)?;
+        file.write_all(contents.as_ref())?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&tmp, path)?;
+        sync_directory(parent)
+    })();
+    if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
-    })?;
+    }
+    result
+}
+
+fn sync_directory(path: &Utf8Path) -> Result<(), SError> {
+    #[cfg(unix)]
+    {
+        std::fs::File::open(path.as_std_path())?.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
     Ok(())
 }
 

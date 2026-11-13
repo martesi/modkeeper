@@ -1,4 +1,5 @@
 use crate::config::global::GlobalConfig;
+use crate::core::deletion;
 use crate::core::library::Library;
 use crate::core::mod_stager::StageMaterial;
 use crate::models::error::SError;
@@ -95,7 +96,17 @@ impl AppRegistry {
 impl Default for AppRegistry {
     fn default() -> Self {
         let old_config = GlobalConfig::load();
-        let (app_config, config_warning) = store::load_or_migrate(&old_config);
+        let (app_config, mut config_warning) = store::load_or_migrate(&old_config);
+        if config_warning.is_none() {
+            if let Err(error) = deletion::recover_pending_deletions(&app_config) {
+                tracing::error!("Pending library deletion recovery failed: {error}");
+                config_warning = Some(format!("Pending deletion recovery: {error}"));
+            }
+        } else {
+            tracing::warn!(
+                "Skipping pending library deletion recovery because app config loading reported a warning"
+            );
+        }
 
         Self {
             active_instance: Arc::new(Mutex::new(None)),

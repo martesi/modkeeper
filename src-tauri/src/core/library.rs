@@ -109,17 +109,21 @@ impl Library {
     }
 
     pub fn load(repo_root: &Utf8Path) -> Result<Self, SError> {
-        Self::load_inner(repo_root, true)
+        Self::load_inner(repo_root, true, true)
     }
 
     /// Loads enough state to reconcile deployed artifacts even when the
     /// installation crossed SPT major versions. Normal activation still uses
     /// `load`, which rejects that transition before deployment is possible.
     pub(crate) fn load_for_cleanup(repo_root: &Utf8Path) -> Result<Self, SError> {
-        Self::load_inner(repo_root, false)
+        Self::load_inner(repo_root, false, false)
     }
 
-    fn load_inner(repo_root: &Utf8Path, enforce_spt_major: bool) -> Result<Self, SError> {
+    fn load_inner(
+        repo_root: &Utf8Path,
+        enforce_spt_major: bool,
+        persist_migrations: bool,
+    ) -> Result<Self, SError> {
         let dto = Self::read_library_manifest(repo_root)?;
 
         // Validate historical version
@@ -171,7 +175,7 @@ impl Library {
             mods: dto.mods,
             is_dirty: false,
         };
-        if migrated_legacy_fingerprints {
+        if migrated_legacy_fingerprints && persist_migrations {
             library.persist_deployment()?;
         }
         Ok(library)

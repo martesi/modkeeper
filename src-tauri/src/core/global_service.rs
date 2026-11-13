@@ -1,5 +1,6 @@
 use crate::core::cache::LibraryCache;
 use crate::core::cleanup;
+use crate::core::deletion;
 use crate::core::library::Library;
 use crate::core::library_service;
 use crate::core::version;
@@ -12,7 +13,6 @@ use crate::models::workspace::{
 };
 use crate::store::AppConfigStore;
 use crate::store::app_config::{AppConfig, AppSettings, KnownLibrary};
-use crate::utils::file;
 use crate::utils::time::{file_created_at, now_iso8601_utc, to_iso8601_utc};
 use crate::utils::toml;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -381,44 +381,33 @@ pub fn delete_library_files(
     let library_root = known.library_root.clone();
     let mut instance = instance_handle.lock();
 
-    // Remove recorded deployment artifacts before the mod sources disappear.
+    // Load the state before staging moves the repository out of its original
+    // location. The deletion journal keeps the loaded ownership snapshot.
     let library = Library::load_for_cleanup(&library_root)?;
     let major_mismatch = library.has_spt_major_mismatch()?;
     let previous_config = store.config.clone();
     cleanup::with_exclusive(|| {
-        cleanup::validate_purge_unlocked(&library)?;
-        cleanup::validate_recorded_deployment_removal(&library, major_mismatch)?;
-        cleanup::validate_library_directory_removal(&library_root)?;
+        let mut transaction = deletion::prepare(&store.path, &library, major_mismatch)?;
 
-        // Commit the registry change only after every read-only safety check
-        // has passed, but before mutating deployment files or the game tree.
+        // Config removal is the commit point. Before it succeeds, every
+        // filesystem mutation remains reversible through the journal.
         store.config.remove_library(&registered_id);
         if let Err(error) = store.save() {
-            return Err(rollback_config_change(&mut store, &previous_config, error));
+            let config_error = rollback_config_change(&mut store, &previous_config, error);
+            return Err(match transaction.rollback() {
+                Ok(()) => config_error,
+                Err(rollback_error) => SError::IOError(format!(
+                    "{config_error}; deletion rollback pending: {rollback_error}"
+                )),
+            });
         }
 
-        if major_mismatch {
-            if let Err(error) = cleanup::remove_recorded_deployment_for_delete(&library, true) {
-                return Err(rollback_config_change(&mut store, &previous_config, error));
-            }
-        } else {
-            if let Err(error) = cleanup::remove_recorded_deployment_for_delete(&library, false) {
-                return Err(rollback_config_change(&mut store, &previous_config, error));
-            }
-        }
-        if let Err(error) = cleanup::purge_unlocked(&library) {
-            return Err(rollback_config_change(&mut store, &previous_config, error));
-        }
-        if library_root.exists()
-            && let Err(error) = file::remove_dir_all(&library_root)
-        {
-            return Err(rollback_config_change(&mut store, &previous_config, error));
-        }
-        Ok(())
-    })?;
-    if instance.as_ref().map(|lib| lib.id.as_str()) == Some(registered_id.as_str()) {
+        // The library is no longer usable once config commit succeeds. Clear
+        // the live handle before best-effort physical cleanup begins.
         *instance = None;
-    }
+        transaction.mark_committed()?;
+        transaction.finish()
+    })?;
     Ok(())
 }
 
