@@ -120,6 +120,15 @@ impl Library {
         let spt_paths = game_rules.clone().to_absolute(&game_root);
         // Validate current physical version using the game_root from the loaded library
         let spt_version = version::fetch_and_validate(&spt_paths)?;
+        if !version::same_major(&dto.spt_version, &spt_version)? {
+            return Err(SError::InvalidLibrary(
+                repo_root.to_string(),
+                format!(
+                    "SPT major version changed from {} to {}; create a new library for the new major version",
+                    dto.spt_version, spt_version
+                ),
+            ));
+        }
 
         // Unreadable/unparseable cache is an open-time InvalidLibrary (C5)
         let cache = toml::read(&lib_paths.cache).map_err(|e| {

@@ -97,6 +97,10 @@ pub fn validate_string(version_str: &str) -> Result<(), SError> {
     validate(&version)
 }
 
+pub(crate) fn same_major(left: &str, right: &str) -> Result<bool, SError> {
+    Ok(parse(left)?.major == parse(right)?.major)
+}
+
 /// Parses a string into a SemVer Version, handling errors with early exit.
 fn parse(version_str: &str) -> Result<Version, SError> {
     Version::parse(version_str).map_err(|e| SError::ParseError(e.to_string()))
