@@ -591,6 +591,75 @@ fn purge_preflights_all_walks_before_unlinking_links() {
 
 #[cfg(unix)]
 #[test]
+fn purge_resolves_relative_link_targets_from_the_link_parent() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Relative purge link test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let repo_target = repo_root.join("relative-target.txt");
+    fs::write(&repo_target, "repo").unwrap();
+    let repo_link = legacy_root.join("relative-repo-link");
+    std::os::unix::fs::symlink(
+        Utf8Path::new("../../../../repo/relative-target.txt").as_std_path(),
+        repo_link.as_std_path(),
+    )
+    .unwrap();
+
+    let external_root = Utf8PathBuf::from_path_buf(tmp.path().join("external")).unwrap();
+    fs::create_dir_all(&external_root).unwrap();
+    let external_target = external_root.join("foreign.txt");
+    fs::write(&external_target, "external").unwrap();
+    let external_link = legacy_root.join("relative-external-link");
+    std::os::unix::fs::symlink(
+        Utf8Path::new("../../../../external/foreign.txt").as_std_path(),
+        external_link.as_std_path(),
+    )
+    .unwrap();
+
+    library.sync().unwrap();
+    assert!(fs::symlink_metadata(&repo_link).is_err());
+    assert!(external_link.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_preflights_link_parent_permissions_before_unlinking() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Purge permission preflight test".to_string(),
+    })
+    .unwrap();
+    let repo_target = repo_root.join("permission-target.txt");
+    fs::write(&repo_target, "repo").unwrap();
+    let server_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&server_root).unwrap();
+    let server_link = server_root.join("server-link");
+    std::os::unix::fs::symlink(repo_target.as_std_path(), server_link.as_std_path()).unwrap();
+
+    let client_root = game_root.join("BepInEx/plugins");
+    fs::create_dir_all(&client_root).unwrap();
+    let client_link = client_root.join("client-link");
+    std::os::unix::fs::symlink(repo_target.as_std_path(), client_link.as_std_path()).unwrap();
+    fs::set_permissions(&client_root, fs::Permissions::from_mode(0o555)).unwrap();
+    let result = library.sync();
+    fs::set_permissions(&client_root, fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(matches!(result, Err(SError::IOError(_))));
+    assert!(server_link.exists());
+    assert!(client_link.exists());
+}
+
+#[cfg(unix)]
+#[test]
 fn deleting_a_library_validates_purge_before_removing_deployment() {
     let (tmp, game_root, repo_root) = setup_test_env();
     let mut library = Library::create(LibraryCreationRequirement {

@@ -153,6 +153,11 @@ fn plan_purge(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
             let Ok(target) = linker::read_link_target(path) else {
                 continue;
             };
+            let target = if target.is_absolute() {
+                target
+            } else {
+                path.parent().unwrap_or(Utf8Path::new(".")).join(target)
+            };
             let target = dunce_canon(&target)
                 .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
                 .unwrap_or(target);
@@ -161,7 +166,34 @@ fn plan_purge(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
             }
         }
     }
+    preflight_link_removals(&links)?;
     Ok(links)
+}
+
+fn preflight_link_removals(links: &[Utf8PathBuf]) -> Result<(), SError> {
+    for link in links {
+        let parent = link.parent().ok_or(SError::Unexpected)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(parent)?.permissions().mode();
+            if mode & 0o222 == 0 {
+                return Err(SError::IOError(format!(
+                    "Deployment link parent is not writable: '{parent}'"
+                )));
+            }
+        }
+        let probe = parent.join(format!(".modkeeper-purge-probe-{}", uuid::Uuid::new_v4()));
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&probe)?;
+        if let Err(error) = fs::remove_file(&probe) {
+            let _ = fs::remove_file(&probe);
+            return Err(error.into());
+        }
+    }
+    Ok(())
 }
 
 pub fn purge(library: &Library) -> Result<(), SError> {
