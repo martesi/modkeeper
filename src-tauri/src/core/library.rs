@@ -153,8 +153,10 @@ impl Library {
             DeploymentState::default()
         };
         deployment::normalize_created_dirs(&game_root, &mut deployment);
+        let migrated_legacy_fingerprints =
+            deployment::migrate_legacy_fingerprints(&game_root, repo_root, &mut deployment)?;
 
-        Ok(Self {
+        let library = Self {
             id: dto.id,
             name: dto.name,
             repo_root: repo_root.to_owned(),
@@ -168,7 +170,11 @@ impl Library {
             spt_version,
             mods: dto.mods,
             is_dirty: false,
-        })
+        };
+        if migrated_legacy_fingerprints {
+            library.persist_deployment()?;
+        }
+        Ok(library)
     }
 
     pub(crate) fn has_spt_major_mismatch(&self) -> Result<bool, SError> {
@@ -263,6 +269,11 @@ impl Library {
     /// reconciled, without rewriting the historical library manifest.
     pub(crate) fn retire_deployment(&self) -> Result<(), SError> {
         toml::write(&self.lib_paths.deployment, &DeploymentState::default())?;
+        Ok(())
+    }
+
+    pub(crate) fn persist_deployment(&self) -> Result<(), SError> {
+        toml::write(&self.lib_paths.deployment, &self.deployment)?;
         Ok(())
     }
 

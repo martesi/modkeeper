@@ -3,6 +3,7 @@ mod common;
 use camino::{Utf8Path, Utf8PathBuf};
 use common::{create_test_mod, setup_test_env};
 use mod_keeper_lib::core::library::Library;
+use mod_keeper_lib::core::linker::ArtifactKind;
 use mod_keeper_lib::core::mod_fs::{self, ModFS};
 use mod_keeper_lib::core::mod_stager::StagedMod;
 use mod_keeper_lib::core::{global_service, library_service, mod_manager};
@@ -306,6 +307,10 @@ fn updating_a_deployed_mod_refreshes_and_removal_unlinks_stale_copies() {
     fs::write(&deployed, "user edit").unwrap();
     library.mark_dirty();
     assert!(matches!(library.sync(), Err(SError::FileCollision(_))));
+    assert_eq!(fs::read_to_string(&deployed).unwrap(), "user edit");
+    let remove_error = mod_manager::remove_mod(&mut library, &mod_id).unwrap_err();
+    assert!(matches!(remove_error, SError::FileCollision(_)));
+    assert!(library.mods.contains_key(&mod_id));
     assert_eq!(fs::read_to_string(&deployed).unwrap(), "user edit");
     fs::write(&deployed, "Example").unwrap();
 
@@ -731,6 +736,57 @@ fn test_copy_deployment_reuses_owned_directories_and_normalizes_legacy_paths() {
             .created_dirs
             .iter()
             .all(|path| path.is_relative())
+    );
+    loaded.sync().unwrap();
+}
+
+#[test]
+fn test_legacy_copy_deployment_fingerprints_are_migrated_on_load() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut lib = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root,
+        name: "Legacy deployment test".to_string(),
+    })
+    .unwrap();
+
+    let source = repo_root.join("source");
+    create_test_mod(&source, "LegacyMod", true);
+    let scanned = mod_fs::scan(&source, &SPTPathRules::default()).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(
+        &mut lib,
+        create_staged_mod_for_test(&source, scanned),
+        false,
+    )
+    .unwrap();
+    lib.mods.get_mut(&mod_id).unwrap().is_active = true;
+    lib.sync().unwrap();
+
+    let copy_count = lib
+        .deployment
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == ArtifactKind::Copy)
+        .count();
+    assert!(copy_count > 0);
+    for artifact in &mut lib.deployment.artifacts {
+        if artifact.kind == ArtifactKind::Copy {
+            artifact.fingerprint = None;
+        }
+    }
+    lib.persist().unwrap();
+
+    let mut loaded = Library::load(&lib.repo_root).unwrap();
+    assert_eq!(
+        loaded
+            .deployment
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == ArtifactKind::Copy)
+            .filter(|artifact| artifact.fingerprint.is_some())
+            .count(),
+        copy_count
     );
     loaded.sync().unwrap();
 }

@@ -71,6 +71,44 @@ pub(crate) fn normalize_created_dirs(game_root: &Utf8Path, state: &mut Deploymen
     }
 }
 
+/// Backfills fingerprints for legacy regular-copy records only when the
+/// recorded destination still exactly matches the library source. An
+/// ambiguous legacy destination remains unowned so later reconciliation can
+/// surface an explicit collision instead of guessing.
+pub(crate) fn migrate_legacy_fingerprints(
+    game_root: &Utf8Path,
+    repo_root: &Utf8Path,
+    state: &mut DeploymentState,
+) -> Result<bool, SError> {
+    let mut migrated = false;
+    for artifact in &mut state.artifacts {
+        if artifact.fingerprint.is_some() || artifact.kind != ArtifactKind::Copy {
+            continue;
+        }
+        if !recorded_path_is_contained(game_root, &artifact.target) {
+            continue;
+        }
+        let Some(source) = recorded_source_path_for(repo_root, &artifact.source) else {
+            continue;
+        };
+        let target = game_root.join(&artifact.target);
+        let Ok(source_meta) = fs::symlink_metadata(source.as_std_path()) else {
+            continue;
+        };
+        let Ok(target_meta) = fs::symlink_metadata(target.as_std_path()) else {
+            continue;
+        };
+        if !source_meta.is_file() || !target_meta.is_file() {
+            continue;
+        }
+        if file_contents_match(&source, &target)? {
+            artifact.fingerprint = Some(file_fingerprint(&target)?);
+            migrated = true;
+        }
+    }
+    Ok(migrated)
+}
+
 /// Checks that a persisted game-root-relative path cannot escape through `..`
 /// or an ancestor symlink/junction. The final component is deliberately not
 /// canonicalized because recorded symlinks and junctions are deployment
@@ -155,7 +193,7 @@ fn has_unredirected_ancestors(
                 let Ok(actual) = dunce::canonicalize(physical.as_std_path()) else {
                     return false;
                 };
-                if actual != expected {
+                if !canonical_paths_equal(&actual, &expected) {
                     return false;
                 }
             }
@@ -164,6 +202,19 @@ fn has_unredirected_ancestors(
         }
     }
     true
+}
+
+fn canonical_paths_equal(actual: &std::path::Path, expected: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        actual
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&expected.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        actual == expected
+    }
 }
 
 // --- Protected Path Helpers ---
@@ -358,15 +409,24 @@ fn deployment_owns_directory(library: &Library, target: &Utf8Path) -> Result<boo
 pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError> {
     let old = library.deployment.clone();
     let desired: HashSet<_> = plan.artifacts.iter().cloned().collect();
+    let mut artifact_removals = Vec::new();
 
     for artifact in &old.artifacts {
         let target = library.game_root.join(&artifact.target);
         if desired.contains(artifact) && artifact_is_current(library, artifact, &target)? {
             continue;
         }
-        if artifact_is_recorded(library, artifact, &target)? {
-            linker::remove(&target, artifact.kind)?;
+        match fs::symlink_metadata(&target) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Ok(_) if artifact_is_recorded(library, artifact, &target)? => {
+                artifact_removals.push((target, artifact.kind));
+            }
+            Ok(_) => return Err(collision(&artifact.target)),
+            Err(error) => return Err(error.into()),
         }
+    }
+    for (target, kind) in artifact_removals {
+        linker::remove(&target, kind)?;
     }
 
     let protected = get_protected_paths_absolute(&library.game_root, &library.game_rules);
@@ -513,10 +573,20 @@ pub(crate) fn artifact_is_recorded(
         return Ok(false);
     }
 
-    let Some(expected) = artifact.fingerprint.as_deref() else {
-        return Ok(false);
-    };
-    Ok(file_fingerprint(target)? == expected)
+    match artifact.kind {
+        ArtifactKind::Hardlink => Ok(same_file::is_same_file(
+            source.as_std_path(),
+            target.as_std_path(),
+        )
+        .unwrap_or(false)),
+        ArtifactKind::Copy => {
+            let Some(expected) = artifact.fingerprint.as_deref() else {
+                return Ok(false);
+            };
+            Ok(file_fingerprint(target)? == expected)
+        }
+        ArtifactKind::Symlink | ArtifactKind::Junction => unreachable!(),
+    }
 }
 
 /// Verifies that a recorded artifact still represents the current library
@@ -574,13 +644,17 @@ pub(crate) fn artifact_is_owned(
 }
 
 fn recorded_source_path(library: &Library, source: &Utf8Path) -> Option<Utf8PathBuf> {
+    recorded_source_path_for(&library.repo_root, source)
+}
+
+fn recorded_source_path_for(repo_root: &Utf8Path, source: &Utf8Path) -> Option<Utf8PathBuf> {
     if !is_safe_relative_path(source) {
         return None;
     }
 
-    let repo_canonical = dunce::canonicalize(library.repo_root.as_std_path()).ok()?;
-    let source_path = library.repo_root.join(source);
-    let source_parent = source_path.parent().unwrap_or(&library.repo_root);
+    let repo_canonical = dunce::canonicalize(repo_root.as_std_path()).ok()?;
+    let source_path = repo_root.join(source);
+    let source_parent = source_path.parent().unwrap_or(repo_root);
     let source_parent_canonical = canonicalize_nearest_existing(source_parent)?;
     source_parent_canonical
         .starts_with(repo_canonical)

@@ -137,6 +137,7 @@ pub fn unlink_mod(
         deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
     let mut unlinked = Vec::new();
     let mut removed_targets = HashSet::new();
+    let mut artifact_removals = Vec::new();
 
     for path in unlink_paths {
         let Some(artifact) = deployment::recorded_artifact(library, path).cloned() else {
@@ -155,14 +156,22 @@ pub fn unlink_mod(
         match fs::symlink_metadata(&target) {
             Ok(_) => {
                 if !deployment::artifact_is_recorded(library, &artifact, &target)? {
-                    continue;
+                    return Err(SError::FileCollision(vec![format!(
+                        "Deployment target changed outside ModKeeper ownership: '{target}'."
+                    )]));
                 }
-                linker::remove(&target, artifact.kind)?;
-                unlinked.push(target.clone());
+                artifact_removals.push((target, artifact));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                removed_targets.insert(artifact.target);
+            }
             Err(error) => return Err(error.into()),
         }
+    }
+
+    for (target, artifact) in artifact_removals {
+        linker::remove(&target, artifact.kind)?;
+        unlinked.push(target);
         removed_targets.insert(artifact.target);
     }
 
