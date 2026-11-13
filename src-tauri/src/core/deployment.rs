@@ -132,9 +132,9 @@ pub(crate) fn recorded_path_is_contained(base: &Utf8Path, relative: &Utf8Path) -
     parent_canonical.starts_with(base_canonical)
 }
 
-/// Like [`recorded_path_is_contained`], but also resolves the final component.
-/// This is used for recorded directories, which must never be redirected by a
-/// junction or symlink before cleanup inspects their contents.
+/// Like [`recorded_path_is_contained`], but also validates the final component.
+/// Recorded directories must never be redirected by a junction or symlink
+/// before cleanup inspects or removes their contents.
 pub(crate) fn recorded_directory_is_contained(base: &Utf8Path, relative: &Utf8Path) -> bool {
     if !recorded_path_is_contained(base, relative) {
         return false;
@@ -144,9 +144,14 @@ pub(crate) fn recorded_directory_is_contained(base: &Utf8Path, relative: &Utf8Pa
         return false;
     };
     let absolute = base.join(relative);
-    dunce::canonicalize(absolute.as_std_path())
-        .map(|path| path.starts_with(base_canonical))
-        .unwrap_or(false)
+    match fs::symlink_metadata(&absolute) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+        Ok(meta) if is_redirected_path(&absolute) || !meta.is_dir() => false,
+        Ok(_) => dunce::canonicalize(absolute.as_std_path())
+            .map(|path| path.starts_with(base_canonical))
+            .unwrap_or(false),
+        Err(_) => false,
+    }
 }
 
 fn is_safe_relative_path(path: &Utf8Path) -> bool {
@@ -189,11 +194,11 @@ fn has_unredirected_ancestors(
         physical.push(component);
         expected.push(component);
         match fs::symlink_metadata(physical.as_std_path()) {
-            Ok(_) => {
-                let Ok(actual) = dunce::canonicalize(physical.as_std_path()) else {
+            Ok(meta) => {
+                if !meta.is_dir() || is_redirected_path(&physical) {
                     return false;
-                };
-                if !canonical_paths_equal(&actual, &expected) {
+                }
+                if !same_file::is_same_file(physical.as_std_path(), &expected).unwrap_or(false) {
                     return false;
                 }
             }
@@ -204,36 +209,15 @@ fn has_unredirected_ancestors(
     true
 }
 
-#[cfg(windows)]
-fn canonical_paths_equal(actual: &std::path::Path, expected: &std::path::Path) -> bool {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Globalization::{CSTR_EQUAL, CompareStringOrdinal};
-
-    let actual: Vec<_> = actual.as_os_str().encode_wide().collect();
-    let expected: Vec<_> = expected.as_os_str().encode_wide().collect();
-    let Ok(actual_len) = i32::try_from(actual.len()) else {
-        return false;
-    };
-    let Ok(expected_len) = i32::try_from(expected.len()) else {
-        return false;
-    };
-
-    // CompareStringOrdinal uses the Windows ordinal uppercase table, which
-    // matches the case-insensitive path rules for the Windows filesystem.
-    unsafe {
-        CompareStringOrdinal(
-            actual.as_ptr(),
-            actual_len,
-            expected.as_ptr(),
-            expected_len,
-            1,
-        ) == CSTR_EQUAL
-    }
-}
-
-#[cfg(not(windows))]
-fn canonical_paths_equal(actual: &std::path::Path, expected: &std::path::Path) -> bool {
-    actual == expected
+fn is_redirected_path(path: &Utf8Path) -> bool {
+    let is_symlink = fs::symlink_metadata(path.as_std_path())
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false);
+    #[cfg(windows)]
+    let is_junction = junction::exists(path.as_std_path()).unwrap_or(false);
+    #[cfg(not(windows))]
+    let is_junction = false;
+    is_symlink || is_junction || linker::read_link_target(path).is_ok()
 }
 
 // --- Protected Path Helpers ---
@@ -427,7 +411,17 @@ fn deployment_owns_directory(library: &Library, target: &Utf8Path) -> Result<boo
 /// Validates recorded artifacts before compatibility cleanup can remove any
 /// links. This catches conflicts for artifacts that are no longer desired.
 pub fn preflight(library: &Library, plan: &DeploymentPlan) -> Result<(), SError> {
-    plan_artifact_removals(library, plan).map(|_| ())
+    plan_artifact_removals(library, plan)?;
+    preflight_recorded_directories(library)
+}
+
+fn preflight_recorded_directories(library: &Library) -> Result<(), SError> {
+    for path in &library.deployment.created_dirs {
+        if !recorded_directory_is_contained(&library.game_root, path) {
+            return Err(containment_collision(path));
+        }
+    }
+    Ok(())
 }
 
 fn plan_artifact_removals(
@@ -439,6 +433,9 @@ fn plan_artifact_removals(
     let mut artifact_removals = Vec::new();
 
     for artifact in &old.artifacts {
+        if !recorded_path_is_contained(&library.game_root, &artifact.target) {
+            return Err(containment_collision(&artifact.target));
+        }
         let target = library.game_root.join(&artifact.target);
         if desired.contains(artifact) && artifact_is_current(library, artifact, &target)? {
             continue;
@@ -458,6 +455,7 @@ fn plan_artifact_removals(
 /// Reconciles recorded artifacts, then creates only absent destinations.
 pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError> {
     let old = library.deployment.clone();
+    preflight_recorded_directories(library)?;
     let artifact_removals = plan_artifact_removals(library, &plan)?;
     for (target, kind) in artifact_removals {
         linker::remove(&target, kind)?;
@@ -468,6 +466,9 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
     let mut old_dirs = old.created_dirs.clone();
     old_dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     for path in &old_dirs {
+        if !recorded_directory_is_contained(&library.game_root, path) {
+            return Err(containment_collision(path));
+        }
         if desired_dirs.contains(path)
             || protected
                 .iter()
@@ -560,6 +561,12 @@ fn check_destinations(library: &Library, artifacts: &[DeploymentArtifact]) -> Re
 
 fn collision(path: &Utf8Path) -> SError {
     SError::FileCollision(vec![format!("Deployment target already exists: '{path}'.")])
+}
+
+fn containment_collision(path: &Utf8Path) -> SError {
+    SError::FileCollision(vec![format!(
+        "Deployment target cannot be safely removed because its path is redirected or outside the game root: '{path}'."
+    )])
 }
 
 fn legacy_repo_link(path: &Utf8Path, repo_root: &Utf8Path) -> bool {

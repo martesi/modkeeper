@@ -101,15 +101,27 @@ pub fn purge(library: &Library) -> Result<(), SError> {
         .unwrap_or_else(|_| library.repo_root.clone());
     let roots = deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
 
-    for root in roots.iter().filter(|root| root.exists()) {
+    for root in &roots {
+        let meta = match fs::symlink_metadata(root) {
+            Ok(meta) => meta,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if !meta.is_dir() || meta.file_type().is_symlink() || linker::read_link_target(root).is_ok()
+        {
+            return Err(ownership_error(library, root));
+        }
         let relative = root.strip_prefix(&library.game_root)?;
         if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
             return Err(ownership_error(library, root));
         }
-        for entry in WalkDir::new(root).follow_links(false) {
+        // The root was verified as a real directory above; min_depth avoids
+        // treating it as a link traversal root, while follow_links keeps child
+        // links from being traversed.
+        for entry in WalkDir::new(root).min_depth(1).follow_links(false) {
             let entry = entry.map_err(|error| SError::IOError(error.to_string()))?;
             let path = Utf8Path::from_path(entry.path()).ok_or(SError::Unexpected)?;
-            if path == root || !entry.file_type().is_symlink() {
+            if !entry.file_type().is_symlink() {
                 continue;
             }
             let Ok(target) = linker::read_link_target(path) else {
@@ -138,6 +150,31 @@ pub fn unlink_mod(
     let mut unlinked = Vec::new();
     let mut removed_targets = HashSet::new();
     let mut artifact_removals = Vec::new();
+    let mut dirs: Vec<_> = shared_dirs.iter().collect();
+    dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    let mut directory_candidates = Vec::new();
+
+    // Validate every recorded directory before removing any artifact. The
+    // directory set is library-wide, so another mod can make this cleanup
+    // unsafe even when this mod's own artifacts are valid.
+    for path in &dirs {
+        let Ok(relative) = path.strip_prefix(&library.game_root) else {
+            return Err(containment_collision(path));
+        };
+        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
+            return Err(containment_collision(path));
+        }
+        let Ok(meta) = fs::symlink_metadata(path) else {
+            continue;
+        };
+        if protected.iter().any(|root| root == *path) {
+            continue;
+        }
+        if meta.is_dir() {
+            let _ = fs::read_dir(path)?.next();
+            directory_candidates.push((*path).clone());
+        }
+    }
 
     for path in unlink_paths {
         let Some(artifact) = deployment::recorded_artifact(library, path).cloned() else {
@@ -176,24 +213,10 @@ pub fn unlink_mod(
         removed_targets.insert(artifact.target);
     }
 
-    let mut dirs: Vec<_> = shared_dirs.iter().collect();
-    dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
-    for path in dirs {
-        let Ok(relative) = path.strip_prefix(&library.game_root) else {
-            return Err(containment_collision(path));
-        };
-        let Ok(meta) = fs::symlink_metadata(path) else {
-            continue;
-        };
-        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
-            return Err(containment_collision(path));
-        }
-        if protected.iter().any(|root| root == path) {
-            continue;
-        }
-        if meta.is_dir() && fs::read_dir(path)?.next().is_none() {
-            fs::remove_dir(path)?;
-            unlinked.push(path.clone());
+    for path in directory_candidates {
+        if fs::read_dir(&path)?.next().is_none() {
+            fs::remove_dir(&path)?;
+            unlinked.push(path);
         }
     }
 

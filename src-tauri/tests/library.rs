@@ -446,6 +446,114 @@ fn removing_a_mod_refuses_a_deployment_path_redirected_within_the_game_root() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn sync_refuses_redirected_recorded_directories_when_artifacts_are_missing() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root),
+        game_root: game_root.clone(),
+        name: "Missing artifact directory test".to_string(),
+    })
+    .unwrap();
+    let source = Utf8PathBuf::from_path_buf(tmp.path().join("source")).unwrap();
+    let content = source.join("SPT/user/mods/DirMod/Nested/content.txt");
+    fs::create_dir_all(content.parent().unwrap()).unwrap();
+    fs::write(&content, "DirMod").unwrap();
+    let scanned = mod_fs::scan(&source, &SPTPathRules::default()).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&source, scanned),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+    mod_manager::toggle_mod(&mut library, &mod_id, false).unwrap();
+
+    let deployed_dir = game_root.join("SPT/user/mods/DirMod");
+    let external_dir = Utf8PathBuf::from_path_buf(tmp.path().join("external")).unwrap();
+    fs::create_dir_all(external_dir.join("Nested")).unwrap();
+    fs::remove_dir_all(&deployed_dir).unwrap();
+    std::os::unix::fs::symlink(external_dir.as_std_path(), deployed_dir.as_std_path()).unwrap();
+    library.deployment.artifacts.clear();
+    library.mark_dirty();
+
+    assert!(matches!(library.sync(), Err(SError::FileCollision(_))));
+    assert!(external_dir.join("Nested").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn removing_a_mod_preflights_shared_directories_before_unlinking_artifacts() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root),
+        game_root: game_root.clone(),
+        name: "Shared directory preflight test".to_string(),
+    })
+    .unwrap();
+    let first_source = Utf8PathBuf::from_path_buf(tmp.path().join("first-source")).unwrap();
+    let second_source = Utf8PathBuf::from_path_buf(tmp.path().join("second-source")).unwrap();
+    create_test_mod(&first_source, "FirstMod", true);
+    create_test_mod(&second_source, "SecondMod", true);
+    let first_fs = mod_fs::scan(&first_source, &SPTPathRules::default()).unwrap();
+    let second_fs = mod_fs::scan(&second_source, &SPTPathRules::default()).unwrap();
+    let first_id = first_fs.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&first_source, first_fs),
+        true,
+    )
+    .unwrap();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&second_source, second_fs),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+
+    let first_target = game_root.join("SPT/user/mods/FirstMod/content.txt");
+    let second_dir = game_root.join("SPT/user/mods/SecondMod");
+    let external_dir = Utf8PathBuf::from_path_buf(tmp.path().join("redirected-second")).unwrap();
+    fs::create_dir_all(&external_dir).unwrap();
+    fs::write(external_dir.join("content.txt"), "foreign").unwrap();
+    fs::remove_dir_all(&second_dir).unwrap();
+    std::os::unix::fs::symlink(external_dir.as_std_path(), second_dir.as_std_path()).unwrap();
+
+    let error = mod_manager::remove_mod(&mut library, &first_id).unwrap_err();
+    assert!(matches!(error, SError::FileCollision(_)));
+    assert!(library.mods.contains_key(&first_id));
+    assert_eq!(fs::read_to_string(&first_target).unwrap(), "FirstMod");
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_refuses_a_redirected_protected_root_before_traversal() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Purge root redirect test".to_string(),
+    })
+    .unwrap();
+    let redirected_root = game_root.join("redirected-mods");
+    fs::create_dir_all(&redirected_root).unwrap();
+    let repo_file = repo_root.join("foreign.txt");
+    fs::write(&repo_file, "foreign").unwrap();
+    let foreign_link = redirected_root.join("foreign-link");
+    std::os::unix::fs::symlink(repo_file.as_std_path(), foreign_link.as_std_path()).unwrap();
+
+    let protected_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(protected_root.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(redirected_root.as_std_path(), protected_root.as_std_path())
+        .unwrap();
+
+    assert!(matches!(library.sync(), Err(SError::InvalidLibrary(_, _))));
+    assert!(foreign_link.exists());
+}
+
 #[test]
 fn retiring_reconciled_records_prevents_old_library_replay() {
     let (tmp, game_root, _) = setup_test_env();
