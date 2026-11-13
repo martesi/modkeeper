@@ -550,13 +550,43 @@ fn purge_preflights_all_protected_roots_before_traversal() {
     fs::create_dir_all(&redirected_root).unwrap();
     let redirected_link = redirected_root.join("foreign-link");
     std::os::unix::fs::symlink(repo_file.as_std_path(), redirected_link.as_std_path()).unwrap();
-    let invalid_root = game_root.join("BepInEx/plugins");
-    fs::create_dir_all(invalid_root.parent().unwrap()).unwrap();
-    std::os::unix::fs::symlink(redirected_root.as_std_path(), invalid_root.as_std_path()).unwrap();
+    let invalid_parent = game_root.join("BepInEx");
+    fs::create_dir_all(&invalid_parent).unwrap();
+    fs::remove_dir(&invalid_parent).unwrap();
+    std::os::unix::fs::symlink(redirected_root.as_std_path(), invalid_parent.as_std_path())
+        .unwrap();
 
     assert!(matches!(library.sync(), Err(SError::InvalidLibrary(_, _))));
     assert!(valid_link.exists());
     assert!(redirected_link.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_preflights_all_walks_before_unlinking_links() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Purge walk preflight test".to_string(),
+    })
+    .unwrap();
+    let repo_file = repo_root.join("foreign.txt");
+    fs::write(&repo_file, "foreign").unwrap();
+    let valid_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&valid_root).unwrap();
+    let valid_link = valid_root.join("valid-link");
+    std::os::unix::fs::symlink(repo_file.as_std_path(), valid_link.as_std_path()).unwrap();
+
+    let invalid_root = game_root.join("BepInEx/plugins");
+    fs::create_dir_all(&invalid_root).unwrap();
+    let invalid_name = std::ffi::OsStr::from_bytes(b"invalid-\xff");
+    fs::write(invalid_root.as_std_path().join(invalid_name), "invalid").unwrap();
+
+    assert!(matches!(library.sync(), Err(SError::Unexpected)));
+    assert!(valid_link.exists());
 }
 
 #[cfg(unix)]
@@ -600,6 +630,65 @@ fn deleting_a_library_validates_purge_before_removing_deployment() {
     assert!(matches!(error, SError::InvalidLibrary(_, _)));
     assert!(deployed.exists());
     assert!(repo_root.exists());
+    assert!(
+        !Library::load(&repo_root)
+            .unwrap()
+            .deployment
+            .artifacts
+            .is_empty()
+    );
+    assert!(
+        config_handle
+            .lock()
+            .config
+            .known_libraries
+            .iter()
+            .any(|known| known.id == library.id)
+    );
+    assert!(library.mods.contains_key(&mod_id));
+}
+
+#[cfg(unix)]
+#[test]
+fn deleting_a_library_validates_purge_walks_before_removing_deployment() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Delete purge walk test".to_string(),
+    })
+    .unwrap();
+    let source_path = tmp.path().join("source");
+    let source = Utf8Path::from_path(&source_path).unwrap();
+    create_test_mod(source, "KeepDeployment", true);
+    let scanned = mod_fs::scan(source, &SPTPathRules::default()).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(source, scanned),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/KeepDeployment/content.txt");
+
+    let invalid_root = game_root.join("BepInEx/plugins");
+    fs::create_dir_all(&invalid_root).unwrap();
+    let invalid_name = std::ffi::OsStr::from_bytes(b"invalid-\xff");
+    fs::write(invalid_root.as_std_path().join(invalid_name), "invalid").unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root: repo_root.clone(),
+    });
+    let error = global_service::delete_library_files(&config_handle, &instance_handle, &library.id)
+        .unwrap_err();
+
+    assert!(matches!(error, SError::Unexpected));
+    assert!(deployed.exists());
     assert!(
         !Library::load(&repo_root)
             .unwrap()
@@ -742,6 +831,7 @@ fn creating_a_new_major_library_allows_an_already_removed_old_tree() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn cross_major_migration_purges_legacy_links_from_the_old_server_root() {
     let (tmp, game_root, _) = setup_test_env();

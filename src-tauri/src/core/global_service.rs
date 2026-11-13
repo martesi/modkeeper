@@ -259,7 +259,7 @@ pub fn create_library(
             if existing.has_spt_major_mismatch()? {
                 let compatible =
                     find_compatible_versioned_library(&game_root, &existing.spt_version)?;
-                cleanup::validate_purge_roots(&existing)?;
+                cleanup::validate_purge(&existing)?;
                 cleanup::remove_recorded_deployment_for_transition(&existing)?;
                 cleanup::purge(&existing)?;
                 if let Some((compatible_root, library)) = compatible {
@@ -367,7 +367,7 @@ pub fn delete_library_files(
 
     // Remove recorded deployment artifacts before the mod sources disappear.
     let library = Library::load_for_cleanup(&library_root)?;
-    cleanup::validate_purge_roots(&library)?;
+    cleanup::validate_purge(&library)?;
     if library.has_spt_major_mismatch()? {
         cleanup::remove_recorded_deployment_for_transition(&library)?;
     } else {

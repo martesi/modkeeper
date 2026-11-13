@@ -94,10 +94,10 @@ fn remove_recorded_deployment_with_identity(
     Ok(())
 }
 
-/// Compatibility cleanup for deployments made before deployment.toml existed.
+/// Validates the compatibility purge without mutating the game tree.
 /// Recorded artifacts are removed by reconciliation, not by scanning the cache.
-pub fn validate_purge_roots(library: &Library) -> Result<(), SError> {
-    validated_purge_roots(library).map(|_| ())
+pub fn validate_purge(library: &Library) -> Result<(), SError> {
+    plan_purge(library).map(|_| ())
 }
 
 fn purge_roots(library: &Library) -> Vec<Utf8PathBuf> {
@@ -113,6 +113,10 @@ fn purge_roots(library: &Library) -> Vec<Utf8PathBuf> {
 fn validated_purge_roots(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
     let mut valid_roots = Vec::new();
     for root in purge_roots(library) {
+        let relative = root.strip_prefix(&library.game_root)?;
+        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
+            return Err(ownership_error(library, &root));
+        }
         let meta = match fs::symlink_metadata(&root) {
             Ok(meta) => meta,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
@@ -124,20 +128,17 @@ fn validated_purge_roots(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> 
         {
             return Err(ownership_error(library, &root));
         }
-        let relative = root.strip_prefix(&library.game_root)?;
-        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
-            return Err(ownership_error(library, &root));
-        }
         valid_roots.push(root);
     }
     Ok(valid_roots)
 }
 
-pub fn purge(library: &Library) -> Result<(), SError> {
+fn plan_purge(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
     let repo_root = dunce_canon(&library.repo_root)
         .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
         .unwrap_or_else(|_| library.repo_root.clone());
     let roots = validated_purge_roots(library)?;
+    let mut links = Vec::new();
 
     for root in roots {
         // The root was verified as a real directory above; min_depth avoids
@@ -156,9 +157,16 @@ pub fn purge(library: &Library) -> Result<(), SError> {
                 .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
                 .unwrap_or(target);
             if target.starts_with(&repo_root) {
-                linker::unlink(path)?;
+                links.push(path.to_path_buf());
             }
         }
+    }
+    Ok(links)
+}
+
+pub fn purge(library: &Library) -> Result<(), SError> {
+    for path in plan_purge(library)? {
+        linker::unlink(&path)?;
     }
     Ok(())
 }
