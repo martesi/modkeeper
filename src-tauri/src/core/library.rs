@@ -109,6 +109,17 @@ impl Library {
     }
 
     pub fn load(repo_root: &Utf8Path) -> Result<Self, SError> {
+        Self::load_inner(repo_root, true)
+    }
+
+    /// Loads enough state to reconcile deployed artifacts even when the
+    /// installation crossed SPT major versions. Normal activation still uses
+    /// `load`, which rejects that transition before deployment is possible.
+    pub(crate) fn load_for_cleanup(repo_root: &Utf8Path) -> Result<Self, SError> {
+        Self::load_inner(repo_root, false)
+    }
+
+    fn load_inner(repo_root: &Utf8Path, enforce_spt_major: bool) -> Result<Self, SError> {
         let dto = Self::read_library_manifest(repo_root)?;
 
         // Validate historical version
@@ -120,7 +131,7 @@ impl Library {
         let spt_paths = game_rules.clone().to_absolute(&game_root);
         // Validate current physical version using the game_root from the loaded library
         let spt_version = version::fetch_and_validate(&spt_paths)?;
-        if !version::same_major(&dto.spt_version, &spt_version)? {
+        if enforce_spt_major && !version::same_major(&dto.spt_version, &spt_version)? {
             return Err(SError::InvalidLibrary(
                 repo_root.to_string(),
                 format!(
@@ -158,6 +169,11 @@ impl Library {
             mods: dto.mods,
             is_dirty: false,
         })
+    }
+
+    pub(crate) fn has_spt_major_mismatch(&self) -> Result<bool, SError> {
+        let recorded = Self::read_library_manifest(&self.repo_root)?.spt_version;
+        Ok(!version::same_major(&recorded, &self.spt_version)?)
     }
 
     /// Reads the library manifest; both IO and parse failures map to
@@ -247,6 +263,17 @@ impl Library {
     /// The canonical way to apply mod activation changes to the game directory.
     pub fn sync(&mut self) -> Result<(), SError> {
         use crate::core::{cleanup, deployment};
+        let current_paths = self.game_rules.clone().to_absolute(&self.game_root);
+        let current_version = version::fetch_and_validate(&current_paths)?;
+        if !version::same_major(&self.spt_version, &current_version)? {
+            return Err(SError::InvalidLibrary(
+                self.repo_root.to_string(),
+                format!(
+                    "SPT major version changed from {} to {}; create a new library for the new major version",
+                    self.spt_version, current_version
+                ),
+            ));
+        }
         let plan = deployment::plan(self)?;
         cleanup::purge(self)?;
         deployment::deploy(self, plan)?;

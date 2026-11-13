@@ -66,6 +66,12 @@ pub fn derive_library_root(game_root: &Utf8Path) -> Utf8PathBuf {
     game_root.join(&spt_rules.library_default)
 }
 
+/// Keeps a prior default library intact when the same game root moves to a
+/// different SPT major version.
+pub fn derive_library_root_for_spt(game_root: &Utf8Path, spt_version: &str) -> Utf8PathBuf {
+    game_root.join(format!(".mod_keeper-spt-{spt_version}"))
+}
+
 fn assert_is_library(library: &Library, library_id: &str) -> Result<(), SError> {
     if library.id == library_id {
         Ok(())

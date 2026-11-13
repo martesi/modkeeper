@@ -184,19 +184,40 @@ pub fn create_library(
     input: CreateLibraryInput,
 ) -> Result<(), SError> {
     let game_root = Utf8PathBuf::from(input.game_root);
-    let library_root = input
+    let use_default_library_root = input.library_root.is_none();
+    let mut library_root = input
         .library_root
         .map(Utf8PathBuf::from)
         .unwrap_or_else(|| library_service::derive_library_root(&game_root));
+    let name = input
+        .name
+        .unwrap_or_else(|| game_root.file_name().unwrap_or("Library").to_string());
 
     let library = if library_root.exists() {
         // Existing dir: adopt when valid, error when not - never overwrite.
         library_service::validate_library_structure(&library_root)?;
-        Library::load(&library_root)?
+        if use_default_library_root {
+            let existing = Library::load_for_cleanup(&library_root)?;
+            if existing.has_spt_major_mismatch()? {
+                library_root =
+                    library_service::derive_library_root_for_spt(&game_root, &existing.spt_version);
+                if library_root.exists() {
+                    library_service::validate_library_structure(&library_root)?;
+                    Library::load(&library_root)?
+                } else {
+                    Library::create(LibraryCreationRequirement {
+                        game_root: game_root.clone(),
+                        repo_root: Some(library_root.clone()),
+                        name: name.clone(),
+                    })?
+                }
+            } else {
+                existing
+            }
+        } else {
+            Library::load(&library_root)?
+        }
     } else {
-        let name = input
-            .name
-            .unwrap_or_else(|| game_root.file_name().unwrap_or("Library").to_string());
         Library::create(LibraryCreationRequirement {
             game_root,
             repo_root: Some(library_root.clone()),
@@ -266,10 +287,9 @@ pub fn delete_library_files(
     };
 
     // Remove recorded deployment artifacts before the mod sources disappear.
-    if let Ok(library) = Library::load(&library_root) {
-        cleanup::remove_recorded_deployment(&library)?;
-        cleanup::purge(&library)?;
-    }
+    let library = Library::load_for_cleanup(&library_root)?;
+    cleanup::remove_recorded_deployment(&library)?;
+    cleanup::purge(&library)?;
 
     delete_library_entry(config_handle, instance_handle, library_id)?;
 

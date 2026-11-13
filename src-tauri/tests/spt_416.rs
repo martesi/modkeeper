@@ -164,6 +164,48 @@ fn loading_a_4x_library_rejects_an_spt_5_installation() {
 }
 
 #[test]
+fn syncing_an_open_4x_library_rejects_an_spt_5_installation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+    let game = root.join("game");
+    let repo = root.join("library");
+    let runtime = game.join("SPT_Runtime");
+    fs::create_dir_all(&runtime).unwrap();
+    fs::write(game.join("EscapeFromTarkov.exe"), "game").unwrap();
+    fs::write(runtime.join("SPT.Server.exe"), "server").unwrap();
+    fs::write(runtime.join("SPT.Server.deps.json"), deps("4.1.6")).unwrap();
+
+    let mut library = Library::create(LibraryCreationRequirement {
+        game_root: game.clone(),
+        repo_root: Some(repo),
+        name: "SPT 4 test".into(),
+    })
+    .unwrap();
+    let package = root.join("package");
+    let mod_file = package.join("SPT_Runtime/user/mods/Example/mod.dll");
+    fs::create_dir_all(mod_file.parent().unwrap()).unwrap();
+    fs::write(&mod_file, "mod").unwrap();
+    let staged = mod_stager::resolve(&[package], &library.stage_material("mod".into()))
+        .unwrap()
+        .pop()
+        .unwrap();
+    let id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &id, true).unwrap();
+
+    fs::write(runtime.join("SPT.Server.deps.json"), deps("5.0.0")).unwrap();
+    let error = library.sync().unwrap_err();
+    match error {
+        SError::InvalidLibrary(_, message) => {
+            assert!(message.contains("4.1.6"));
+            assert!(message.contains("5.0.0"));
+        }
+        error => panic!("unexpected error: {error:?}"),
+    }
+    assert!(!runtime.join("user/mods/Example/mod.dll").exists());
+}
+
+#[test]
 fn staging_accepts_old_and_new_roots_without_mutating_source() {
     let temp = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();

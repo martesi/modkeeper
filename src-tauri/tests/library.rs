@@ -104,6 +104,86 @@ fn test_default_library_root_stores_relative_game_root() {
 }
 
 #[test]
+fn default_library_root_moves_to_a_versioned_root_after_an_spt_major_change() {
+    let (_tmp, game_root, _) = setup_test_env();
+    let old_root = game_root.join(".mod_keeper");
+    let old_library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(old_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    fs::write(
+        game_root.join("SPT/SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&_tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: old_library.id,
+        library_root: old_root.clone(),
+    });
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    let new_root = game_root.join(".mod_keeper-spt-5.0.0");
+    assert!(old_root.exists());
+    assert!(new_root.join("manifest.toml").exists());
+    let instance = instance_handle.lock();
+    assert_eq!(instance.as_ref().unwrap().repo_root, new_root);
+    assert_eq!(instance.as_ref().unwrap().spt_version, "5.0.0");
+    assert_eq!(config_handle.lock().config.known_libraries.len(), 2);
+}
+
+#[test]
+fn deleting_a_cross_major_library_removes_its_recorded_deployment() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &mod_id, true).unwrap();
+    library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/Example/content.txt");
+    assert!(fs::symlink_metadata(&deployed).is_ok());
+
+    fs::write(
+        game_root.join("SPT/SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root: repo_root.clone(),
+    });
+
+    global_service::delete_library_files(&config_handle, &instance_handle, &library.id).unwrap();
+
+    assert!(fs::symlink_metadata(&deployed).is_err());
+    assert!(!repo_root.exists());
+    assert!(config_handle.lock().config.known_libraries.is_empty());
+}
+
+#[test]
 fn test_collision_detection() {
     let (_tmp, game_root, repo_root) = setup_test_env();
     let requirement = LibraryCreationRequirement {
