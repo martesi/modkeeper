@@ -145,7 +145,7 @@ fn default_library_root_moves_to_a_versioned_root_after_an_spt_major_change() {
 }
 
 #[test]
-fn deleting_a_cross_major_library_removes_its_recorded_deployment() {
+fn deleting_a_cross_major_library_blocks_on_an_unverifiable_copy() {
     let (tmp, game_root, repo_root) = setup_test_env();
     let mut library = Library::create(LibraryCreationRequirement {
         repo_root: Some(repo_root.clone()),
@@ -176,11 +176,13 @@ fn deleting_a_cross_major_library_removes_its_recorded_deployment() {
         library_root: repo_root.clone(),
     });
 
-    global_service::delete_library_files(&config_handle, &instance_handle, &library.id).unwrap();
+    let error = global_service::delete_library_files(&config_handle, &instance_handle, &library.id)
+        .unwrap_err();
 
-    assert!(fs::symlink_metadata(&deployed).is_err());
-    assert!(!repo_root.exists());
-    assert!(config_handle.lock().config.known_libraries.is_empty());
+    assert!(matches!(&error, SError::InvalidLibrary(_, _)));
+    assert!(fs::symlink_metadata(&deployed).is_ok());
+    assert!(repo_root.exists());
+    assert_eq!(config_handle.lock().config.known_libraries.len(), 1);
 }
 
 #[test]
@@ -225,7 +227,7 @@ fn deleting_a_cross_major_library_refuses_a_replaced_deployment() {
 
 #[cfg(unix)]
 #[test]
-fn deleting_a_library_refuses_a_deployment_path_redirected_outside_the_game_root() {
+fn deleting_a_library_refuses_a_deployment_path_redirected_within_the_game_root() {
     let (tmp, game_root, repo_root) = setup_test_env();
     let mut library = Library::create(LibraryCreationRequirement {
         repo_root: Some(repo_root.clone()),
@@ -243,12 +245,12 @@ fn deleting_a_library_refuses_a_deployment_path_redirected_outside_the_game_root
     mod_manager::toggle_mod(&mut library, &mod_id, true).unwrap();
     library.sync().unwrap();
 
-    let redirected_root = tmp.path().join("redirected-user");
+    let redirected_root = game_root.join("redirected-user");
     fs::create_dir_all(redirected_root.join("mods/Example")).unwrap();
     fs::create_dir_all(redirected_root.join("sptRegistry")).unwrap();
     fs::write(
         redirected_root.join("mods/Example/content.txt"),
-        "outside game root",
+        "another mod",
     )
     .unwrap();
     fs::write(
@@ -274,7 +276,7 @@ fn deleting_a_library_refuses_a_deployment_path_redirected_outside_the_game_root
     );
     assert_eq!(
         fs::read_to_string(redirected_root.join("mods/Example/content.txt")).unwrap(),
-        "outside game root"
+        "another mod"
     );
     assert!(repo_root.exists());
     assert_eq!(config_handle.lock().config.known_libraries.len(), 1);
@@ -300,6 +302,12 @@ fn updating_a_deployed_mod_refreshes_and_removal_unlinks_stale_copies() {
     library.sync().unwrap();
     let deployed = game_root.join("SPT/user/mods/Example/content.txt");
     assert_eq!(fs::read_to_string(&deployed).unwrap(), "Example");
+
+    fs::write(&deployed, "user edit").unwrap();
+    library.mark_dirty();
+    assert!(matches!(library.sync(), Err(SError::FileCollision(_))));
+    assert_eq!(fs::read_to_string(&deployed).unwrap(), "user edit");
+    fs::write(&deployed, "Example").unwrap();
 
     fs::write(
         mod_src_utf8.join("SPT/user/mods/Example/content.txt"),
@@ -333,7 +341,7 @@ fn updating_a_deployed_mod_refreshes_and_removal_unlinks_stale_copies() {
 }
 
 #[test]
-fn creating_a_new_major_library_removes_the_old_deployment_first() {
+fn retiring_reconciled_records_prevents_old_library_replay() {
     let (tmp, game_root, _) = setup_test_env();
     let old_root = game_root.join(".mod_keeper");
     let mut old_library = Library::create(LibraryCreationRequirement {
@@ -353,6 +361,7 @@ fn creating_a_new_major_library_removes_the_old_deployment_first() {
     old_library.sync().unwrap();
     let deployed = game_root.join("SPT/user/mods/Example/content.txt");
     assert!(deployed.exists());
+    fs::remove_file(&deployed).unwrap();
 
     fs::write(
         game_root.join("SPT/SPT.Server.deps.json"),

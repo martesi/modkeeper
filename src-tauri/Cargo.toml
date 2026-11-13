@@ -66,6 +66,7 @@ tracing = { version = "0.1.44", features = ["log"] }
 tauri-plugin-dialog = "2"
 base64 = "0.23"
 blake3 = "1.8"
+same-file = "1.0.6"
 tauri-plugin-log = "2"
 window-vibrancy = "0.8.1"
 junction = "2.1"

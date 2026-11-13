@@ -12,6 +12,20 @@ use walkdir::WalkDir;
 /// This is used when the library itself is being deleted; normal sync relies
 /// on deployment reconciliation so unchanged artifacts can be retained.
 pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
+    remove_recorded_deployment_with_identity(library, false)
+}
+
+/// Removes deployment only when every regular-file artifact has a verifiable
+/// filesystem identity. Cross-major transitions use this stricter policy
+/// because a byte-identical copy may belong to the replacement installation.
+pub fn remove_recorded_deployment_for_transition(library: &Library) -> Result<(), SError> {
+    remove_recorded_deployment_with_identity(library, true)
+}
+
+fn remove_recorded_deployment_with_identity(
+    library: &Library,
+    require_identity: bool,
+) -> Result<(), SError> {
     let mut artifacts = library.deployment.artifacts.clone();
     artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.target.components().count()));
 
@@ -22,7 +36,13 @@ pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
         }
         let target = library.game_root.join(&artifact.target);
         match fs::symlink_metadata(&target) {
-            Ok(_) if deployment::artifact_is_owned(library, &artifact, &target)? => {
+            Ok(_)
+                if if require_identity {
+                    deployment::artifact_is_owned(library, &artifact, &target)?
+                } else {
+                    deployment::artifact_is_recorded(library, &artifact, &target)?
+                } =>
+            {
                 artifact_removals.push((target, artifact.kind));
             }
             Ok(_) => return Err(ownership_error(library, &artifact.target)),

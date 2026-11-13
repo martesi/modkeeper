@@ -25,11 +25,33 @@ pub struct DeploymentArtifact {
     pub target: Utf8PathBuf,
     pub source: Utf8PathBuf,
     pub kind: ArtifactKind,
+    #[serde(default)]
+    pub fingerprint: Option<String>,
 }
 
 pub struct DeploymentPlan {
     artifacts: Vec<DeploymentArtifact>,
     directories: Vec<Utf8PathBuf>,
+}
+
+impl DeploymentArtifact {
+    fn from_source(
+        target: Utf8PathBuf,
+        source: Utf8PathBuf,
+        source_path: &Utf8Path,
+        kind: ArtifactKind,
+    ) -> Result<Self, SError> {
+        let fingerprint = source_path
+            .is_file()
+            .then(|| file_fingerprint(source_path))
+            .transpose()?;
+        Ok(Self {
+            target,
+            source,
+            kind,
+            fingerprint,
+        })
+    }
 }
 
 /// Keeps persisted directory ownership relative to the game root.
@@ -61,6 +83,9 @@ pub(crate) fn recorded_path_is_contained(base: &Utf8Path, relative: &Utf8Path) -
     let Ok(base_canonical) = dunce::canonicalize(base.as_std_path()) else {
         return false;
     };
+    if !has_unredirected_ancestors(base, relative, &base_canonical) {
+        return false;
+    }
     let absolute = base.join(relative);
     let parent = absolute.parent().unwrap_or(base);
     let Some(parent_canonical) = canonicalize_nearest_existing(parent) else {
@@ -107,6 +132,38 @@ fn canonicalize_nearest_existing(path: &Utf8Path) -> Option<PathBuf> {
             Err(_) => return None,
         }
     }
+}
+
+fn has_unredirected_ancestors(
+    base: &Utf8Path,
+    relative: &Utf8Path,
+    base_canonical: &std::path::Path,
+) -> bool {
+    let Some(parent) = relative.parent() else {
+        return true;
+    };
+    let mut physical = base.to_path_buf();
+    let mut expected = base_canonical.to_path_buf();
+    for component in parent.as_std_path().components() {
+        let Some(component) = component.as_os_str().to_str() else {
+            return false;
+        };
+        physical.push(component);
+        expected.push(component);
+        match fs::symlink_metadata(physical.as_std_path()) {
+            Ok(_) => {
+                let Ok(actual) = dunce::canonicalize(physical.as_std_path()) else {
+                    return false;
+                };
+                if actual != expected {
+                    return false;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(_) => return false,
+        }
+    }
+    true
 }
 
 // --- Protected Path Helpers ---
@@ -208,19 +265,21 @@ pub fn plan(library: &Library) -> Result<DeploymentPlan, SError> {
                 if entry.file_type().is_dir() {
                     directories.insert(destination);
                 } else if entry.file_type().is_file() {
-                    artifacts.push(DeploymentArtifact {
-                        target: destination,
-                        source: entry_path.strip_prefix(&library.repo_root)?.to_path_buf(),
+                    artifacts.push(DeploymentArtifact::from_source(
+                        destination,
+                        entry_path.strip_prefix(&library.repo_root)?.to_path_buf(),
+                        entry_path,
                         kind,
-                    });
+                    )?);
                 }
             }
         } else {
-            artifacts.push(DeploymentArtifact {
-                target: target.clone(),
-                source: source.strip_prefix(&library.repo_root)?.to_path_buf(),
+            artifacts.push(DeploymentArtifact::from_source(
+                target.clone(),
+                source.strip_prefix(&library.repo_root)?.to_path_buf(),
+                &source,
                 kind,
-            });
+            )?);
         }
         add_parent_dirs(&mut directories, &target);
     }
@@ -302,7 +361,7 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
 
     for artifact in &old.artifacts {
         let target = library.game_root.join(&artifact.target);
-        if desired.contains(artifact) && artifact_is_owned(library, artifact, &target)? {
+        if desired.contains(artifact) && artifact_is_current(library, artifact, &target)? {
             continue;
         }
         if artifact_is_recorded(library, artifact, &target)? {
@@ -357,7 +416,7 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
             .iter()
             .find(|old| old.target == artifact.target)
             && previous == artifact
-            && artifact_is_owned(library, previous, &target)?
+            && artifact_is_current(library, previous, &target)?
         {
             new_artifacts.push(artifact.clone());
             continue;
@@ -450,7 +509,36 @@ pub(crate) fn artifact_is_recorded(
     ) {
         return Ok(link_target_matches(&source, target));
     }
-    Ok(meta.is_file())
+    if !meta.is_file() {
+        return Ok(false);
+    }
+
+    let Some(expected) = artifact.fingerprint.as_deref() else {
+        return Ok(false);
+    };
+    Ok(file_fingerprint(target)? == expected)
+}
+
+/// Verifies that a recorded artifact still represents the current library
+/// source. This is sufficient for ordinary reconciliation, where a changed
+/// source should replace the old deployment but a user-edited destination must
+/// be preserved as a collision.
+fn artifact_is_current(
+    library: &Library,
+    artifact: &DeploymentArtifact,
+    target: &Utf8Path,
+) -> Result<bool, SError> {
+    if !artifact_is_recorded(library, artifact, target)? {
+        return Ok(false);
+    }
+
+    let Some(source) = contained_source_path(library, &artifact.source) else {
+        return Ok(false);
+    };
+    match artifact.kind {
+        ArtifactKind::Symlink | ArtifactKind::Junction => Ok(true),
+        ArtifactKind::Hardlink | ArtifactKind::Copy => Ok(file_contents_match(&source, target)?),
+    }
 }
 
 pub(crate) fn artifact_is_owned(
@@ -473,8 +561,14 @@ pub(crate) fn artifact_is_owned(
     }
 
     match artifact.kind {
-        ArtifactKind::Hardlink => Ok(file_contents_match(&source, target)?),
-        ArtifactKind::Copy => Ok(file_contents_match(&source, target)?),
+        ArtifactKind::Hardlink => Ok(same_file::is_same_file(
+            source.as_std_path(),
+            target.as_std_path(),
+        )?),
+        // A regular copy has no stable origin identity. Matching bytes are not
+        // enough to distinguish it from a replacement made by the new game
+        // installation, so cross-major destructive cleanup refuses it.
+        ArtifactKind::Copy => Ok(false),
         ArtifactKind::Symlink | ArtifactKind::Junction => unreachable!(),
     }
 }
@@ -519,6 +613,15 @@ fn link_target_matches(source: &Utf8Path, target: &Utf8Path) -> bool {
             dunce::canonicalize(source.as_std_path()).map(|expected| actual == expected)
         })
         .unwrap_or(false)
+}
+
+fn file_fingerprint(path: &Utf8Path) -> io::Result<String> {
+    let mut file = fs::File::open(path)?;
+    Ok(blake3::Hasher::new()
+        .update_reader(&mut file)?
+        .finalize()
+        .to_hex()
+        .to_string())
 }
 
 fn file_contents_match(left: &Utf8Path, right: &Utf8Path) -> io::Result<bool> {
