@@ -122,6 +122,84 @@ pub fn unlink(target: &Utf8Path) -> io::Result<()> {
     }
 }
 
+/// Identifies a legacy reparse link so cleanup can restore it without changing
+/// a Windows junction into a symbolic link during a removal preflight.
+pub(crate) fn link_kind(path: &Utf8Path) -> io::Result<ArtifactKind> {
+    #[cfg(windows)]
+    if junction::exists(path.as_std_path())? {
+        return Ok(ArtifactKind::Junction);
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+
+    Ok(ArtifactKind::Symlink)
+}
+
+/// Recreates a legacy link from the target string returned by `read_link`.
+/// Relative targets must remain relative to the destination rather than the
+/// process working directory.
+pub(crate) fn recreate_link(
+    target: &Utf8Path,
+    destination: &Utf8Path,
+    kind: ArtifactKind,
+) -> io::Result<()> {
+    match kind {
+        ArtifactKind::Symlink => recreate_symlink(target, destination),
+        ArtifactKind::Junction => {
+            #[cfg(windows)]
+            {
+                let resolved = resolve_link_target(target, destination)?;
+                junction::create(resolved.as_std_path(), destination.as_std_path())
+            }
+            #[cfg(not(windows))]
+            {
+                Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "junctions are only supported on Windows",
+                ))
+            }
+        }
+        ArtifactKind::Hardlink | ArtifactKind::Copy => Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "only symbolic links and junctions can be recreated",
+        )),
+    }
+}
+
+fn recreate_symlink(target: &Utf8Path, destination: &Utf8Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target.as_std_path(), destination.as_std_path())
+    }
+    #[cfg(windows)]
+    {
+        let resolved = resolve_link_target(target, destination)?;
+        if resolved.is_dir() {
+            std::os::windows::fs::symlink_dir(target.as_std_path(), destination.as_std_path())
+        } else {
+            std::os::windows::fs::symlink_file(target.as_std_path(), destination.as_std_path())
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "symbolic links are not supported on this platform",
+        ))
+    }
+}
+
+#[cfg(windows)]
+fn resolve_link_target(target: &Utf8Path, destination: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    if target.is_absolute() {
+        return Ok(target.to_path_buf());
+    }
+    destination
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "link has no parent"))
+        .map(|parent| parent.join(target))
+}
+
 #[derive(Clone, Copy)]
 pub struct MethodSelection {
     pub file: ArtifactKind,

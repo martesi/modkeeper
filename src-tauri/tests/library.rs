@@ -628,6 +628,28 @@ fn purge_resolves_relative_link_targets_from_the_link_parent() {
 
 #[cfg(unix)]
 #[test]
+fn purge_keeps_dangling_external_targets_unverified() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Dangling external purge link test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let external_root = Utf8PathBuf::from_path_buf(tmp.path().join("outside")).unwrap();
+    fs::create_dir_all(&external_root).unwrap();
+    let link = legacy_root.join("dangling-external-link");
+    let target = repo_root.join("../outside/missing.txt");
+    std::os::unix::fs::symlink(target.as_std_path(), link.as_std_path()).unwrap();
+
+    library.sync().unwrap();
+    assert!(fs::symlink_metadata(&link).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
 fn purge_preflights_link_parent_permissions_before_unlinking() {
     use std::os::unix::fs::PermissionsExt;
 

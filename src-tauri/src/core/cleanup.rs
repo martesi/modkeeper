@@ -94,10 +94,12 @@ fn remove_recorded_deployment_with_identity(
     Ok(())
 }
 
-/// Validates the compatibility purge without mutating the game tree.
-/// Recorded artifacts are removed by reconciliation, not by scanning the cache.
+/// Validates the compatibility purge without leaving game-tree mutations.
+/// Each candidate link is actually removed and restored so its delete
+/// permission is checked before deployment records are retired elsewhere.
 pub fn validate_purge(library: &Library) -> Result<(), SError> {
-    plan_purge(library).map(|_| ())
+    let links = plan_purge(library)?;
+    preflight_link_removals(&links)
 }
 
 fn purge_roots(library: &Library) -> Vec<Utf8PathBuf> {
@@ -133,7 +135,14 @@ fn validated_purge_roots(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> 
     Ok(valid_roots)
 }
 
-fn plan_purge(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
+#[derive(Clone)]
+struct PurgeLink {
+    path: Utf8PathBuf,
+    target: Utf8PathBuf,
+    kind: linker::ArtifactKind,
+}
+
+fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
     let repo_root = dunce_canon(&library.repo_root)
         .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
         .unwrap_or_else(|_| library.repo_root.clone());
@@ -150,57 +159,125 @@ fn plan_purge(library: &Library) -> Result<Vec<Utf8PathBuf>, SError> {
             if !entry.file_type().is_symlink() {
                 continue;
             }
-            let Ok(target) = linker::read_link_target(path) else {
+            let Ok(raw_target) = linker::read_link_target(path) else {
                 continue;
             };
-            let target = if target.is_absolute() {
-                target
+            let target = if raw_target.is_absolute() {
+                raw_target.clone()
             } else {
-                path.parent().unwrap_or(Utf8Path::new(".")).join(target)
+                path.parent()
+                    .unwrap_or(Utf8Path::new("."))
+                    .join(&raw_target)
             };
-            let target = dunce_canon(&target)
-                .map(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()))
-                .unwrap_or(target);
+            let Ok(target) = dunce_canon(&target) else {
+                // A dangling target cannot be proven to remain inside the
+                // repository. Leave it untouched rather than using a lexical
+                // prefix that may still contain `..` components.
+                continue;
+            };
+            let target = Utf8PathBuf::from(target.to_string_lossy().into_owned());
             if target.starts_with(&repo_root) {
-                links.push(path.to_path_buf());
+                links.push(PurgeLink {
+                    path: path.to_path_buf(),
+                    target: raw_target,
+                    kind: linker::link_kind(path)?,
+                });
             }
         }
     }
-    preflight_link_removals(&links)?;
     Ok(links)
 }
 
-fn preflight_link_removals(links: &[Utf8PathBuf]) -> Result<(), SError> {
+fn preflight_link_removals(links: &[PurgeLink]) -> Result<(), SError> {
     for link in links {
-        let parent = link.parent().ok_or(SError::Unexpected)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(parent)?.permissions().mode();
-            if mode & 0o222 == 0 {
-                return Err(SError::IOError(format!(
-                    "Deployment link parent is not writable: '{parent}'"
-                )));
-            }
+        if !verify_purge_link(link)? {
+            continue;
         }
-        let probe = parent.join(format!(".modkeeper-purge-probe-{}", uuid::Uuid::new_v4()));
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&probe)?;
-        if let Err(error) = fs::remove_file(&probe) {
-            let _ = fs::remove_file(&probe);
+        if let Err(error) = linker::unlink(&link.path) {
             return Err(error.into());
+        }
+        if let Err(error) = linker::recreate_link(&link.target, &link.path, link.kind) {
+            let rollback = restore_removed_links(std::slice::from_ref(link));
+            return Err(with_rollback_error(error.into(), rollback));
         }
     }
     Ok(())
 }
 
 pub fn purge(library: &Library) -> Result<(), SError> {
-    for path in plan_purge(library)? {
-        linker::unlink(&path)?;
+    let links = plan_purge(library)?;
+    let mut removed = Vec::new();
+    for link in links {
+        match verify_purge_link(&link) {
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(error) => {
+                let rollback = restore_removed_links(&removed);
+                return Err(with_rollback_error(error, rollback));
+            }
+        }
+        match linker::unlink(&link.path) {
+            Ok(()) => removed.push(link),
+            Err(error) => {
+                let rollback = restore_removed_links(&removed);
+                return Err(with_rollback_error(error.into(), rollback));
+            }
+        }
     }
     Ok(())
+}
+
+fn verify_purge_link(link: &PurgeLink) -> Result<bool, SError> {
+    let meta = match fs::symlink_metadata(&link.path) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if !meta.file_type().is_symlink() {
+        return Err(purge_link_changed(&link.path));
+    }
+    if linker::read_link_target(&link.path)? != link.target
+        || linker::link_kind(&link.path)? != link.kind
+    {
+        return Err(purge_link_changed(&link.path));
+    }
+    Ok(true)
+}
+
+fn restore_removed_links(links: &[PurgeLink]) -> Result<(), SError> {
+    let mut failures = Vec::new();
+    for link in links.iter().rev() {
+        match verify_purge_link(link) {
+            Ok(true) => continue,
+            Ok(false) => {
+                if let Err(error) = linker::recreate_link(&link.target, &link.path, link.kind) {
+                    failures.push(format!("'{}': {error}", link.path));
+                }
+            }
+            Err(error) => failures.push(format!("'{}': {error}", link.path)),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(SError::IOError(format!(
+            "Unable to restore removed deployment links: {}",
+            failures.join(", ")
+        )))
+    }
+}
+
+fn with_rollback_error(primary: SError, rollback: Result<(), SError>) -> SError {
+    match rollback {
+        Ok(()) => primary,
+        Err(error) => SError::IOError(format!("{primary}; rollback failed: {error}")),
+    }
+}
+
+fn purge_link_changed(path: &Utf8Path) -> SError {
+    SError::FileCollision(vec![format!(
+        "Deployment link changed before it could be safely removed: '{path}'."
+    )])
 }
 
 /// Removes only recorded artifacts for a mod and prunes recorded empty directories.
