@@ -167,6 +167,7 @@ pub(crate) fn can_unlink(path: &Utf8Path) -> io::Result<()> {
         use std::os::windows::fs::OpenOptionsExt;
 
         const DELETE: u32 = 0x0001_0000;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
         const FILE_FLAG_OPEN_NO_RECALL: u32 = 0x0010_0000;
         const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
         const FILE_SHARE_DELETE: u32 = 0x0000_0004;
@@ -176,7 +177,11 @@ pub(crate) fn can_unlink(path: &Utf8Path) -> io::Result<()> {
         fs::OpenOptions::new()
             .access_mode(DELETE)
             .share_mode(FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE)
-            .custom_flags(FILE_FLAG_OPEN_NO_RECALL | FILE_FLAG_OPEN_REPARSE_POINT)
+            .custom_flags(
+                FILE_FLAG_BACKUP_SEMANTICS
+                    | FILE_FLAG_OPEN_NO_RECALL
+                    | FILE_FLAG_OPEN_REPARSE_POINT,
+            )
             .open(path.as_std_path())?;
     }
     Ok(())
@@ -273,5 +278,24 @@ mod tests {
 
         assert_eq!(methods.file, ArtifactKind::Copy);
         assert_eq!(methods.directory, ArtifactKind::Copy);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn can_unlink_accepts_directory_symlinks_and_junctions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(tmp.path()).unwrap();
+        let source = root.join("source");
+        let symlink = root.join("directory-symlink");
+        let junction = root.join("directory-junction");
+        std::fs::create_dir(&source).unwrap();
+
+        std::os::windows::fs::symlink_dir(&source, &symlink).unwrap();
+        can_unlink(&symlink).unwrap();
+        unlink(&symlink).unwrap();
+
+        junction::create(&source, &junction).unwrap();
+        can_unlink(&junction).unwrap();
+        unlink(&junction).unwrap();
     }
 }

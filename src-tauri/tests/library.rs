@@ -676,6 +676,27 @@ fn purge_handles_non_utf8_link_targets_without_recreating_them() {
 
 #[cfg(unix)]
 #[test]
+fn purge_handles_long_link_names_with_a_bounded_quarantine_name() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Long purge link test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let target = repo_root.join("long-target.txt");
+    fs::write(&target, "repo").unwrap();
+    let link = legacy_root.join("l".repeat(202));
+    std::os::unix::fs::symlink(target.as_std_path(), link.as_std_path()).unwrap();
+
+    library.sync().unwrap();
+    assert!(fs::symlink_metadata(&link).is_err());
+}
+
+#[cfg(unix)]
+#[test]
 fn purge_preflights_link_parent_permissions_before_unlinking() {
     use std::os::unix::fs::PermissionsExt;
 

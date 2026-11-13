@@ -276,8 +276,7 @@ fn quarantine_links(links: &[PurgeLink]) -> Result<Vec<QuarantinedLink>, SError>
 
 fn quarantine_path(path: &Utf8Path) -> Result<Utf8PathBuf, SError> {
     let parent = path.parent().ok_or(SError::Unexpected)?;
-    let name = path.file_name().ok_or(SError::Unexpected)?;
-    Ok(parent.join(format!(".modkeeper-purge-{}-{name}", uuid::Uuid::new_v4())))
+    Ok(parent.join(format!(".mkp-{}", uuid::Uuid::new_v4())))
 }
 
 fn restore_quarantined_links(links: &[QuarantinedLink]) -> Result<(), SError> {
