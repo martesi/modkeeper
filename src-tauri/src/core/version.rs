@@ -102,9 +102,18 @@ fn parse(version_str: &str) -> Result<Version, SError> {
     Version::parse(version_str).map_err(|e| SError::ParseError(e.to_string()))
 }
 
-/// Checks if the provided version matches the hardcoded requirement range (>=4, <5).
+/// Checks whether the installed release is in a supported SPT line.
+///
+/// SPT 5.0 is supported only through its 5.0.x line until a later release
+/// proves a compatible runtime and installation contract.
 fn validate(version: &Version) -> Result<(), SError> {
-    let req_str = "^4";
+    let req_str = match version.major {
+        4 => "^4",
+        5 if version.minor == 0 => "~5.0",
+        _ => {
+            return Err(SError::UnsupportedSPTVersion(version.to_string()));
+        }
+    };
     let req = VersionReq::parse(req_str).map_err(|e| SError::ParseError(e.to_string()))?;
 
     if req.matches(version) {

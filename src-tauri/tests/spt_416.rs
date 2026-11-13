@@ -89,6 +89,48 @@ fn spt_416_imports_deploys_and_removes_mods() {
 }
 
 #[test]
+fn spt_500_runtime_layout_imports_and_deploys_mods() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+    let game = root.join("game");
+    let repo = root.join("library");
+    let runtime = game.join("SPT_Runtime");
+    fs::create_dir_all(&runtime).unwrap();
+    fs::write(game.join("EscapeFromTarkov.exe"), "game").unwrap();
+    fs::write(runtime.join("SPT.Server.exe"), "server").unwrap();
+    fs::write(runtime.join("SPT.Server.deps.json"), deps("5.0.0")).unwrap();
+
+    let mut library = Library::create(LibraryCreationRequirement {
+        game_root: game.clone(),
+        repo_root: Some(repo.clone()),
+        name: "SPT 5 test".into(),
+    })
+    .unwrap();
+    assert_eq!(library.spt_version, "5.0.0");
+
+    let package = root.join("package");
+    let mod_file = package.join("SPT_Runtime/user/mods/Example/mod.dll");
+    fs::create_dir_all(mod_file.parent().unwrap()).unwrap();
+    fs::write(&mod_file, "mod").unwrap();
+    let staged = mod_stager::resolve(&[package], &library.stage_material("mod".into()))
+        .unwrap()
+        .pop()
+        .unwrap();
+    let id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &id, true).unwrap();
+    drop(library);
+
+    let mut library = Library::load(&repo).unwrap();
+    library.sync().unwrap();
+    assert_eq!(
+        fs::read_to_string(runtime.join("user/mods/Example/mod.dll")).unwrap(),
+        "mod"
+    );
+    assert!(!game.join("SPT").exists());
+}
+
+#[test]
 fn staging_accepts_old_and_new_roots_without_mutating_source() {
     let temp = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
@@ -148,6 +190,8 @@ fn server_metadata_takes_precedence_and_invalid_data_is_rejected() {
     fs::write(&metadata, deps("4.1.6")).unwrap();
     assert_eq!(version::fetch_and_validate(&rules).unwrap(), "4.1.6");
     fs::write(&metadata, deps("5.0.0")).unwrap();
+    assert_eq!(version::fetch_and_validate(&rules).unwrap(), "5.0.0");
+    fs::write(&metadata, deps("5.1.0")).unwrap();
     assert!(matches!(
         version::fetch_and_validate(&rules),
         Err(SError::UnsupportedSPTVersion(_))
