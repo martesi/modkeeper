@@ -2258,6 +2258,25 @@ fn deleting_a_library_keeps_files_when_config_save_fails() {
     .unwrap();
     let library_id = instance_handle.lock().as_ref().unwrap().id.clone();
     let library_root = game_root.join(".mod_keeper");
+    let mod_src = tmp.path().join("config_failure_mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "ConfigFailureMod", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let mod_id = mod_fs.id.clone();
+    {
+        let mut instance = instance_handle.lock();
+        let library = instance.as_mut().unwrap();
+        mod_manager::add_mod(
+            library,
+            create_staged_mod_for_test(mod_src_utf8, mod_fs),
+            false,
+        )
+        .unwrap();
+        mod_manager::toggle_mod(library, &mod_id, true).unwrap();
+        library.sync().unwrap();
+    }
+    let deployed = game_root.join("SPT/user/mods/ConfigFailureMod/content.txt");
+    assert!(deployed.exists());
     let blocked_config_path = tmp.path().join("blocked-config");
     fs::create_dir(&blocked_config_path).unwrap();
     config_handle.lock().path = Utf8PathBuf::from_path_buf(blocked_config_path).unwrap();
@@ -2266,6 +2285,14 @@ fn deleting_a_library_keeps_files_when_config_save_fails() {
         global_service::delete_library_files(&config_handle, &instance_handle, &library_id);
     assert!(result.is_err());
     assert!(library_root.exists());
+    assert!(deployed.exists());
+    assert!(
+        !Library::load(&library_root)
+            .unwrap()
+            .deployment
+            .artifacts
+            .is_empty()
+    );
     assert!(
         config_handle
             .lock()

@@ -312,7 +312,8 @@ pub fn plan(library: &Library) -> Result<DeploymentPlan, SError> {
         let target = library.deployment_target(&target);
         if kind == ArtifactKind::Copy && source.is_dir() {
             check_copy_directory_destination(library, &target)?;
-            for entry in WalkDir::new(&source).into_iter().filter_map(Result::ok) {
+            for entry in WalkDir::new(&source) {
+                let entry = entry.map_err(|error| SError::IOError(error.to_string()))?;
                 let entry_path = Utf8Path::from_path(entry.path()).ok_or(SError::Unexpected)?;
                 let relative = entry_path.strip_prefix(&source)?;
                 let destination = target.join(relative);

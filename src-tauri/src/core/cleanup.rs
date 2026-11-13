@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 
 const PURGE_RECOVERY_VERSION: u8 = 2;
 static PURGE_LOCK: Mutex<()> = Mutex::new(());
+type RecordedDeploymentPlan = (Vec<(Utf8PathBuf, linker::ArtifactKind)>, Vec<Utf8PathBuf>);
 
 /// Serializes all in-process purge/recovery lifecycles. The lock covers the
 /// journal, quarantine moves, and final cleanup so another operation cannot
@@ -30,20 +31,88 @@ pub(crate) fn with_exclusive<T>(
 /// This is used when the library itself is being deleted; normal sync relies
 /// on deployment reconciliation so unchanged artifacts can be retained.
 pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
-    remove_recorded_deployment_with_identity(library, false)
+    remove_recorded_deployment_with_identity(library, false, true)
 }
 
 /// Removes deployment only when every regular-file artifact has a verifiable
 /// filesystem identity. Cross-major transitions use this stricter policy
 /// because a byte-identical copy may belong to the replacement installation.
 pub fn remove_recorded_deployment_for_transition(library: &Library) -> Result<(), SError> {
-    remove_recorded_deployment_with_identity(library, true)
+    remove_recorded_deployment_with_identity(library, true, true)
+}
+
+/// Removes recorded artifacts while retaining deployment.toml until the
+/// surrounding deletion transaction has committed. If a later cleanup step
+/// fails, the old ownership records remain available for recovery.
+pub(crate) fn remove_recorded_deployment_for_delete(
+    library: &Library,
+    require_identity: bool,
+) -> Result<(), SError> {
+    remove_recorded_deployment_with_identity(library, require_identity, false)
 }
 
 fn remove_recorded_deployment_with_identity(
     library: &Library,
     require_identity: bool,
+    retire: bool,
 ) -> Result<(), SError> {
+    let (artifact_removals, directory_removals) =
+        plan_recorded_deployment_removal(library, require_identity)?;
+
+    for (target, kind) in artifact_removals {
+        linker::remove(&target, kind)?;
+    }
+    for directory in directory_removals {
+        if fs::read_dir(&directory)?.next().is_none() {
+            fs::remove_dir(&directory)?;
+        }
+    }
+
+    if retire {
+        library.retire_deployment()?;
+    }
+    Ok(())
+}
+
+/// Checks all recorded deployment removals, their parent permissions, and the
+/// deployment record write before a destructive deletion transaction starts.
+/// The actual removals are deliberately kept separate so callers can commit
+/// their registry change only after this validation succeeds.
+pub(crate) fn validate_recorded_deployment_removal(
+    library: &Library,
+    require_identity: bool,
+) -> Result<(), SError> {
+    let (artifact_removals, directory_removals) =
+        plan_recorded_deployment_removal(library, require_identity)?;
+    for (target, _) in &artifact_removals {
+        linker::can_unlink(target)?;
+    }
+    for directory in &directory_removals {
+        linker::can_unlink(directory)?;
+        fs::read_dir(directory)?;
+    }
+    library.persist_deployment()?;
+    Ok(())
+}
+
+/// Preflights recursive library-directory removal so a permission or walk
+/// error is reported before any game or ownership state is changed.
+pub(crate) fn validate_library_directory_removal(root: &Utf8Path) -> Result<(), SError> {
+    if !root.exists() {
+        return Ok(());
+    }
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry.map_err(|error| SError::IOError(error.to_string()))?;
+        let path = Utf8Path::from_path(entry.path()).ok_or(SError::Unexpected)?;
+        linker::can_unlink(path)?;
+    }
+    Ok(())
+}
+
+fn plan_recorded_deployment_removal(
+    library: &Library,
+    require_identity: bool,
+) -> Result<RecordedDeploymentPlan, SError> {
     let mut artifacts = library.deployment.artifacts.clone();
     artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.target.components().count()));
 
@@ -98,17 +167,7 @@ fn remove_recorded_deployment_with_identity(
         }
     }
 
-    for (target, kind) in artifact_removals {
-        linker::remove(&target, kind)?;
-    }
-    for directory in directory_removals {
-        if fs::read_dir(&directory)?.next().is_none() {
-            fs::remove_dir(&directory)?;
-        }
-    }
-
-    library.retire_deployment()?;
-    Ok(())
+    Ok((artifact_removals, directory_removals))
 }
 
 /// Validates the compatibility purge without leaving game-tree mutations.

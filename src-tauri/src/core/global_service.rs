@@ -36,6 +36,18 @@ pub fn save_settings(
     Ok(store.config.settings.clone())
 }
 
+fn rollback_config_change(
+    store: &mut AppConfigStore,
+    previous: &AppConfig,
+    primary: SError,
+) -> SError {
+    store.config = previous.clone();
+    match store.save() {
+        Ok(()) => primary,
+        Err(error) => SError::IOError(format!("{primary}; app config rollback failed: {error}")),
+    }
+}
+
 fn mtime_iso(path: &Utf8Path) -> String {
     path.metadata()
         .and_then(|m| m.modified())
@@ -210,27 +222,23 @@ pub fn activate_library(
     instance_handle: &Arc<Mutex<Option<Library>>>,
     library_id: &str,
 ) -> Result<(), SError> {
-    let library_root = {
-        let store = config_handle.lock();
-        store
-            .config
-            .find_library(library_id)
-            .map(|known| known.library_root.clone())
-            .ok_or_else(|| {
-                SError::InvalidLibrary(library_id.to_string(), "Library not registered".to_string())
-            })?
-    };
-
+    let mut store = config_handle.lock();
+    let mut instance = instance_handle.lock();
+    let library_root = store
+        .config
+        .find_library(library_id)
+        .map(|known| known.library_root.clone())
+        .ok_or_else(|| {
+            SError::InvalidLibrary(library_id.to_string(), "Library not registered".to_string())
+        })?;
     let library = Library::load(&library_root)?;
-
-    {
-        let mut store = config_handle.lock();
-        store.config.app_state.active_library_id = Some(library_id.to_string());
-        store.save()?;
+    let previous_config = store.config.clone();
+    store.config.app_state.active_library_id = Some(library_id.to_string());
+    if let Err(error) = store.save() {
+        return Err(rollback_config_change(&mut store, &previous_config, error));
     }
-
     // Swapping drops the previous Library on this (blocking) thread.
-    *instance_handle.lock() = Some(library);
+    *instance = Some(library);
     Ok(())
 }
 
@@ -311,12 +319,15 @@ pub fn create_library(
         })?
     };
 
+    let previous_config = store.config.clone();
     store.config.upsert_library(KnownLibrary {
         id: library.id.clone(),
         library_root,
     });
     store.config.app_state.active_library_id = Some(library.id.clone());
-    store.save()?;
+    if let Err(error) = store.save() {
+        return Err(rollback_config_change(&mut store, &previous_config, error));
+    }
     *instance = Some(library);
     Ok(())
 }
@@ -373,36 +384,38 @@ pub fn delete_library_files(
     // Remove recorded deployment artifacts before the mod sources disappear.
     let library = Library::load_for_cleanup(&library_root)?;
     let major_mismatch = library.has_spt_major_mismatch()?;
+    let previous_config = store.config.clone();
     cleanup::with_exclusive(|| {
         cleanup::validate_purge_unlocked(&library)?;
-        if major_mismatch {
-            cleanup::remove_recorded_deployment_for_transition(&library)?;
-        } else {
-            cleanup::remove_recorded_deployment(&library)?;
-        }
-        cleanup::purge_unlocked(&library)
-    })?;
+        cleanup::validate_recorded_deployment_removal(&library, major_mismatch)?;
+        cleanup::validate_library_directory_removal(&library_root)?;
 
-    // Persist the registry change before deleting the directory. If the
-    // filesystem removal fails, restore the old config so the active library
-    // remains discoverable and usable.
-    let previous_config = store.config.clone();
-    store.config.remove_library(&registered_id);
-    if let Err(error) = store.save() {
-        store.config = previous_config.clone();
-        return Err(error);
-    }
-    if library_root.exists()
-        && let Err(error) = file::remove_dir_all(&library_root)
-    {
-        store.config = previous_config;
-        return match store.save() {
-            Ok(()) => Err(error),
-            Err(rollback_error) => Err(SError::IOError(format!(
-                "{error}; app config rollback failed: {rollback_error}"
-            ))),
-        };
-    }
+        // Commit the registry change only after every read-only safety check
+        // has passed, but before mutating deployment files or the game tree.
+        store.config.remove_library(&registered_id);
+        if let Err(error) = store.save() {
+            return Err(rollback_config_change(&mut store, &previous_config, error));
+        }
+
+        if major_mismatch {
+            if let Err(error) = cleanup::remove_recorded_deployment_for_delete(&library, true) {
+                return Err(rollback_config_change(&mut store, &previous_config, error));
+            }
+        } else {
+            if let Err(error) = cleanup::remove_recorded_deployment_for_delete(&library, false) {
+                return Err(rollback_config_change(&mut store, &previous_config, error));
+            }
+        }
+        if let Err(error) = cleanup::purge_unlocked(&library) {
+            return Err(rollback_config_change(&mut store, &previous_config, error));
+        }
+        if library_root.exists()
+            && let Err(error) = file::remove_dir_all(&library_root)
+        {
+            return Err(rollback_config_change(&mut store, &previous_config, error));
+        }
+        Ok(())
+    })?;
     if instance.as_ref().map(|lib| lib.id.as_str()) == Some(registered_id.as_str()) {
         *instance = None;
     }
