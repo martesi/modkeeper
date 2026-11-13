@@ -345,6 +345,107 @@ fn updating_a_deployed_mod_refreshes_and_removal_unlinks_stale_copies() {
     assert!(!deployed.exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn sync_preflights_changed_removals_before_purging_recorded_links() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Preflight order test".to_string(),
+    })
+    .unwrap();
+
+    let link_source_root = Utf8PathBuf::from_path_buf(tmp.path().join("link-source")).unwrap();
+    let copy_source_root = Utf8PathBuf::from_path_buf(tmp.path().join("copy-source")).unwrap();
+    create_test_mod(&link_source_root, "KeepLink", true);
+    create_test_mod(&copy_source_root, "DropCopy", true);
+    let link_fs = mod_fs::scan(&link_source_root, &SPTPathRules::default()).unwrap();
+    let copy_fs = mod_fs::scan(&copy_source_root, &SPTPathRules::default()).unwrap();
+    let link_id = link_fs.id.clone();
+    let copy_id = copy_fs.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&link_source_root, link_fs),
+        true,
+    )
+    .unwrap();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&copy_source_root, copy_fs),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+
+    let link_relative = Utf8Path::new("SPT/user/mods/KeepLink/content.txt");
+    let link_target = library.game_root.join(link_relative);
+    let link_artifact = library
+        .deployment
+        .artifacts
+        .iter_mut()
+        .find(|artifact| artifact.target == link_relative)
+        .unwrap();
+    let link_source = library.repo_root.join(&link_artifact.source);
+    fs::remove_file(&link_target).unwrap();
+    std::os::unix::fs::symlink(link_source.as_std_path(), link_target.as_std_path()).unwrap();
+    link_artifact.kind = ArtifactKind::Symlink;
+    link_artifact.fingerprint = None;
+
+    let copy_target = library.game_root.join("SPT/user/mods/DropCopy/content.txt");
+    fs::write(&copy_target, "user edit").unwrap();
+    mod_manager::toggle_mod(&mut library, &copy_id, false).unwrap();
+
+    assert!(matches!(library.sync(), Err(SError::FileCollision(_))));
+    assert!(
+        fs::symlink_metadata(&link_target)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read_to_string(&copy_target).unwrap(), "user edit");
+    assert!(library.mods.get(&link_id).unwrap().is_active);
+}
+
+#[cfg(unix)]
+#[test]
+fn removing_a_mod_refuses_a_deployment_path_redirected_within_the_game_root() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root),
+        game_root: game_root.clone(),
+        name: "Removal redirect test".to_string(),
+    })
+    .unwrap();
+    let source = game_root.join("outside-source");
+    create_test_mod(&source, "RedirectedMod", true);
+    let scanned = mod_fs::scan(&source, &SPTPathRules::default()).unwrap();
+    let mod_id = scanned.id.clone();
+    mod_manager::add_mod(
+        &mut library,
+        create_staged_mod_for_test(&source, scanned),
+        true,
+    )
+    .unwrap();
+    library.sync().unwrap();
+
+    let deployed_dir = game_root.join("SPT/user/mods/RedirectedMod");
+    let redirected_dir = game_root.join("redirected-mod");
+    fs::create_dir_all(&redirected_dir).unwrap();
+    fs::write(redirected_dir.join("content.txt"), "another mod").unwrap();
+    fs::remove_dir_all(&deployed_dir).unwrap();
+    std::os::unix::fs::symlink(redirected_dir.as_std_path(), deployed_dir.as_std_path()).unwrap();
+
+    let error = mod_manager::remove_mod(&mut library, &mod_id).unwrap_err();
+    assert!(matches!(error, SError::FileCollision(_)));
+    assert!(library.mods.contains_key(&mod_id));
+    assert!(library.lib_paths.mods.join(&mod_id).exists());
+    assert_eq!(
+        fs::read_to_string(redirected_dir.join("content.txt")).unwrap(),
+        "another mod"
+    );
+}
+
 #[test]
 fn retiring_reconciled_records_prevents_old_library_replay() {
     let (tmp, game_root, _) = setup_test_env();

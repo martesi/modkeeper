@@ -73,6 +73,7 @@ junction = "2.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sysinfo = "0.40"
+windows-sys = { version = "0.61.2", features = ["Win32_Globalization"] }
 
 [dev-dependencies]
 tempfile = "3"

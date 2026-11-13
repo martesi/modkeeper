@@ -204,17 +204,36 @@ fn has_unredirected_ancestors(
     true
 }
 
+#[cfg(windows)]
 fn canonical_paths_equal(actual: &std::path::Path, expected: &std::path::Path) -> bool {
-    #[cfg(windows)]
-    {
-        actual
-            .to_string_lossy()
-            .eq_ignore_ascii_case(&expected.to_string_lossy())
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Globalization::{CSTR_EQUAL, CompareStringOrdinal};
+
+    let actual: Vec<_> = actual.as_os_str().encode_wide().collect();
+    let expected: Vec<_> = expected.as_os_str().encode_wide().collect();
+    let Ok(actual_len) = i32::try_from(actual.len()) else {
+        return false;
+    };
+    let Ok(expected_len) = i32::try_from(expected.len()) else {
+        return false;
+    };
+
+    // CompareStringOrdinal uses the Windows ordinal uppercase table, which
+    // matches the case-insensitive path rules for the Windows filesystem.
+    unsafe {
+        CompareStringOrdinal(
+            actual.as_ptr(),
+            actual_len,
+            expected.as_ptr(),
+            expected_len,
+            1,
+        ) == CSTR_EQUAL
     }
-    #[cfg(not(windows))]
-    {
-        actual == expected
-    }
+}
+
+#[cfg(not(windows))]
+fn canonical_paths_equal(actual: &std::path::Path, expected: &std::path::Path) -> bool {
+    actual == expected
 }
 
 // --- Protected Path Helpers ---
@@ -405,9 +424,17 @@ fn deployment_owns_directory(library: &Library, target: &Utf8Path) -> Result<boo
     Ok(false)
 }
 
-/// Reconciles recorded artifacts, then creates only absent destinations.
-pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError> {
-    let old = library.deployment.clone();
+/// Validates recorded artifacts before compatibility cleanup can remove any
+/// links. This catches conflicts for artifacts that are no longer desired.
+pub fn preflight(library: &Library, plan: &DeploymentPlan) -> Result<(), SError> {
+    plan_artifact_removals(library, plan).map(|_| ())
+}
+
+fn plan_artifact_removals(
+    library: &Library,
+    plan: &DeploymentPlan,
+) -> Result<Vec<(Utf8PathBuf, ArtifactKind)>, SError> {
+    let old = &library.deployment;
     let desired: HashSet<_> = plan.artifacts.iter().cloned().collect();
     let mut artifact_removals = Vec::new();
 
@@ -425,6 +452,13 @@ pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError>
             Err(error) => return Err(error.into()),
         }
     }
+    Ok(artifact_removals)
+}
+
+/// Reconciles recorded artifacts, then creates only absent destinations.
+pub fn deploy(library: &mut Library, plan: DeploymentPlan) -> Result<(), SError> {
+    let old = library.deployment.clone();
+    let artifact_removals = plan_artifact_removals(library, &plan)?;
     for (target, kind) in artifact_removals {
         linker::remove(&target, kind)?;
     }

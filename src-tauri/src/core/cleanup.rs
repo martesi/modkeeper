@@ -144,10 +144,11 @@ pub fn unlink_mod(
             continue;
         };
         let expected_target = library.game_root.join(&artifact.target);
-        if path != &expected_target
-            || !deployment::recorded_path_is_contained(&library.game_root, &artifact.target)
-        {
+        if path != &expected_target {
             continue;
+        }
+        if !deployment::recorded_path_is_contained(&library.game_root, &artifact.target) {
+            return Err(containment_collision(path));
         }
         if protected.iter().any(|root| root == path) {
             continue;
@@ -178,18 +179,18 @@ pub fn unlink_mod(
     let mut dirs: Vec<_> = shared_dirs.iter().collect();
     dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     for path in dirs {
-        if protected.iter().any(|root| root == path) {
-            continue;
-        }
         let Ok(relative) = path.strip_prefix(&library.game_root) else {
-            continue;
+            return Err(containment_collision(path));
         };
-        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
-            continue;
-        }
         let Ok(meta) = fs::symlink_metadata(path) else {
             continue;
         };
+        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
+            return Err(containment_collision(path));
+        }
+        if protected.iter().any(|root| root == path) {
+            continue;
+        }
         if meta.is_dir() && fs::read_dir(path)?.next().is_none() {
             fs::remove_dir(path)?;
             unlinked.push(path.clone());
@@ -214,4 +215,10 @@ fn ownership_error(library: &Library, path: &Utf8Path) -> SError {
             "Refusing to remove deployment target '{path}' because its ownership or containment cannot be verified"
         ),
     )
+}
+
+fn containment_collision(path: &Utf8Path) -> SError {
+    SError::FileCollision(vec![format!(
+        "Deployment target cannot be safely removed because its path is redirected or outside the game root: '{path}'."
+    )])
 }

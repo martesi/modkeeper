@@ -297,6 +297,7 @@ impl Library {
         self.spt_paths_canonical = SPTPathCanonical::from_spt_paths(current_paths)?;
         self.spt_version = current_version;
         let plan = deployment::plan(self)?;
+        deployment::preflight(self, &plan)?;
         cleanup::purge(self)?;
         deployment::deploy(self, plan)?;
         self.mark_clean();
