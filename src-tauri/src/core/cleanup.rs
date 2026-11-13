@@ -15,10 +15,19 @@ pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
     let mut artifacts = library.deployment.artifacts.clone();
     artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.target.components().count()));
 
+    let mut artifact_removals = Vec::new();
     for artifact in artifacts {
+        if !deployment::recorded_path_is_contained(&library.game_root, &artifact.target) {
+            return Err(ownership_error(library, &artifact.target));
+        }
         let target = library.game_root.join(&artifact.target);
-        if artifact_is_still_owned(library, &artifact, &target) {
-            linker::remove(&target, artifact.kind)?;
+        match fs::symlink_metadata(&target) {
+            Ok(_) if deployment::artifact_is_owned(library, &artifact, &target)? => {
+                artifact_removals.push((target, artifact.kind));
+            }
+            Ok(_) => return Err(ownership_error(library, &artifact.target)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
     }
 
@@ -26,17 +35,36 @@ pub fn remove_recorded_deployment(library: &Library) -> Result<(), SError> {
         deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
     let mut directories = library.deployment.created_dirs.clone();
     directories.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    let mut directory_removals = Vec::new();
     for path in directories {
-        let absolute = library.game_root.join(path);
+        if !deployment::recorded_path_is_contained(&library.game_root, &path) {
+            return Err(ownership_error(library, &path));
+        }
+        let absolute = library.game_root.join(&path);
         if protected.iter().any(|root| root == &absolute) {
             continue;
         }
-        if let Ok(meta) = fs::symlink_metadata(&absolute)
-            && meta.is_dir()
-            && fs::read_dir(&absolute)?.next().is_none()
-        {
-            fs::remove_dir(&absolute)?;
+        match fs::symlink_metadata(&absolute) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Ok(_) if !deployment::recorded_directory_is_contained(&library.game_root, &path) => {
+                return Err(ownership_error(library, &absolute));
+            }
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(ownership_error(library, &absolute));
+            }
+            Ok(meta) if meta.is_dir() => {
+                directory_removals.push(absolute);
+            }
+            Ok(_) => {}
+            Err(error) => return Err(error.into()),
         }
+    }
+
+    for (target, kind) in artifact_removals {
+        linker::remove(&target, kind)?;
+    }
+    for directory in directory_removals {
+        fs::remove_dir(&directory)?;
     }
 
     Ok(())
@@ -51,6 +79,10 @@ pub fn purge(library: &Library) -> Result<(), SError> {
     let roots = deployment::get_protected_paths_absolute(&library.game_root, &library.game_rules);
 
     for root in roots.iter().filter(|root| root.exists()) {
+        let relative = root.strip_prefix(&library.game_root)?;
+        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
+            return Err(ownership_error(library, root));
+        }
         for entry in WalkDir::new(root).follow_links(false) {
             let entry = entry.map_err(|error| SError::IOError(error.to_string()))?;
             let path = Utf8Path::from_path(entry.path()).ok_or(SError::Unexpected)?;
@@ -87,13 +119,19 @@ pub fn unlink_mod(
         let Some(artifact) = deployment::recorded_artifact(library, path).cloned() else {
             continue;
         };
+        let expected_target = library.game_root.join(&artifact.target);
+        if path != &expected_target
+            || !deployment::recorded_path_is_contained(&library.game_root, &artifact.target)
+        {
+            continue;
+        }
         if protected.iter().any(|root| root == path) {
             continue;
         }
         let target = path.clone();
         match fs::symlink_metadata(&target) {
             Ok(_) => {
-                if !artifact_is_still_owned(library, &artifact, &target) {
+                if !deployment::artifact_is_owned(library, &artifact, &target)? {
                     continue;
                 }
                 linker::remove(&target, artifact.kind)?;
@@ -109,6 +147,12 @@ pub fn unlink_mod(
     dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     for path in dirs {
         if protected.iter().any(|root| root == path) {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(&library.game_root) else {
+            continue;
+        };
+        if !deployment::recorded_directory_is_contained(&library.game_root, relative) {
             continue;
         }
         let Ok(meta) = fs::symlink_metadata(path) else {
@@ -131,18 +175,11 @@ pub fn unlink_mod(
     Ok(unlinked)
 }
 
-fn artifact_is_still_owned(
-    library: &Library,
-    artifact: &deployment::DeploymentArtifact,
-    target: &Utf8Path,
-) -> bool {
-    if matches!(
-        artifact.kind,
-        linker::ArtifactKind::Symlink | linker::ArtifactKind::Junction
-    ) {
-        return linker::read_link_target(target)
-            .map(|actual| actual == library.repo_root.join(&artifact.source))
-            .unwrap_or(false);
-    }
-    fs::symlink_metadata(target).is_ok_and(|meta| meta.is_file())
+fn ownership_error(library: &Library, path: &Utf8Path) -> SError {
+    SError::InvalidLibrary(
+        library.repo_root.to_string(),
+        format!(
+            "Refusing to remove deployment target '{path}' because its ownership or containment cannot be verified"
+        ),
+    )
 }

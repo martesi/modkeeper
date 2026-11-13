@@ -2,9 +2,10 @@ use crate::core::cache::LibraryCache;
 use crate::core::cleanup;
 use crate::core::library::Library;
 use crate::core::library_service;
+use crate::core::version;
 use crate::models::error::SError;
 use crate::models::library::LibraryCreationRequirement;
-use crate::models::paths::LibPathRules;
+use crate::models::paths::{LibPathRules, SPTPathRules};
 use crate::models::workspace::{
     CacheState, CacheStatus, CreateLibraryInput, LibraryEntry, LibraryStub, LibrarySummary,
     LibraryWorkspace, ModSummary,
@@ -17,6 +18,7 @@ use crate::utils::toml;
 use camino::{Utf8Path, Utf8PathBuf};
 use parking_lot::Mutex;
 use std::collections::BTreeMap;
+use std::fs;
 use std::sync::Arc;
 
 pub fn get_settings(store: &AppConfigStore) -> AppSettings {
@@ -39,6 +41,62 @@ fn mtime_iso(path: &Utf8Path) -> String {
         .and_then(|m| m.modified())
         .map(to_iso8601_utc)
         .unwrap_or_else(|_| now_iso8601_utc())
+}
+
+fn current_spt_version(game_root: &Utf8Path) -> Result<String, SError> {
+    let rules = SPTPathRules::for_game_root(game_root)?;
+    version::fetch_and_validate(&rules.to_absolute(game_root))
+}
+
+/// Re-adopts a compatible versioned library before creating another one. The
+/// exact-version path wins; multiple remaining compatible paths are ambiguous
+/// and must be selected explicitly rather than silently duplicating a library.
+fn find_compatible_versioned_library(
+    game_root: &Utf8Path,
+    current_version: &str,
+) -> Result<Option<(Utf8PathBuf, Library)>, SError> {
+    let exact_root = library_service::derive_library_root_for_spt(game_root, current_version);
+    if exact_root.exists() {
+        return Ok(Some((exact_root.clone(), Library::load(&exact_root)?)));
+    }
+
+    let mut candidates = Vec::new();
+    for entry in fs::read_dir(game_root)? {
+        let entry = entry?;
+        let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+            SError::ParseError(format!("Non-UTF-8 library path: {}", path.display()))
+        })?;
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        if !name.starts_with(".mod_keeper-spt-") || !path.is_dir() {
+            continue;
+        }
+
+        let manifest = Library::read_library_manifest(&path)?;
+        if version::same_major(&manifest.spt_version, current_version)? {
+            candidates.push(path);
+        }
+    }
+
+    if candidates.len() > 1 {
+        return Err(SError::InvalidLibrary(
+            game_root.to_string(),
+            format!(
+                "Multiple compatible versioned libraries found: {}; choose a library root explicitly",
+                candidates
+                    .iter()
+                    .map(|path| path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
+    }
+
+    candidates
+        .pop()
+        .map(|path| Library::load(&path).map(|library| (path, library)))
+        .transpose()
 }
 
 /// Read-only workspace assembly (C13): reads each registered library's own
@@ -199,12 +257,18 @@ pub fn create_library(
         if use_default_library_root {
             let existing = Library::load_for_cleanup(&library_root)?;
             if existing.has_spt_major_mismatch()? {
-                library_root =
-                    library_service::derive_library_root_for_spt(&game_root, &existing.spt_version);
-                if library_root.exists() {
-                    library_service::validate_library_structure(&library_root)?;
-                    Library::load(&library_root)?
+                let compatible =
+                    find_compatible_versioned_library(&game_root, &existing.spt_version)?;
+                cleanup::remove_recorded_deployment(&existing)?;
+                cleanup::purge(&existing)?;
+                if let Some((compatible_root, library)) = compatible {
+                    library_root = compatible_root;
+                    library
                 } else {
+                    library_root = library_service::derive_library_root_for_spt(
+                        &game_root,
+                        &existing.spt_version,
+                    );
                     Library::create(LibraryCreationRequirement {
                         game_root: game_root.clone(),
                         repo_root: Some(library_root.clone()),
@@ -216,6 +280,20 @@ pub fn create_library(
             }
         } else {
             Library::load(&library_root)?
+        }
+    } else if use_default_library_root {
+        let current_version = current_spt_version(&game_root)?;
+        if let Some((compatible_root, library)) =
+            find_compatible_versioned_library(&game_root, &current_version)?
+        {
+            library_root = compatible_root;
+            library
+        } else {
+            Library::create(LibraryCreationRequirement {
+                game_root,
+                repo_root: Some(library_root.clone()),
+                name,
+            })?
         }
     } else {
         Library::create(LibraryCreationRequirement {

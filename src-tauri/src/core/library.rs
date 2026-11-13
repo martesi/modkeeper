@@ -263,7 +263,8 @@ impl Library {
     /// The canonical way to apply mod activation changes to the game directory.
     pub fn sync(&mut self) -> Result<(), SError> {
         use crate::core::{cleanup, deployment};
-        let current_paths = self.game_rules.clone().to_absolute(&self.game_root);
+        let current_rules = SPTPathRules::for_game_root(&self.game_root)?;
+        let current_paths = current_rules.clone().to_absolute(&self.game_root);
         let current_version = version::fetch_and_validate(&current_paths)?;
         if !version::same_major(&self.spt_version, &current_version)? {
             return Err(SError::InvalidLibrary(
@@ -274,6 +275,9 @@ impl Library {
                 ),
             ));
         }
+        self.game_rules = current_rules;
+        self.spt_paths_canonical = SPTPathCanonical::from_spt_paths(current_paths)?;
+        self.spt_version = current_version;
         let plan = deployment::plan(self)?;
         cleanup::purge(self)?;
         deployment::deploy(self, plan)?;

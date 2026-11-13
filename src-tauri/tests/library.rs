@@ -184,6 +184,218 @@ fn deleting_a_cross_major_library_removes_its_recorded_deployment() {
 }
 
 #[test]
+fn deleting_a_cross_major_library_refuses_a_replaced_deployment() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &mod_id, true).unwrap();
+    library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/Example/content.txt");
+    fs::remove_file(&deployed).unwrap();
+    fs::write(&deployed, "new installation").unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root: repo_root.clone(),
+    });
+
+    let error = global_service::delete_library_files(&config_handle, &instance_handle, &library.id)
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, SError::InvalidLibrary(_, _)),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(fs::read_to_string(&deployed).unwrap(), "new installation");
+    assert!(repo_root.exists());
+    assert_eq!(config_handle.lock().config.known_libraries.len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn deleting_a_library_refuses_a_deployment_path_redirected_outside_the_game_root() {
+    let (tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut library, &mod_id, true).unwrap();
+    library.sync().unwrap();
+
+    let redirected_root = tmp.path().join("redirected-user");
+    fs::create_dir_all(redirected_root.join("mods/Example")).unwrap();
+    fs::create_dir_all(redirected_root.join("sptRegistry")).unwrap();
+    fs::write(
+        redirected_root.join("mods/Example/content.txt"),
+        "outside game root",
+    )
+    .unwrap();
+    fs::write(
+        redirected_root.join("sptRegistry/registry.json"),
+        r#"{"SPT_Version":"SPT 4.0.11 - redirected"}"#,
+    )
+    .unwrap();
+    let user_root = game_root.join("SPT/user");
+    fs::rename(&user_root, game_root.join("SPT/user-original")).unwrap();
+    std::os::unix::fs::symlink(&redirected_root, &user_root).unwrap();
+
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: library.id.clone(),
+        library_root: repo_root.clone(),
+    });
+    let error = global_service::delete_library_files(&config_handle, &instance_handle, &library.id)
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, SError::InvalidLibrary(_, _)),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(redirected_root.join("mods/Example/content.txt")).unwrap(),
+        "outside game root"
+    );
+    assert!(repo_root.exists());
+    assert_eq!(config_handle.lock().config.known_libraries.len(), 1);
+}
+
+#[test]
+fn creating_a_new_major_library_removes_the_old_deployment_first() {
+    let (tmp, game_root, _) = setup_test_env();
+    let old_root = game_root.join(".mod_keeper");
+    let mut old_library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(game_root.join(".mod_keeper")),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let mod_src = tmp.path().join("mod");
+    let mod_src_utf8 = Utf8Path::from_path(&mod_src).unwrap();
+    create_test_mod(mod_src_utf8, "Example", true);
+    let mod_fs = mod_fs::scan(mod_src_utf8, &SPTPathRules::default()).unwrap();
+    let staged = create_staged_mod_for_test(mod_src_utf8, mod_fs);
+    let mod_id = staged.fs.id.clone();
+    mod_manager::add_mod(&mut old_library, staged, false).unwrap();
+    mod_manager::toggle_mod(&mut old_library, &mod_id, true).unwrap();
+    old_library.sync().unwrap();
+    let deployed = game_root.join("SPT/user/mods/Example/content.txt");
+    assert!(deployed.exists());
+
+    fs::write(
+        game_root.join("SPT/SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+    let (config_handle, instance_handle) = test_handles(&tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: old_library.id.clone(),
+        library_root: old_root.clone(),
+    });
+
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    assert!(!deployed.exists());
+    assert!(old_root.exists());
+    let instance = instance_handle.lock();
+    let new_library = instance.as_ref().unwrap();
+    assert_eq!(new_library.spt_version, "5.0.0");
+    assert!(new_library.mods.is_empty());
+}
+
+#[test]
+fn readding_a_game_root_reuses_a_compatible_versioned_library_after_a_patch_change() {
+    let (_tmp, game_root, _) = setup_test_env();
+    let old_root = game_root.join(".mod_keeper");
+    let old_library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(old_root.clone()),
+        game_root: game_root.clone(),
+        name: "SPT 4 library".to_string(),
+    })
+    .unwrap();
+    let old_id = old_library.id.clone();
+
+    fs::write(
+        game_root.join("SPT/SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.0-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+    let (config_handle, instance_handle) = test_handles(&_tmp);
+    config_handle.lock().config.upsert_library(KnownLibrary {
+        id: old_id.clone(),
+        library_root: old_root.clone(),
+    });
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    let versioned_root = game_root.join(".mod_keeper-spt-5.0.0");
+    let versioned_id = instance_handle.lock().as_ref().unwrap().id.clone();
+    global_service::delete_library_files(&config_handle, &instance_handle, &old_id).unwrap();
+    assert!(!old_root.exists());
+    assert!(versioned_root.exists());
+
+    fs::write(
+        game_root.join("SPT/SPT.Server.deps.json"),
+        r#"{"runtimeTarget":{"name":"net10/win-x64"},"targets":{"net10/win-x64":{"SPT.Server/5.0.1-RELEASE+abc":{}}}}"#,
+    )
+    .unwrap();
+    global_service::create_library(
+        &config_handle,
+        &instance_handle,
+        CreateLibraryInput {
+            game_root: game_root.to_string(),
+            library_root: None,
+            name: None,
+        },
+    )
+    .unwrap();
+
+    let instance = instance_handle.lock();
+    let library = instance.as_ref().unwrap();
+    assert_eq!(library.id, versioned_id);
+    assert_eq!(library.repo_root, versioned_root);
+    assert_eq!(library.spt_version, "5.0.1");
+    assert_eq!(config_handle.lock().config.known_libraries.len(), 1);
+}
+
+#[test]
 fn test_collision_detection() {
     let (_tmp, game_root, repo_root) = setup_test_env();
     let requirement = LibraryCreationRequirement {
