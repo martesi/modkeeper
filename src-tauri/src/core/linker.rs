@@ -135,8 +135,10 @@ pub fn unlink(target: &Utf8Path) -> io::Result<()> {
 /// Windows junction into a symbolic link during a removal preflight.
 pub(crate) fn link_kind(path: &Utf8Path) -> io::Result<ArtifactKind> {
     #[cfg(windows)]
-    if junction::exists(path.as_std_path())? {
-        return Ok(ArtifactKind::Junction);
+    match junction::get_target(path.as_std_path()) {
+        Ok(_) => return Ok(ArtifactKind::Junction),
+        Err(error) if error.to_string() == "not a reparse tag mount point" => {}
+        Err(error) => return Err(error),
     }
     #[cfg(not(windows))]
     let _ = path;

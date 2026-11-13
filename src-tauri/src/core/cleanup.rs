@@ -3,10 +3,12 @@ use crate::core::library::Library;
 use crate::core::linker;
 use crate::models::error::SError;
 use crate::models::paths::SPTPathRules;
+use crate::utils::toml as toml_store;
 use camino::{Utf8Path, Utf8PathBuf};
 use dunce::canonicalize as dunce_canon;
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -101,7 +103,7 @@ fn remove_recorded_deployment_with_identity(
 /// retired elsewhere.
 pub fn validate_purge(library: &Library) -> Result<(), SError> {
     let links = plan_purge(library)?;
-    preflight_link_removals(&links)
+    preflight_link_removals(library, &links)
 }
 
 fn purge_roots(library: &Library) -> Vec<Utf8PathBuf> {
@@ -149,7 +151,25 @@ struct QuarantinedLink {
     path: Utf8PathBuf,
 }
 
+struct QuarantineBatch {
+    links: Vec<QuarantinedLink>,
+    recovery_path: Utf8PathBuf,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PurgeRecovery {
+    version: u8,
+    entries: Vec<PurgeRecoveryEntry>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PurgeRecoveryEntry {
+    original: Utf8PathBuf,
+    quarantine: Utf8PathBuf,
+}
+
 fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
+    ensure_no_pending_recovery(library)?;
     let repo_root = dunce_canon(&library.repo_root)
         .unwrap_or_else(|_| library.repo_root.as_std_path().to_path_buf());
     let roots = validated_purge_roots(library)?;
@@ -164,6 +184,16 @@ fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
             let path = Utf8Path::from_path(entry.path()).ok_or(SError::Unexpected)?;
             if !entry.file_type().is_symlink() {
                 continue;
+            }
+            if path
+                .file_name()
+                .is_some_and(|name| name.starts_with(".mkp-"))
+            {
+                return Err(purge_recovery_error(
+                    library,
+                    path,
+                    "an orphaned quarantine link was found without a recovery manifest",
+                ));
             }
             let Ok(raw_target) = linker::read_link_target_native(path) else {
                 continue;
@@ -194,24 +224,26 @@ fn plan_purge(library: &Library) -> Result<Vec<PurgeLink>, SError> {
     Ok(links)
 }
 
-fn preflight_link_removals(links: &[PurgeLink]) -> Result<(), SError> {
-    let quarantined = quarantine_links(links)?;
-    restore_quarantined_links(&quarantined)
+fn preflight_link_removals(library: &Library, links: &[PurgeLink]) -> Result<(), SError> {
+    let batch = quarantine_links(library, links)?;
+    restore_quarantined_links(&batch.links)?;
+    clear_purge_recovery(&batch.recovery_path)
 }
 
 pub fn purge(library: &Library) -> Result<(), SError> {
-    let quarantined = quarantine_links(&plan_purge(library)?)?;
+    let batch = quarantine_links(library, &plan_purge(library)?)?;
     let mut failures = Vec::new();
-    for entry in &quarantined {
+    for entry in &batch.links {
         if let Err(error) = linker::unlink(&entry.path) {
             failures.push(format!("'{}': {error}", entry.path));
         }
     }
     if failures.is_empty() {
-        return Ok(());
+        return clear_purge_recovery(&batch.recovery_path);
     }
     Err(SError::IOError(format!(
-        "Unable to remove all quarantined deployment links; failed objects remain at temporary paths: {}",
+        "Unable to remove all quarantined deployment links; recovery is pending at '{}': {}",
+        batch.recovery_path,
         failures.join(", ")
     )))
 }
@@ -237,32 +269,36 @@ fn verify_purge_link_at(link: &PurgeLink, path: &Utf8Path) -> Result<bool, SErro
     Ok(true)
 }
 
-fn quarantine_links(links: &[PurgeLink]) -> Result<Vec<QuarantinedLink>, SError> {
-    let mut quarantined = Vec::new();
+fn quarantine_links(library: &Library, links: &[PurgeLink]) -> Result<QuarantineBatch, SError> {
+    let recovery_path = purge_recovery_path(library);
+    let mut candidates = Vec::new();
     for link in links {
         match verify_purge_link(link) {
             Ok(false) => continue,
             Ok(true) => {}
-            Err(error) => {
-                let rollback = restore_quarantined_links(&quarantined);
-                return Err(with_rollback_error(error, rollback));
-            }
+            Err(error) => return Err(error),
         }
-        let path = match quarantine_path(&link.path) {
-            Ok(path) => path,
-            Err(error) => {
-                let rollback = restore_quarantined_links(&quarantined);
-                return Err(with_rollback_error(error, rollback));
-            }
-        };
-        if let Err(error) = fs::rename(link.path.as_std_path(), path.as_std_path()) {
-            let rollback = restore_quarantined_links(&quarantined);
-            return Err(with_rollback_error(error.into(), rollback));
-        }
-        quarantined.push(QuarantinedLink {
+        let path = quarantine_path(&link.path)?;
+        candidates.push(QuarantinedLink {
             link: link.clone(),
             path,
         });
+    }
+    if candidates.is_empty() {
+        return Ok(QuarantineBatch {
+            links: candidates,
+            recovery_path,
+        });
+    }
+
+    persist_purge_recovery(&recovery_path, &candidates)?;
+    let mut quarantined = Vec::new();
+    for entry in candidates {
+        if let Err(error) = fs::rename(entry.link.path.as_std_path(), entry.path.as_std_path()) {
+            let rollback = restore_quarantined_links(&quarantined);
+            return Err(with_rollback_error(error.into(), rollback));
+        }
+        quarantined.push(entry);
     }
 
     for entry in &quarantined {
@@ -271,12 +307,123 @@ fn quarantine_links(links: &[PurgeLink]) -> Result<Vec<QuarantinedLink>, SError>
             return Err(with_rollback_error(error.into(), rollback));
         }
     }
-    Ok(quarantined)
+    Ok(QuarantineBatch {
+        links: quarantined,
+        recovery_path,
+    })
 }
 
 fn quarantine_path(path: &Utf8Path) -> Result<Utf8PathBuf, SError> {
     let parent = path.parent().ok_or(SError::Unexpected)?;
-    Ok(parent.join(format!(".mkp-{}", uuid::Uuid::new_v4())))
+    for _ in 0..8 {
+        let candidate = parent.join(format!(".mkp-{}", uuid::Uuid::new_v4()));
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(candidate),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(SError::IOError(format!(
+        "Unable to allocate a quarantine path beside '{path}'"
+    )))
+}
+
+fn purge_recovery_path(library: &Library) -> Utf8PathBuf {
+    library.repo_root.join(".modkeeper-purge-recovery.toml")
+}
+
+fn persist_purge_recovery(
+    recovery_path: &Utf8Path,
+    links: &[QuarantinedLink],
+) -> Result<(), SError> {
+    let recovery = PurgeRecovery {
+        version: 1,
+        entries: links
+            .iter()
+            .map(|entry| PurgeRecoveryEntry {
+                original: entry.link.path.clone(),
+                quarantine: entry.path.clone(),
+            })
+            .collect(),
+    };
+    let serialized =
+        ::toml::to_string(&recovery).map_err(|error| SError::ParseError(error.to_string()))?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(recovery_path.as_std_path())?;
+    file.write_all(serialized.as_bytes())?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn ensure_no_pending_recovery(library: &Library) -> Result<(), SError> {
+    let recovery_path = purge_recovery_path(library);
+    let meta = match fs::symlink_metadata(&recovery_path) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return Err(purge_recovery_error(
+            library,
+            &recovery_path,
+            "the recovery manifest is not a regular file",
+        ));
+    }
+
+    let recovery: PurgeRecovery = match toml_store::read(&recovery_path) {
+        Ok(recovery) => recovery,
+        Err(error) => {
+            return Err(purge_recovery_error(
+                library,
+                &recovery_path,
+                &format!("the recovery manifest could not be read: {error}"),
+            ));
+        }
+    };
+    if recovery.version != 1 {
+        return Err(purge_recovery_error(
+            library,
+            &recovery_path,
+            "the recovery manifest has an unsupported version",
+        ));
+    }
+    for entry in recovery.entries {
+        match fs::symlink_metadata(&entry.quarantine) {
+            Ok(_) => {
+                return Err(purge_recovery_error(
+                    library,
+                    &recovery_path,
+                    &format!(
+                        "retained quarantine '{}' requires recovery before retrying",
+                        entry.quarantine
+                    ),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    fs::remove_file(&recovery_path)?;
+    Ok(())
+}
+
+fn clear_purge_recovery(recovery_path: &Utf8Path) -> Result<(), SError> {
+    match fs::remove_file(recovery_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn purge_recovery_error(library: &Library, path: &Utf8Path, detail: &str) -> SError {
+    SError::InvalidLibrary(
+        library.repo_root.to_string(),
+        format!(
+            "Purge recovery is pending at '{path}': {detail}. Resolve the retained quarantine before retrying"
+        ),
+    )
 }
 
 fn restore_quarantined_links(links: &[QuarantinedLink]) -> Result<(), SError> {

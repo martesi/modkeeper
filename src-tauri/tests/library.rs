@@ -697,6 +697,62 @@ fn purge_handles_long_link_names_with_a_bounded_quarantine_name() {
 
 #[cfg(unix)]
 #[test]
+fn purge_blocks_an_orphaned_quarantine_link_on_retry() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Orphaned purge recovery test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let target = repo_root.join("orphan-target.txt");
+    fs::write(&target, "repo").unwrap();
+    let quarantine = legacy_root.join(".mkp-orphan");
+    std::os::unix::fs::symlink(target.as_std_path(), quarantine.as_std_path()).unwrap();
+
+    let result = library.sync();
+    assert!(matches!(result, Err(SError::InvalidLibrary(_, _))));
+    assert!(fs::symlink_metadata(&quarantine).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_blocks_a_retained_recovery_manifest_on_retry() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Retained purge recovery test".to_string(),
+    })
+    .unwrap();
+    let legacy_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&legacy_root).unwrap();
+    let target = repo_root.join("retained-target.txt");
+    fs::write(&target, "repo").unwrap();
+    let quarantine = legacy_root.join(".mkp-retained");
+    std::os::unix::fs::symlink(target.as_std_path(), quarantine.as_std_path()).unwrap();
+    let original = legacy_root.join("original-link");
+    let recovery = repo_root.join(".modkeeper-purge-recovery.toml");
+    fs::write(
+        &recovery,
+        format!(
+            "version = 1\n\n[[entries]]\noriginal = {:?}\nquarantine = {:?}\n",
+            original.to_string(),
+            quarantine.to_string()
+        ),
+    )
+    .unwrap();
+
+    let result = library.sync();
+    assert!(matches!(result, Err(SError::InvalidLibrary(_, _))));
+    assert!(recovery.exists());
+    assert!(fs::symlink_metadata(&quarantine).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
 fn purge_preflights_link_parent_permissions_before_unlinking() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -725,6 +781,32 @@ fn purge_preflights_link_parent_permissions_before_unlinking() {
     assert!(matches!(result, Err(SError::IOError(_))));
     assert!(server_link.exists());
     assert!(client_link.exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn purge_handles_chained_junctions_during_quarantine() {
+    let (_tmp, game_root, repo_root) = setup_test_env();
+    let mut library = Library::create(LibraryCreationRequirement {
+        repo_root: Some(repo_root.clone()),
+        game_root: game_root.clone(),
+        name: "Chained junction purge test".to_string(),
+    })
+    .unwrap();
+    let target = repo_root.join("junction-target");
+    fs::create_dir_all(&target).unwrap();
+    let server_root = game_root.join("SPT/user/mods");
+    fs::create_dir_all(&server_root).unwrap();
+    let first = server_root.join("junction-a");
+    let second = server_root.join("junction-b");
+    junction::create(target.as_std_path(), first.as_std_path()).unwrap();
+    junction::create(first.as_std_path(), second.as_std_path()).unwrap();
+
+    library.sync().unwrap();
+    assert!(fs::symlink_metadata(&first).is_err());
+    assert!(fs::symlink_metadata(&second).is_err());
+    assert!(target.exists());
+    assert!(!repo_root.join(".modkeeper-purge-recovery.toml").exists());
 }
 
 #[cfg(unix)]
