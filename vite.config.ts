@@ -4,7 +4,6 @@ import babel from '@rolldown/plugin-babel'
 import router from '@tanstack/router-plugin/vite'
 import autoImports from 'unplugin-auto-import/vite'
 import tailwindcss from '@tailwindcss/vite'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { lingui } from '@lingui/vite-plugin'
 
 const host = process.env.TAURI_DEV_HOST
@@ -41,13 +40,15 @@ export default defineConfig(() => ({
       dts: 'src/gen/auto-imports.d.ts',
     }),
     tailwindcss(),
-    tsconfigPaths(),
     router({
       generatedRouteTree: 'src/gen/routes.ts',
       disableLogging: true,
     }),
   ],
   clearScreen: false,
+  resolve: {
+    tsconfigPaths: true,
+  },
   server: {
     port: 1420,
     strictPort: true,
