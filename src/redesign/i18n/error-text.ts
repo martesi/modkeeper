@@ -15,7 +15,10 @@ export const errorText = {
       message: `This SPT version is not supported: ${version}`,
     }),
   parseError: (detail: string) =>
-    t({ id: 'error.parseError', message: `A file could not be read: ${detail}` }),
+    t({
+      id: 'error.parseError',
+      message: `A file could not be read: ${detail}`,
+    }),
   ioError: (detail: string) =>
     t({ id: 'error.ioError', message: `A file operation failed: ${detail}` }),
   gameOrServerRunning: () =>

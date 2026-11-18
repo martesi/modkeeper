@@ -19,7 +19,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
-export const WithValue: Story = { args: { defaultValue: 'SPT Winter Playthrough' } }
+export const WithValue: Story = {
+  args: { defaultValue: 'SPT Winter Playthrough' },
+}
 export const Disabled: Story = { args: { disabled: true } }
 export const Invalid: Story = {
   args: { 'aria-invalid': true, defaultValue: 'Already registered path' },

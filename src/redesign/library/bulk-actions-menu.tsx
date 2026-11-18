@@ -15,6 +15,7 @@ import {
   selectedModIdsAtom,
 } from '../state/library-state'
 import { bulkUpdateMods } from '../data/library-repository'
+import type { BulkModAction } from '../data/redesign-types'
 import { libraryText } from '../i18n/library-text'
 import { commonText } from '../i18n/common-text'
 
@@ -33,18 +34,18 @@ export function BulkActionsMenu() {
   const count = selectedIds.size
   const disabled = count === 0 || libraryBusy || pending || !activeLibraryId
 
-  async function run(action: 'enable' | 'disable' | 'delete') {
+  async function run(action: BulkModAction) {
     if (!activeLibraryId) return
     setPending(true)
     try {
-      await bulkUpdateMods({
+      const outcome = await bulkUpdateMods({
         libraryId: activeLibraryId,
         modIds: [...selectedIds],
         action,
       })
+      if (outcome.status === 'success') setConfirmDelete(false)
     } finally {
       setPending(false)
-      setConfirmDelete(false)
     }
   }
 
@@ -55,7 +56,7 @@ export function BulkActionsMenu() {
           <FidelityButton
             disabled={disabled}
             busy={pending}
-            className="text-[13px] font-bold uppercase tracking-[0.02em]"
+            className="text-[13px] font-semibold"
           >
             {libraryText.actions(count)}
             <ChevronDown />
@@ -64,17 +65,17 @@ export function BulkActionsMenu() {
         <DropdownMenuContent
           align="start"
           sideOffset={8}
-          className="mk-glass-standard min-w-[11.5rem] rounded-2xl border-border bg-popover p-1.5"
+          className="min-w-[11.5rem] rounded-lg p-1"
         >
           <DropdownMenuItem
-            className="rounded-[0.625rem] py-2.5"
+            className="rounded-sm"
             onSelect={() => void run('enable')}
           >
             <Play aria-hidden />
             {libraryText.enableSelected()}
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="rounded-[0.625rem] py-2.5"
+            className="rounded-sm"
             onSelect={() => void run('disable')}
           >
             <Square aria-hidden />
@@ -82,7 +83,7 @@ export function BulkActionsMenu() {
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
-            className="rounded-[0.625rem] py-2.5"
+            className="rounded-sm"
             onSelect={() => setConfirmDelete(true)}
           >
             <Trash2 aria-hidden />

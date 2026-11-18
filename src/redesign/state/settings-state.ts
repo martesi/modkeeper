@@ -7,6 +7,7 @@
  */
 import { atom, getDefaultStore } from 'jotai'
 import type { AppSettings } from '../data/redesign-types'
+import { DEFAULT_ACCENT } from '../data/settings-defaults'
 
 export const settingsAtom = atom<AppSettings | null>(null)
 
@@ -18,7 +19,7 @@ export function setSettings(settings: AppSettings): void {
 export const themeModeAtom = atom((get) => get(settingsAtom)?.theme ?? 'system')
 
 export const accentColorAtom = atom(
-  (get) => get(settingsAtom)?.accentColor ?? '#e91e63',
+  (get) => get(settingsAtom)?.accentColor ?? DEFAULT_ACCENT,
 )
 
 export const languageAtom = atom(

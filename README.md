@@ -17,7 +17,7 @@ Modkeeper is designed to solve common problems when managing mods for SPT:
 
 - **Non-destructive mod management**: Uses preflighted file-system links where available and safe recorded copies as a fallback
 - **Multiple library instances**: Manage different mod configurations for different playthroughs or server setups
-- **Safe operations**: Automatic backup system before mod updates, with restore functionality
+- **Safe operations**: Automatic rollback if overwriting an existing mod fails, without exposing a manual backup browser
 - **Clean separation**: Mods are stored in a separate repository directory and linked to the game directory only when active
 - **Type-aware deployment**: Supports Client mods, Server mods, and mods that work for both, with proper path management for each type
 - **Collision detection**: Prevents file conflicts between mods during deployment
@@ -29,12 +29,10 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 ### Implemented Features
 
 - ✅ Library creation and management (multiple instances)
-- ✅ Mod installation from ZIP archives
+- ✅ Mod installation from ZIP and 7z archives
 - ✅ Mod activation/deactivation (toggle system)
 - ✅ Safe deployment via links or recorded copies
-- ✅ Automatic backup system with restore capability
-- ✅ Mod metadata display (manifest parsing)
-- ✅ Mod documentation viewer (Markdown support)
+- ✅ Automatic rollback when overwriting an existing mod fails (internal snapshot)
 - ✅ Mod type detection (Client/Server/Both)
 - ✅ File collision detection
 - ✅ Process checking on Windows (prevents sync while game/server is running)
@@ -68,7 +66,7 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 
 - **Library System**: Each library instance manages its own mod repository and deployment state
 - **Deployment Model**: Mods are stored in repository (`repo_root/mods/`) and linked to game directory when active
-- **Backup System**: Automatic backups stored in `repo_root/backups/{mod_id}/{timestamp}/`
+- **Upgrade Safety**: A transient snapshot at `repo_root/backups/{mod_id}/snapshot/` protects an existing mod while it is overwritten; a successful install discards it and a failed one restores from it. There is no user-facing backup or restore UI.
 - **Cache System**: File system metadata cached for performance
 - **State Management**: Jotai for global state, React hooks for component state
 
@@ -180,14 +178,10 @@ Tests cover:
 
 ## For Mod Developers
 
-Modkeeper accepts the [SPT Mod Manifest Proposal](https://github.com/martesi/spt-mod-manifest-proposal) for mod metadata. To enable proper mod management:
+The [SPT Mod Manifest Proposal](https://github.com/martesi/spt-mod-manifest-proposal) describes the intended mod metadata format, but the current redesign does not read `manifest/manifest.json` yet. A mod is identified by the name resolved from its folder, and by its detected type (Client/Server/Both). A `manifest/` folder is imported and deployed like any other mod file, so nothing is excluded from the game directory today.
 
-1. **Create a manifest file**: Place your mod's manifest at `manifest/manifest.json` in your mod's root directory
-2. **Manifest folder behavior**: The entire `manifest/` folder is treated as part of the mod's self-description and will **not** be deployed to the game directory
-3. **Manifest format**: Follow the specification defined in the [Mod Manifest Proposal](https://github.com/martesi/spt-mod-manifest-proposal)
-
-This allows Modkeeper to:
-- Display mod metadata (name, author, version, description)
+Once manifest support returns, Modkeeper intends to:
+- Display mod metadata (author, version, description)
 - Show mod documentation
 - Handle dependencies between mods
 - Display compatibility information

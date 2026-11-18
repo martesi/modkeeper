@@ -17,10 +17,12 @@ import {
   librarySearchAtom,
   librarySortAtom,
   libraryStatusFilterAtom,
+  libraryTypeFilterAtom,
   selectedModIdsAtom,
   visibleModsAtom,
   type LibrarySort,
   type LibraryStatusFilter,
+  type LibraryTypeFilter,
 } from '../state/library-state'
 import { libraryText } from '../i18n/library-text'
 
@@ -37,6 +39,7 @@ export function ModGridToolbar() {
   const [search, setSearch] = useAtom(librarySearchAtom)
   const [sort, setSort] = useAtom(librarySortAtom)
   const [statusFilter, setStatusFilter] = useAtom(libraryStatusFilterAtom)
+  const [typeFilter, setTypeFilter] = useAtom(libraryTypeFilterAtom)
 
   const visibleSelectedCount = visibleMods.filter((mod) =>
     selectedIds.has(mod.id),
@@ -66,15 +69,24 @@ export function ModGridToolbar() {
     { value: 'enabled', label: libraryText.filterEnabled() },
     { value: 'disabled', label: libraryText.filterDisabled() },
   ]
+  const typeFilterOptions: { value: LibraryTypeFilter; label: string }[] = [
+    { value: 'all', label: libraryText.typeFilterAll() },
+    { value: 'client', label: libraryText.typeFilterClient() },
+    { value: 'server', label: libraryText.typeFilterServer() },
+    { value: 'both', label: libraryText.typeFilterBoth() },
+    { value: 'unknown', label: libraryText.typeFilterUnknown() },
+  ]
 
   const sortLabel =
     sortOptions.find((option) => option.value === sort)?.label ?? ''
   const filterLabel =
     filterOptions.find((option) => option.value === statusFilter)?.label ?? ''
+  const typeFilterLabel =
+    typeFilterOptions.find((option) => option.value === typeFilter)?.label ?? ''
 
   return (
-    <FidelityPanel className="flex flex-wrap items-center gap-3 px-3 py-2">
-      <label className="flex cursor-pointer items-center gap-2 text-[13px] font-bold text-muted-foreground">
+    <FidelityPanel className="flex flex-wrap items-center gap-2 p-2">
+      <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-muted-foreground">
         <FidelityCheckbox
           checked={allVisibleSelected}
           indeterminate={!allVisibleSelected && visibleSelectedCount > 0}
@@ -99,10 +111,17 @@ export function ModGridToolbar() {
         options={filterOptions}
         onChange={(value) => setStatusFilter(value)}
       />
+      <OptionMenu
+        label={libraryText.typeFilterLabel()}
+        valueLabel={typeFilterLabel}
+        value={typeFilter}
+        options={typeFilterOptions}
+        onChange={(value) => setTypeFilter(value)}
+      />
 
       <BulkActionsMenu />
 
-      <div className="relative min-w-[11rem] flex-1">
+      <div className="relative min-w-44 flex-1">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden
@@ -113,6 +132,17 @@ export function ModGridToolbar() {
           onChange={(event) => setSearch(event.target.value)}
           placeholder={libraryText.searchPlaceholder()}
           aria-label={libraryText.searchLabel()}
+          data-library-search=""
+          onKeyDown={(event) => {
+            if (
+              event.key !== 'Escape' ||
+              event.nativeEvent.isComposing ||
+              search === ''
+            ) {
+              return
+            }
+            setSearch('')
+          }}
           className="pl-9"
         />
       </div>
@@ -145,7 +175,7 @@ function OptionMenu<Value extends string>({
       <DropdownMenuContent
         align="start"
         sideOffset={8}
-        className="mk-glass-standard min-w-[11.5rem] rounded-2xl border-border bg-popover p-1.5"
+        className="min-w-[11.5rem] rounded-lg p-1"
       >
         <DropdownMenuRadioGroup
           value={value}
@@ -155,7 +185,7 @@ function OptionMenu<Value extends string>({
             <DropdownMenuRadioItem
               key={option.value}
               value={option.value}
-              className="rounded-[0.625rem] py-2.5 data-[state=checked]:bg-primary/10 data-[state=checked]:font-bold data-[state=checked]:text-primary"
+              className="rounded-sm data-[state=checked]:bg-primary/10 data-[state=checked]:font-semibold data-[state=checked]:text-primary"
             >
               {option.label}
             </DropdownMenuRadioItem>

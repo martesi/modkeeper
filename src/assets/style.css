@@ -8,12 +8,15 @@ body {
 
 @custom-variant dark (&:is(.dark *));
 
-/* Reference typography (Modkeeper.dc.html): Public Sans body, Manrope headings. */
 @theme {
   --font-sans:
-    'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui,
     sans-serif;
-  --font-heading: 'Manrope', 'Public Sans', ui-sans-serif, sans-serif;
+  --font-heading:
+    'Segoe UI Variable Display', 'Segoe UI Variable Text', 'Segoe UI',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  --default-transition-duration: 167ms;
+  --default-transition-timing-function: cubic-bezier(0.1, 0.9, 0.2, 1);
 }
 
 @theme inline {
@@ -39,7 +42,9 @@ body {
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
@@ -58,58 +63,63 @@ body {
 }
 
 /*
- * Fidelity Modern palette as the shadcn token values (fix_plan_0.md §3: the shadcn vocabulary is
- * canonical, `--mk-*` is retired). Values come from the reference prototype
- * (docs/2026-07-13_redesign/ui/Modkeeper.dc.html). Translucent card/popover fills are deliberate:
- * the OS mica surface on Tauri Windows/macOS or the page gradient elsewhere shows through them.
- * `applyAccent` overrides --primary/--primary-foreground/--ring at runtime for non-default accents.
+ * Fluent light and dark tokens. The `default` accent follows these theme values; saved custom
+ * accents override the primary, foreground, and ring at runtime.
  */
 :root {
-  --radius: 0.75rem; /* reference controls are 12px; cards use rounded-2xl (20px) */
-  --background: #f3f4f8;
-  --foreground: #17181c;
-  --card: rgba(255, 255, 255, 0.65);
-  --card-foreground: #17181c;
-  --popover: rgba(255, 255, 255, 0.9);
-  --popover-foreground: #17181c;
-  --primary: #e91e63;
+  --radius: 0.5rem;
+  --t-fast: 83ms;
+  --t-med: 167ms;
+  --t-slow: 250ms;
+  --ease-out-fluent: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --background: #f3f3f3;
+  --foreground: #1b1c22;
+  --card: rgba(255, 255, 255, 0.62);
+  --card-foreground: #1b1c22;
+  --popover: rgba(250, 250, 252, 0.94);
+  --popover-foreground: #1b1c22;
+  --primary: #0067c0;
   --primary-foreground: #ffffff;
-  --secondary: rgba(255, 255, 255, 0.55);
-  --secondary-foreground: #17181c;
-  --muted: rgba(255, 255, 255, 0.55);
-  --muted-foreground: #6b7280;
-  --accent: rgba(15, 15, 20, 0.05);
-  --accent-foreground: #17181c;
-  --destructive: #d64545;
-  --border: rgba(15, 15, 20, 0.08);
-  --input: rgba(15, 15, 20, 0.08);
-  --ring: #e91e63;
-  --chart-1: #e91e63;
-  --chart-2: #6c8ef5;
-  --chart-3: #3ecf8e;
-  --chart-4: #f5a35c;
-  --chart-5: #00828d;
+  --secondary: rgba(255, 255, 255, 0.72);
+  --secondary-foreground: #1b1c22;
+  --muted: rgba(0, 0, 0, 0.035);
+  --muted-foreground: #5b5f6d;
+  --accent: rgba(0, 0, 0, 0.04);
+  --accent-foreground: #1b1c22;
+  --destructive: #c42b1c;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.075);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --input: rgba(0, 0, 0, 0.075);
+  --ring: #0067c0;
+  --chart-1: #0a8bbd;
+  --chart-2: #6a52ec;
+  --chart-3: #c27a00;
+  --chart-4: #1f9d55;
+  --chart-5: #d6336c;
 }
 
 .dark {
-  --background: #16161c;
-  --foreground: #f4f4f6;
-  --card: rgba(35, 35, 42, 0.55);
-  --card-foreground: #f4f4f6;
-  --popover: rgba(28, 28, 34, 0.9);
-  --popover-foreground: #f4f4f6;
-  --primary: #e91e63;
-  --primary-foreground: #ffffff;
-  --secondary: rgba(50, 50, 58, 0.45);
-  --secondary-foreground: #f4f4f6;
-  --muted: rgba(50, 50, 58, 0.45);
-  --muted-foreground: #a1a1ab;
-  --accent: rgba(255, 255, 255, 0.06);
-  --accent-foreground: #f4f4f6;
-  --destructive: #e05a5a;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #e91e63;
+  --background: #202020;
+  --foreground: #f1f2f6;
+  --card: rgba(255, 255, 255, 0.035);
+  --card-foreground: #f1f2f6;
+  --popover: rgba(40, 41, 48, 0.94);
+  --popover-foreground: #f1f2f6;
+  --primary: #4cc2ff;
+  --primary-foreground: #00213b;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #f1f2f6;
+  --muted: rgba(255, 255, 255, 0.035);
+  --muted-foreground: #a9adbb;
+  --accent: rgba(255, 255, 255, 0.045);
+  --accent-foreground: #f1f2f6;
+  --destructive: #ff6a5c;
+  --destructive-foreground: #2a0400;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.07);
+  --ring: #4cc2ff;
 }
 
 @layer base {
@@ -118,5 +128,23 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 13px;
+    line-height: 1.4;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.toaster [data-sonner-toast] {
+  font-family: var(--font-sans);
+  font-size: 13px;
 }

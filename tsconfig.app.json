@@ -47,8 +47,23 @@
       ]
     }
   },
+  // Composite projects must list imported sources outside the active include roots.
+  "files": [
+    "src/utils/router.ts",
+    "src/utils/theme.ts",
+    "src/utils/i18n.ts",
+    "src/lib/utils.ts",
+    "src/components/ui/sonner.tsx",
+    "src/components/ui/dropdown-menu.tsx",
+    "src/components/ui/select.tsx",
+    "src/components/ui/dialog.tsx",
+    "src/components/ui/checkbox.tsx",
+    "src/components/ui/switch.tsx"
+  ],
   "include": [
-    "src",
+    "src/main.tsx",
+    "src/redesign",
+    "src/routes",
     "src/gen"
   ]
 }

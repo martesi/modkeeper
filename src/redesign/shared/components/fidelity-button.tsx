@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils'
 const buttonVariants = cva(
   cn(
     'relative inline-flex shrink-0 items-center justify-center gap-2',
-    'whitespace-nowrap rounded-lg font-semibold transition-colors',
+    'whitespace-nowrap rounded-sm text-[13px] font-semibold transition-colors',
     'outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-    'disabled:pointer-events-none disabled:opacity-50',
+    'disabled:pointer-events-none disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:pointer-events-none',
   ),
   {
@@ -21,14 +21,15 @@ const buttonVariants = cva(
           'border border-border bg-secondary text-foreground hover:bg-accent',
         outline:
           'border border-border bg-transparent text-foreground hover:bg-accent active:bg-accent',
-        ghost: 'bg-transparent text-foreground hover:bg-accent active:bg-accent',
+        ghost:
+          'bg-transparent text-foreground hover:bg-accent active:bg-accent',
         destructive:
-          'bg-destructive text-white hover:bg-destructive/90',
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90',
       },
       size: {
-        sm: 'h-8 px-3 text-sm',
-        md: 'h-10 px-4 text-sm',
-        lg: 'h-12 px-6 text-base',
+        sm: 'h-7 px-2.5',
+        md: 'h-8 px-3',
+        lg: 'h-9 px-3.5',
       },
     },
     defaultVariants: {

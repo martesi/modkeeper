@@ -13,8 +13,7 @@ type FidelitySwitchProps = {
 }
 
 /**
- * Styled wrapper over the shadcn Switch (fix_plan_0.md §1/§7 — the interactive primitive is always
- * the shadcn one; thumb geometry is Radix's). Sized to the reference's 44×26 track / 20px knob.
+ * Styled wrapper over the shadcn Switch with a compact 36×20 track.
  */
 export function FidelitySwitch({
   busy = false,
@@ -26,10 +25,10 @@ export function FidelitySwitch({
       data-slot="fidelity-switch"
       aria-busy={busy || undefined}
       className={cn(
-        'h-[1.625rem] w-11',
-        '[&_[data-slot=switch-thumb]]:size-5',
-        '[&_[data-slot=switch-thumb][data-state=unchecked]]:translate-x-[2px]',
-        '[&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[20px]',
+        'h-5 w-9',
+        '[&_[data-slot=switch-thumb]]:size-4',
+        '[&_[data-slot=switch-thumb][data-state=unchecked]]:translate-x-0',
+        '[&_[data-slot=switch-thumb][data-state=checked]]:translate-x-4',
         className,
       )}
       {...props}

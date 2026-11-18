@@ -19,43 +19,70 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
 import { commands, events } from '@gen/bindings'
-import type { Result } from '@gen/bindings'
 import type {
   LibraryWorkspace,
   LibrarySummary,
   LibraryId,
   ModId,
+  BulkModAction,
   OperationAccepted,
   WorkspaceEvent,
   SError,
 } from './redesign-types'
 import { isLibrarySummary } from './redesign-types'
 import { resolveCommandError } from '../shared/hooks/use-command-error'
-import { getMockWorkspace, setMockWorkspace } from './example-data'
+import { commonText } from '../i18n/common-text'
+import { libraryText } from '../i18n/library-text'
+import {
+  createRetryableConnection,
+  runPlainCommand,
+  runTrackedCommand,
+} from './runtime-boundary'
+import type { CommandResult } from './runtime-boundary'
+import {
+  emptyWorkspace,
+  getMockWorkspace,
+  setMockWorkspace,
+} from './example-data'
 import { stripSupportedArchiveExtension } from '../shared/utils/file-filters'
 import {
+  activeLibraryIdAtom,
+  libraryBusyAtom,
   libraryWorkspaceAtom,
   setWorkspace,
   addPendingTask,
   removePendingTask,
+  isLibraryTaskPending,
+  setWorkspaceStatus,
 } from '../state/library-state'
+import { canRetryFailedArchives } from './task-outcome'
+import type { InstallTaskOutcome } from './task-outcome'
 import { setSettings } from '../state/settings-state'
 import { getDefaultStore } from 'jotai'
 
 // --- The single persistent event bus (§10) ---
 
-type WorkspaceEventHandler = (event: WorkspaceEvent) => void
+type WorkspaceEventHandler = (
+  event: WorkspaceEvent,
+  submittedPaths?: readonly string[],
+) => void
 
 const subscribers = new Set<WorkspaceEventHandler>()
-let realSourceConnected = false
+const submittedArchivePathsByTaskId = new Map<string, string[]>()
+const connectWorkspaceEvents = createRetryableConnection((error) => {
+  console.error('[redesign] workspace event source unavailable', error)
+})
 
 /**
  * Dispatch a completion event — from the real Tauri listener OR the mock emitter, identically.
  * Clears the in-flight task (drops library-busy) first, then fans out to subscribers.
  */
 function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
-  removePendingTask(event.taskId)
-  subscribers.forEach((handler) => handler(event))
+  if (!removePendingTask(event.taskId)) return
+  const submittedPaths = submittedArchivePathsByTaskId.get(event.taskId)
+  submittedArchivePathsByTaskId.delete(event.taskId)
+  applyWorkspace(event.workspace)
+  subscribers.forEach((handler) => handler(event, submittedPaths))
 }
 
 /** Register a workspace-event subscriber. Returns an unsubscribe. */
@@ -70,18 +97,17 @@ export function listenWorkspaceEvent(
  * Connect the real Tauri event source into the bus, once. Called by redesign-initializers. In the
  * browser prototype there is no source — the mock emitter feeds `dispatchWorkspaceEvent` directly.
  */
-export async function initWorkspaceEventBus(): Promise<void> {
-  if (realSourceConnected) return
-  realSourceConnected = true
-  if (!isTauri()) return
-  try {
-    await events.workspaceEvent.listen((event) =>
+export function ensureWorkspaceEventBus(): Promise<boolean> {
+  if (!isTauri()) return Promise.resolve(true)
+  return connectWorkspaceEvents(() =>
+    events.workspaceEvent.listen((event) =>
       dispatchWorkspaceEvent(event.payload),
-    )
-  } catch (error) {
-    // MOCK-FALLBACK: event source unavailable — the mock emitter still drives the bus.
-    console.warn('[redesign] workspace event source unavailable', error)
-  }
+    ),
+  )
+}
+
+export function initWorkspaceEventBus(): Promise<boolean> {
+  return ensureWorkspaceEventBus()
 }
 
 function surfaceError(error: SError): void {
@@ -89,9 +115,14 @@ function surfaceError(error: SError): void {
   console.error('[redesign] command error', error)
 }
 
+function surfaceTransportError(label: string, error: unknown): void {
+  toast.error(commonText.backendUnavailable())
+  console.error(`[redesign] ${label} transport failure`, error)
+}
+
 /** The workspace the UI currently shows — what a rejected command resolves with, unchanged. */
 function currentWorkspace(): LibraryWorkspace {
-  return getDefaultStore().get(libraryWorkspaceAtom) ?? getMockWorkspace()
+  return getDefaultStore().get(libraryWorkspaceAtom) ?? emptyWorkspace()
 }
 
 /** Apply a workspace from the backend to the atom (and mirror settings, which ride it — T1). */
@@ -102,31 +133,42 @@ function applyWorkspace(workspace: LibraryWorkspace): LibraryWorkspace {
 }
 
 /**
- * The PLAIN command shape (§10): try the real call; a domain rejection is toasted and leaves the
- * workspace as-is; a transport failure falls through to the mock mutation.
+ * The PLAIN command shape (§10): Tauri failures leave the current workspace as-is. Only the
+ * browser prototype clones and mutates its fixture.
  */
+export type CommandOutcome<T> =
+  { status: 'success'; workspace: T } | { status: 'failure'; workspace: T }
+
 async function plainCommand(
   label: string,
-  real: () => Promise<Result<LibraryWorkspace, SError>>,
+  real: () => Promise<CommandResult<LibraryWorkspace, SError>>,
   mock: (workspace: LibraryWorkspace) => void,
-): Promise<LibraryWorkspace> {
-  try {
-    if (isTauri()) {
-      const result = await real()
-      if (result.status === 'ok') return applyWorkspace(result.data)
-      surfaceError(result.error)
-      return currentWorkspace()
-    }
-  } catch (error) {
-    // MOCK-FALLBACK: backend unavailable — apply the change to the fixture instead.
-    console.warn(`[redesign] ${label} failed, using mock`, error)
-  }
-  // MOCK-FALLBACK: no backend present (browser prototype).
-  const workspace = structuredClone(getMockWorkspace())
-  mock(workspace)
-  setMockWorkspace(workspace)
-  setWorkspace(workspace)
-  return workspace
+): Promise<CommandOutcome<LibraryWorkspace>> {
+  let failed = false
+  const workspace = await runPlainCommand({
+    isTauri: isTauri(),
+    invoke: real,
+    mock: () => {
+      const workspace = structuredClone(getMockWorkspace())
+      mock(workspace)
+      setMockWorkspace(workspace)
+      applyWorkspace(workspace)
+      return workspace
+    },
+    apply: applyWorkspace,
+    onDomainError: (error) => {
+      failed = true
+      surfaceError(error)
+    },
+    onTransportError: (error) => {
+      failed = true
+      surfaceTransportError(label, error)
+    },
+    current: currentWorkspace,
+  })
+
+  if (failed) return { status: 'failure', workspace }
+  return { status: 'success', workspace }
 }
 
 /**
@@ -138,26 +180,44 @@ async function plainCommand(
 async function fireAndTrack(
   label: string,
   libraryId: LibraryId,
-  real: (taskId: string) => Promise<Result<OperationAccepted, SError>>,
+  real: (taskId: string) => Promise<CommandResult<OperationAccepted, SError>>,
   mockComplete: (taskId: string) => void,
+  onTaskRegistered?: (taskId: string) => void,
 ): Promise<OperationAccepted> {
-  const taskId = crypto.randomUUID()
-  addPendingTask({ taskId, libraryId })
-  try {
-    if (isTauri()) {
-      const result = await real(taskId)
-      if (result.status === 'ok') return result.data
+  const tauri = isTauri()
+  return runTrackedCommand({
+    isTauri: tauri,
+    ensureReady: ensureWorkspaceEventBus,
+    onNotReady: () => toast.error(libraryText.taskUpdatesUnavailable()),
+    invoke: real,
+    registerPending: () => {
+      const taskId = crypto.randomUUID()
+      addPendingTask({ taskId, libraryId })
+      onTaskRegistered?.(taskId)
+      return taskId
+    },
+    canStart: () => !isLibraryTaskPending(libraryId),
+    onBusy: () => toast.error(libraryText.libraryBusy()),
+    clearPending: (taskId) => {
       removePendingTask(taskId)
-      surfaceError(result.error)
-      return { accepted: false }
-    }
-  } catch (error) {
-    // MOCK-FALLBACK: backend unavailable — simulate the accept + completion locally.
-    console.warn(`[redesign] ${label} failed, using mock`, error)
-  }
-  // MOCK-FALLBACK: no backend present — accept now, emit the completion after a short delay.
-  setTimeout(() => mockComplete(taskId), 700)
-  return { accepted: true }
+      submittedArchivePathsByTaskId.delete(taskId)
+    },
+    mockComplete,
+    schedule: (callback) => setTimeout(callback, 700),
+    onDomainError: surfaceError,
+    onTransportError: (error) => {
+      console.warn(
+        `[redesign] ${label} transport failed; outcome may be unknown`,
+        error,
+      )
+      toast.error(libraryText.taskOutcomeUnknown(), {
+        action: {
+          label: commonText.refresh(),
+          onClick: () => void loadLibraryWorkspace(),
+        },
+      })
+    },
+  })
 }
 
 function findSummary(
@@ -172,19 +232,31 @@ function findSummary(
 
 // --- Workspace load ---
 
-export async function loadLibraryWorkspace(): Promise<LibraryWorkspace> {
-  try {
-    if (isTauri()) {
-      const result = await commands.getLibraryWorkspace()
-      if (result.status === 'ok') return applyWorkspace(result.data)
-      surfaceError(result.error)
-    }
-  } catch (error) {
-    // MOCK-FALLBACK: backend unavailable — load the fixture instead of crashing.
-    console.warn('[redesign] getLibraryWorkspace failed, using mock', error)
+export async function loadLibraryWorkspace(): Promise<LibraryWorkspace | null> {
+  setWorkspaceStatus('loading')
+  let failed = false
+  const workspace = await runPlainCommand({
+    isTauri: isTauri(),
+    invoke: () => commands.getLibraryWorkspace(),
+    mock: () => applyWorkspace(getMockWorkspace()),
+    apply: applyWorkspace,
+    onDomainError: (error) => {
+      failed = true
+      surfaceError(error)
+    },
+    onTransportError: (error) => {
+      failed = true
+      surfaceTransportError('getLibraryWorkspace', error)
+    },
+    current: currentWorkspace,
+  })
+
+  if (failed) {
+    setWorkspaceStatus('error')
+    return null
   }
-  // MOCK-FALLBACK: no backend present (browser prototype).
-  return applyWorkspace(getMockWorkspace())
+  setWorkspaceStatus('ready')
+  return workspace
 }
 
 // --- Library CRUD (PLAIN) ---
@@ -193,7 +265,7 @@ export async function createLibrary(input: {
   gameRoot: string
   libraryRoot?: string
   name?: string
-}): Promise<LibraryWorkspace> {
+}): Promise<CommandOutcome<LibraryWorkspace>> {
   return plainCommand(
     'createLibrary',
     () =>
@@ -229,7 +301,7 @@ export async function createLibrary(input: {
 
 export async function activateLibrary(
   libraryId: LibraryId,
-): Promise<LibraryWorkspace> {
+): Promise<CommandOutcome<LibraryWorkspace>> {
   return plainCommand(
     'activateLibrary',
     () => commands.activateLibrary({ libraryId }),
@@ -243,7 +315,7 @@ export async function activateLibrary(
 export async function renameLibrary(input: {
   libraryId: LibraryId
   name: string
-}): Promise<LibraryWorkspace> {
+}): Promise<CommandOutcome<LibraryWorkspace>> {
   return plainCommand(
     'renameLibrary',
     () => commands.renameLibrary(input),
@@ -260,7 +332,7 @@ export async function renameLibrary(input: {
 export async function deleteLibrary(input: {
   libraryId: LibraryId
   deleteFiles: boolean
-}): Promise<LibraryWorkspace> {
+}): Promise<CommandOutcome<LibraryWorkspace>> {
   return plainCommand(
     'deleteLibrary',
     () => commands.deleteLibrary(input),
@@ -285,8 +357,8 @@ export async function deleteLibrary(input: {
 export async function bulkUpdateMods(input: {
   libraryId: LibraryId
   modIds: ModId[]
-  action: 'enable' | 'disable' | 'delete'
-}): Promise<LibraryWorkspace> {
+  action: BulkModAction
+}): Promise<CommandOutcome<LibraryWorkspace>> {
   return plainCommand(
     'bulkUpdateMods',
     () => commands.bulkUpdateMods(input),
@@ -317,7 +389,7 @@ export async function toggleModStatus(input: {
   libraryId: LibraryId
   modId: ModId
   enabled: boolean
-}): Promise<LibraryWorkspace> {
+}): Promise<CommandOutcome<LibraryWorkspace>> {
   return bulkUpdateMods({
     libraryId: input.libraryId,
     modIds: [input.modId],
@@ -391,7 +463,12 @@ export async function installModArchives(input: {
     (taskId) => {
       const workspace = structuredClone(getMockWorkspace())
       const mods = (workspace.modsByLibraryId[libraryId] ??= [])
-      for (const path of paths) {
+      const fixture = browserInstallFixture()
+      const failedPath = fixture ? paths.at(-1) : undefined
+      const successfulPaths = failedPath
+        ? paths.filter((path) => path !== failedPath)
+        : paths
+      for (const path of successfulPaths) {
         const fileName = path.split(/[\\/]/).pop() ?? path
         mods.push({
           id: crypto.randomUUID(),
@@ -405,15 +482,66 @@ export async function installModArchives(input: {
         })
       }
       const library = findSummary(workspace, libraryId)
-      if (library) library.deployStale = true
+      if (library && successfulPaths.length > 0) library.deployStale = true
+      if (fixture === 'install-failure-inactive') {
+        const otherLibrary = workspace.libraries.find(
+          (entry) => isLibrarySummary(entry) && entry.id !== libraryId,
+        )
+        if (otherLibrary && isLibrarySummary(otherLibrary)) {
+          workspace.activeLibraryId = otherLibrary.id
+        }
+      }
       setMockWorkspace(workspace)
       dispatchWorkspaceEvent({
         type: 'mod_install_completed',
         taskId,
         libraryId,
-        failures: [],
+        failures: failedPath
+          ? [
+              {
+                archivePath: failedPath,
+                error: {
+                  code: 'ParseError',
+                  data: 'Browser fixture simulated an archive parse failure.',
+                },
+              },
+            ]
+          : [],
         workspace,
       })
     },
+    (taskId) => submittedArchivePathsByTaskId.set(taskId, [...paths]),
   )
+}
+
+export function retryFailedArchives(
+  outcome: InstallTaskOutcome,
+): Promise<OperationAccepted> {
+  const store = getDefaultStore()
+  if (
+    !canRetryFailedArchives(
+      outcome,
+      store.get(activeLibraryIdAtom),
+      store.get(libraryBusyAtom),
+    )
+  ) {
+    return Promise.resolve({ accepted: false })
+  }
+
+  const paths = [
+    ...new Set(outcome.failedPaths.filter((path) => path.length > 0)),
+  ]
+  // Keep the failed result visible until a new completion replaces it: a listener/busy/domain
+  // rejection means no retry started, and the user still needs the failed paths.
+  return installModArchives({ libraryId: outcome.libraryId, paths })
+}
+
+function browserInstallFixture():
+  'install-failure' | 'install-failure-inactive' | null {
+  if (!import.meta.env.DEV) return null
+  const fixture = new URLSearchParams(window.location.search).get('fixture')
+  if (fixture === 'install-failure' || fixture === 'install-failure-inactive') {
+    return fixture
+  }
+  return null
 }

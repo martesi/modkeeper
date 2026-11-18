@@ -17,7 +17,20 @@ export const commonText = {
       id: 'common.status.somethingWentWrong',
       message: 'Something went wrong',
     }),
+  backendUnavailable: () =>
+    t({
+      id: 'common.status.backendUnavailable',
+      message: 'The app could not communicate with its backend.',
+    }),
   reload: () => t({ id: 'common.action.reload', message: 'Reload' }),
+  retry: () => t({ id: 'common.action.retry', message: 'Retry' }),
+  refresh: () =>
+    t({ id: 'common.action.refreshWorkspace', message: 'Refresh workspace' }),
+  fileOpenerFailed: () =>
+    t({
+      id: 'common.error.fileOpenerFailed',
+      message: 'Could not open this location.',
+    }),
   cancel: () => t({ id: 'common.action.cancel', message: 'Cancel' }),
   close: () => t({ id: 'common.action.close', message: 'Close' }),
 }

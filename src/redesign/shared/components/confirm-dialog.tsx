@@ -39,12 +39,10 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mk-glass-strong w-[min(28rem,calc(100vw-2rem))] rounded-[2rem] border-border bg-popover">
+      <DialogContent className="w-[min(28rem,calc(100vw-2rem))] rounded-lg bg-popover">
         <DialogHeader>
           <DialogTitle className="font-heading">{title}</DialogTitle>
-          {description && (
-            <DialogDescription>{description}</DialogDescription>
-          )}
+          {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         {children}
         <DialogFooter>

@@ -11,9 +11,7 @@ import { libraryText } from '../i18n/library-text'
 import type { ModSummary } from '../data/redesign-types'
 
 /**
- * Mod card (reference Modkeeper.dc.html `mod.cardStyle`): selection checkbox, tinted initial
- * tile, truncated title, enable/disable switch. Enabled cards get a primary-tinted border;
- * disabled ones fade. Stable dimensions in every state.
+ * Mod card: selection checkbox, type tile, truncated title, and enable/disable switch.
  *
  * The toggle is the PLAIN repository shape with LOCAL per-click pending — set on click, cleared
  * when the promise settles — so it gives instant feedback even queued behind a heavy op. The card
@@ -49,19 +47,20 @@ export function ModTitleCard({ mod }: { mod: ModSummary }) {
 
   return (
     <FidelityPanel
-      className={cn(
-        'flex items-center gap-3 px-3 py-3 transition-[opacity,border-color]',
-        mod.isEnabled ? 'border-primary/20' : 'opacity-60',
-      )}
+      radius="card"
+      className="flex h-14 items-center gap-2 px-2 transition-colors"
     >
       <FidelityCheckbox
         checked={selected}
         onCheckedChange={handleSelect}
         aria-label={libraryText.selectMod(mod.name)}
       />
-      <ModInitialIcon name={mod.name} type={mod.type} />
+      <ModInitialIcon name={mod.name} type={mod.type} enabled={mod.isEnabled} />
       <span
-        className="min-w-0 flex-1 truncate text-sm font-bold"
+        className={cn(
+          'min-w-0 flex-1 truncate text-[13px] font-semibold',
+          mod.isEnabled ? 'text-foreground' : 'text-muted-foreground',
+        )}
         title={mod.name}
       >
         {mod.name}

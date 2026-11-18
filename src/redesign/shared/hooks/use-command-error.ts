@@ -52,6 +52,13 @@ export function resolveCommandError(error: SError): string {
   }
 }
 
+export function resolveCommandErrorSummary(error: SError): string {
+  const message = resolveCommandError(error)
+  const maximumLength = 180
+  if (message.length <= maximumLength) return message
+  return `${message.slice(0, maximumLength - 1).trimEnd()}…`
+}
+
 /**
  * Component-side convenience: toast the translated message, log `code`/`data` as secondary context
  * (the English detail trail lives in the backend log, §13).

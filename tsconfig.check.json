@@ -1,0 +1,18 @@
+{
+  // Read-only typecheck of the active app. Deliberately NOT a composite project: composite
+  // projects must list every imported file in `files`/`include`, which makes every new shared
+  // import a tsconfig edit. This config starts from the active roots and lets TypeScript follow
+  // their imports, so it checks exactly what the running app can reach without pulling in the
+  // retired legacy tree.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    // Repeat runs reuse this build info. It is not `composite` (which would force every imported
+    // file into `files`), just incremental: a stale entry is still invalidated by mtime/hash.
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.check.tsbuildinfo"
+  },
+  "files": [],
+  "include": ["src/main.tsx", "src/redesign", "src/routes", "src/gen", "e2e"]
+}

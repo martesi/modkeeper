@@ -25,7 +25,7 @@ let id = 0
 const pending = new Map<number, (result: unknown) => void>()
 
 function send(method: string, params: Record<string, unknown> = {}) {
-  return new Promise<Record<string, unknown> | undefined>((resolve) => {
+  return new Promise<unknown>((resolve) => {
     const msgId = ++id
     pending.set(msgId, resolve)
     ws.send(JSON.stringify({ id: msgId, method, params }))
@@ -65,8 +65,7 @@ await send('Page.enable')
 await new Promise((resolve) => setTimeout(resolve, 5000))
 
 const shot = (await send('Page.captureScreenshot', { format: 'png' })) as
-  | { data?: string }
-  | undefined
+  { data?: string } | undefined
 if (shot?.data) {
   await Bun.write('e2e/screenshot.png', Buffer.from(shot.data, 'base64'))
   console.log('screenshot saved to e2e/screenshot.png')

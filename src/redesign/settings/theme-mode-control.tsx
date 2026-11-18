@@ -3,8 +3,7 @@ import type { ThemeMode } from '@gen/bindings'
 import { settingsText } from '../i18n/settings-text'
 
 /**
- * Segmented System/Light/Dark control (reference Modkeeper.dc.html): uppercase segments in a soft
- * track; the active one is a white pill in BOTH themes (reference `themeOptions` style). Stable
+ * Segmented System/Light/Dark control on a neutral Fluent track. Stable
  * dimensions — the selected state changes color only, never size.
  */
 export function ThemeModeControl({
@@ -24,7 +23,7 @@ export function ThemeModeControl({
     <div
       role="radiogroup"
       aria-label={settingsText.appearance()}
-      className="inline-flex gap-0.5 rounded-[0.875rem] border border-border bg-secondary p-1"
+      className="inline-flex h-8 gap-0.5 rounded-md border border-border bg-secondary p-0.5"
     >
       {options.map((option) => (
         <button
@@ -34,11 +33,10 @@ export function ThemeModeControl({
           aria-checked={value === option.mode}
           onClick={() => onChange(option.mode)}
           className={cn(
-            'rounded-[0.625rem] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.05em]',
+            'h-7 rounded-sm border border-transparent px-3 text-xs font-semibold',
             'outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50',
             value === option.mode
-              ? // The reference pill is white regardless of theme (a deliberate literal).
-                'bg-white text-neutral-900 shadow-sm'
+              ? 'border-border bg-card text-foreground'
               : 'text-muted-foreground hover:bg-accent',
           )}
         >

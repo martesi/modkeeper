@@ -1,8 +1,6 @@
 /*
- * Fidelity utility classes. The design TOKENS live in src/assets/style.css (fix_plan_0.md §3:
- * one canonical shadcn token set — keeping palette values here would race style.css on CSS
- * import order). Only true extensions remain: backdrop-filter glass, the page gradient for
- * non-Tauri environments, and the thin scrollbar.
+ * Fluent extensions to the canonical tokens in src/assets/style.css: the neutral page fallback,
+ * flyout/dialog blur, and the thin scrollbar.
  */
 
 /*
@@ -12,29 +10,29 @@
 .mk-page-gradient {
   background: radial-gradient(
     ellipse at top left,
-    #fdf2f6 0%,
-    #f3f4f8 45%,
-    #eef0f5 100%
+    #e7ebf2 0%,
+    #f3f3f3 45%,
+    #f3f3f3 100%
   );
 }
 .dark .mk-page-gradient {
   background: radial-gradient(
     ellipse at top left,
-    #241621 0%,
-    #16161c 45%,
-    #101014 100%
+    #2a2c33 0%,
+    #202020 45%,
+    #202020 100%
   );
 }
 
-/* Glass surfaces (true extensions — backdrop-filter has no shadcn token) */
+/* Applied only to dialogs and flyouts, never to ordinary panels or navigation. */
 .mk-glass-standard {
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
 }
 
 .mk-glass-strong {
-  backdrop-filter: blur(40px) saturate(160%);
-  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
 }
 
 /* Thin scrollbar on the app scroll container, keyed to the theme tokens */
@@ -51,7 +49,7 @@
 }
 .mk-scrollbar::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 9999px;
+  border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }

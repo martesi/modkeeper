@@ -15,16 +15,20 @@ const TINT_BY_TYPE: Record<ModType, string> = {
 export function ModInitialIcon({
   name,
   type,
+  enabled = true,
 }: {
   name: string
   type: ModType
+  enabled?: boolean
 }) {
-  const tint = TINT_BY_TYPE[type]
+  const tint = enabled ? TINT_BY_TYPE[type] : 'var(--muted-foreground)'
   return (
     <span
-      className="inline-flex size-11 shrink-0 items-center justify-center rounded-[0.875rem] font-heading text-base font-extrabold"
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm font-heading text-[13px] font-semibold"
       style={{
-        backgroundColor: `color-mix(in srgb, ${tint} 13%, transparent)`,
+        backgroundColor: enabled
+          ? `color-mix(in srgb, ${tint} 13%, transparent)`
+          : 'var(--muted)',
         color: tint,
       }}
       aria-hidden

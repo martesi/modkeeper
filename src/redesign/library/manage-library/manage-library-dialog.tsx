@@ -2,15 +2,7 @@ import { useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
-import {
-  Copy,
-  FolderOpen,
-  Play,
-  Plus,
-  RefreshCw,
-  Settings2,
-  TriangleAlert,
-} from 'lucide-react'
+import { Copy, FolderOpen, Plus, RefreshCw, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -25,7 +17,6 @@ import { FidelityInput } from '../../shared/components/fidelity-input'
 import {
   activeLibraryIdAtom,
   libraryListAtom,
-  libraryWorkspaceAtom,
   pendingTasksAtom,
 } from '../../state/library-state'
 import {
@@ -35,26 +26,21 @@ import {
   rebuildLibraryCache,
   renameLibrary,
 } from '../../data/library-repository'
-import { launchTool } from '../../data/tools-repository'
 import { isLibrarySummary } from '../../data/redesign-types'
 import type {
   LibraryEntry,
   LibraryStub,
   LibrarySummary,
-  ToolSummary,
 } from '../../data/redesign-types'
 import { openGameRoot, openLibraryRoot } from '../../shared/utils/app-opener'
 import { libraryText } from '../../i18n/library-text'
-import { ToolIconGlyph } from '../tool-icon-glyph'
 import { DeleteLibraryConfirmDialog } from './delete-library-confirm-dialog'
-import { ConfigureToolDialog } from './configure-tool-dialog'
 
 /**
- * Manage Library dialog (reference Modkeeper.dc.html): strong-glass body, profile tabs across
+ * Manage Library dialog: profile tabs across
  * every registered entry (readable summaries AND path-only stubs, C13) plus a dashed plus tab
  * that picks a game folder and creates+selects. The body is the reference's two-column layout —
- * section labels left, controls right — covering identity, installation paths, and executable
- * tools. Rebuild Cache is fire-and-track and only valid for the ACTIVE library (§7e rejects
+ * section labels left, controls right — covering identity and installation paths. Rebuild Cache is fire-and-track and only valid for the ACTIVE library (§7e rejects
  * non-active libraryIds), so it is disabled elsewhere with a hint.
  */
 export function ManageLibraryDialog({
@@ -81,25 +67,27 @@ export function ManageLibraryDialog({
   async function handleAddLibrary() {
     const gameRoot = await pickGameRootFolder()
     if (!gameRoot) return
-    const workspace = await createLibrary({ gameRoot })
+    const outcome = await createLibrary({ gameRoot })
+    if (outcome.status !== 'success') return
     // create+select (§12.4): the created library becomes the active one.
-    if (workspace.activeLibraryId) setSelectedKey(workspace.activeLibraryId)
+    if (outcome.workspace.activeLibraryId)
+      setSelectedKey(outcome.workspace.activeLibraryId)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mk-glass-strong mk-scrollbar flex max-h-[88vh] w-[min(67.5rem,calc(100vw-2rem))] flex-col gap-0 overflow-y-auto rounded-[2rem] border-border bg-popover p-0 sm:max-w-none">
-        <DialogHeader className="px-9 pb-1 pt-8">
-          <DialogTitle className="font-heading text-[26px] font-extrabold">
+      <DialogContent className="mk-scrollbar flex max-h-[88vh] w-[min(67.5rem,calc(100vw-2rem))] flex-col gap-0 overflow-y-auto rounded-lg bg-popover p-0 sm:max-w-none">
+        <DialogHeader className="px-6 pb-1 pt-6">
+          <DialogTitle className="font-heading text-xl font-semibold">
             {libraryText.manageDialogTitle()}
           </DialogTitle>
-          <DialogDescription className="text-sm">
+          <DialogDescription className="text-[13px]">
             {libraryText.manageDialogDescription()}
           </DialogDescription>
         </DialogHeader>
 
         <div
-          className="flex flex-wrap items-center gap-2.5 px-9 pb-1 pt-5"
+          className="flex flex-wrap items-center gap-2 px-6 pb-1 pt-4"
           role="tablist"
         >
           {libraries.map((entry) => {
@@ -113,9 +101,9 @@ export function ManageLibraryDialog({
                 aria-selected={isSelected}
                 onClick={() => setSelectedKey(key)}
                 className={cn(
-                  'h-11 max-w-56 truncate rounded-2xl px-4.5 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'h-8 max-w-56 truncate rounded-md px-3 text-[13px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50',
                   isSelected
-                    ? 'bg-primary font-bold text-primary-foreground'
+                    ? 'bg-primary font-semibold text-primary-foreground'
                     : 'border border-border bg-secondary font-semibold text-foreground hover:bg-accent',
                 )}
               >
@@ -131,8 +119,8 @@ export function ManageLibraryDialog({
             aria-label={libraryText.addLibraryTab()}
             title={libraryText.addLibraryTab()}
             className={cn(
-              'inline-flex size-11 items-center justify-center rounded-2xl',
-              'border-2 border-dashed border-border text-muted-foreground outline-none transition-colors',
+              'inline-flex size-8 items-center justify-center rounded-md',
+              'border border-dashed border-border text-muted-foreground outline-none transition-colors',
               'hover:border-primary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50',
             )}
           >
@@ -153,20 +141,14 @@ export function ManageLibraryDialog({
 function LibraryDetails({ library }: { library: LibrarySummary }) {
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const pendingTasks = useAtomValue(pendingTasksAtom)
-  const workspace = useAtomValue(libraryWorkspaceAtom)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [activating, setActivating] = useState(false)
   const [nameDraft, setNameDraft] = useState(library.name)
   const [renaming, setRenaming] = useState(false)
-  const [configureTool, setConfigureTool] = useState<{
-    tool: ToolSummary | null
-  } | null>(null)
 
-  const tools = workspace?.toolsByLibraryId[library.id] ?? []
   const isActive = library.id === activeLibraryId
   const busy = pendingTasks.some((task) => task.libraryId === library.id)
-  const nameDirty =
-    nameDraft.trim() !== library.name && nameDraft.trim() !== ''
+  const nameDirty = nameDraft.trim() !== library.name && nameDraft.trim() !== ''
 
   async function handleActivate() {
     setActivating(true)
@@ -188,7 +170,7 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
 
   return (
     <>
-      <div className="grid gap-7 px-9 py-7 md:grid-cols-[16.25rem_1fr]">
+      <div className="grid gap-5 px-6 py-5 md:grid-cols-[16.25rem_1fr]">
         <div>
           <SectionLabel
             title={libraryText.identitySection()}
@@ -202,22 +184,10 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
             title={libraryText.pathsSection()}
             description={libraryText.pathsDescription()}
           />
-          <SectionLabel
-            title={libraryText.toolsSection()}
-            description={libraryText.toolsDescription()}
-            last
-          />
-          <button
-            type="button"
-            onClick={() => setConfigureTool({ tool: null })}
-            className="rounded-sm text-[13px] font-bold text-primary outline-none transition-opacity hover:opacity-80 focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            {libraryText.registerNewTool()}
-          </button>
         </div>
 
         <div className="min-w-0">
-          <div className="mb-5 flex gap-2.5">
+          <div className="mb-4 flex gap-2">
             <FidelityInput
               value={nameDraft}
               onChange={(event) => setNameDraft(event.target.value)}
@@ -243,25 +213,14 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
             path={library.libraryRoot}
             onOpen={() => void openLibraryRoot(library)}
           />
-
-          <div className="mt-5 flex flex-col gap-3">
-            {tools.map((tool) => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                onConfigure={() => setConfigureTool({ tool })}
-              />
-            ))}
-          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-border px-9 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
         <div className="flex items-center gap-2">
           <FidelityButton
             variant="ghost"
-            size="sm"
-            className="text-[13px] font-bold text-muted-foreground"
+            className="text-[13px] font-semibold text-muted-foreground"
             disabled={!isActive}
             busy={busy}
             title={isActive ? undefined : libraryText.rebuildNeedsActive()}
@@ -272,16 +231,14 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
           </FidelityButton>
           <FidelityButton
             variant="ghost"
-            size="sm"
-            className="text-[13px] font-bold text-destructive hover:text-destructive"
+            className="text-[13px] font-semibold text-destructive hover:text-destructive"
             onClick={() => setConfirmDelete(true)}
           >
             {libraryText.deleteLibrary()}
           </FidelityButton>
         </div>
         <FidelityButton
-          size="lg"
-          className="rounded-2xl px-7 text-[13px] font-extrabold uppercase tracking-[0.05em]"
+          className="px-4"
           disabled={isActive}
           busy={activating}
           onClick={() => void handleActivate()}
@@ -296,14 +253,6 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
         onOpenChange={setConfirmDelete}
         onDeleted={() => {}}
       />
-      <ConfigureToolDialog
-        libraryId={library.id}
-        tool={configureTool?.tool ?? null}
-        open={configureTool !== null}
-        onOpenChange={(next) => {
-          if (!next) setConfigureTool(null)
-        }}
-      />
     </>
   )
 }
@@ -311,18 +260,16 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
 function SectionLabel({
   title,
   description,
-  last = false,
 }: {
   title: string
   description: string
-  last?: boolean
 }) {
   return (
-    <div className={last ? 'mb-2.5' : 'mb-7'}>
-      <h3 className="font-heading mb-1.5 text-[15px] font-bold text-foreground">
+    <div className="mb-7">
+      <h3 className="font-heading mb-1 text-[13px] font-semibold text-foreground">
         {title}
       </h3>
-      <p className="text-[13px] text-muted-foreground">{description}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   )
 }
@@ -342,12 +289,12 @@ function PathRow({
   }
 
   return (
-    <div className="mb-3 flex items-center gap-3.5 rounded-2xl border border-border bg-secondary px-4.5 py-3.5">
-      <span className="shrink-0 text-sm font-bold uppercase tracking-[0.02em] text-foreground">
+    <div className="mb-2 flex min-h-9 items-center gap-2 rounded-md border border-border bg-secondary px-3 py-1.5">
+      <span className="shrink-0 text-xs font-semibold text-foreground">
         {label}
       </span>
       <span
-        className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground"
+        className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
         title={path}
       >
         {path}
@@ -355,7 +302,7 @@ function PathRow({
       <FidelityIconButton
         size="sm"
         variant="secondary"
-        className="rounded-[0.625rem] bg-transparent"
+        className="bg-transparent"
         aria-label={libraryText.copyPath()}
         title={libraryText.copyPath()}
         onClick={() => void handleCopy()}
@@ -365,56 +312,12 @@ function PathRow({
       <FidelityIconButton
         size="sm"
         variant="secondary"
-        className="rounded-[0.625rem] bg-transparent"
+        className="bg-transparent"
         aria-label={libraryText.openInExplorer()}
         title={libraryText.openInExplorer()}
         onClick={onOpen}
       >
         <FolderOpen />
-      </FidelityIconButton>
-    </div>
-  )
-}
-
-function ToolRow({
-  tool,
-  onConfigure,
-}: {
-  tool: ToolSummary
-  onConfigure: () => void
-}) {
-  return (
-    <div className="flex items-center gap-3.5 rounded-2xl border border-border bg-secondary px-4.5 py-3.5">
-      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[0.625rem] bg-primary/15 text-primary [&_svg]:size-4">
-        <ToolIconGlyph tool={tool} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-foreground">
-          {tool.name}
-        </p>
-        <p className="truncate text-[11px] uppercase tracking-[0.05em] text-muted-foreground">
-          {tool.executablePath.split(/[\\/]/).pop()}
-        </p>
-      </div>
-      <FidelityIconButton
-        size="sm"
-        variant="secondary"
-        className="rounded-[0.625rem] bg-transparent"
-        aria-label={libraryText.launchToolLabel(tool.name)}
-        title={libraryText.launchToolLabel(tool.name)}
-        onClick={() => void launchTool(tool)}
-      >
-        <Play />
-      </FidelityIconButton>
-      <FidelityIconButton
-        size="sm"
-        variant="secondary"
-        className="rounded-[0.625rem] bg-transparent"
-        aria-label={libraryText.configureToolLabel(tool.name)}
-        title={libraryText.configureToolLabel(tool.name)}
-        onClick={onConfigure}
-      >
-        <Settings2 />
       </FidelityIconButton>
     </div>
   )
@@ -437,16 +340,19 @@ function StubDetails({ stub }: { stub: LibraryStub }) {
 
   return (
     <>
-      <div className="px-9 py-7">
-        <div className="flex items-center gap-3.5 rounded-2xl border border-destructive/25 bg-destructive/10 px-4.5 py-4">
-          <span className="inline-flex size-8.5 shrink-0 items-center justify-center rounded-[0.625rem] bg-destructive/15 text-destructive">
+      <div className="px-6 py-5">
+        <div className="flex items-center gap-3 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-3">
+          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm bg-destructive/15 text-destructive">
             <TriangleAlert className="size-4" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-foreground">
+            <p className="text-[13px] font-semibold text-foreground">
               {libraryText.pathUnreachable()}
             </p>
-            <p className="truncate text-[13px] text-muted-foreground" title={stub.path}>
+            <p
+              className="truncate text-[13px] text-muted-foreground"
+              title={stub.path}
+            >
               {stub.path}
             </p>
           </div>
@@ -459,7 +365,7 @@ function StubDetails({ stub }: { stub: LibraryStub }) {
         <FidelityButton
           variant="ghost"
           size="sm"
-          className="text-[13px] font-bold text-destructive hover:text-destructive"
+          className="text-[13px] font-semibold text-destructive hover:text-destructive"
           busy={pending}
           onClick={() => void handleRemove()}
         >

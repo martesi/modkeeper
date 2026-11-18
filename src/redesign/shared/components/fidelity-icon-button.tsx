@@ -5,9 +5,9 @@ import { cn } from '@/lib/utils'
 const iconButtonVariants = cva(
   cn(
     'inline-flex shrink-0 items-center justify-center',
-    'rounded-lg transition-colors',
+    'rounded-sm transition-colors',
     'outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-    'disabled:pointer-events-none disabled:opacity-50',
+    'disabled:pointer-events-none disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',
     '[&_svg]:shrink-0 [&_svg]:pointer-events-none',
   ),
   {
@@ -20,12 +20,13 @@ const iconButtonVariants = cva(
         soft: 'bg-primary/15 text-primary hover:bg-primary/25',
         ghost:
           'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground',
-        destructive: 'bg-destructive text-white hover:bg-destructive/90',
+        destructive:
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90',
       },
       size: {
-        sm: 'size-8 [&_svg]:size-4',
-        md: 'size-10 [&_svg]:size-5',
-        lg: 'size-12 [&_svg]:size-6',
+        sm: 'size-7 [&_svg]:size-4',
+        md: 'size-8 [&_svg]:size-[18px]',
+        lg: 'size-9 [&_svg]:size-[18px]',
       },
     },
     defaultVariants: {

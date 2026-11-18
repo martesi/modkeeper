@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { DEFAULT_ACCENT } from '../data/settings-defaults'
 import { ACCENT_SWATCHES } from './accent-palette'
 import { settingsText } from '../i18n/settings-text'
 
@@ -19,6 +20,8 @@ export function AccentSwatches({
     <div className="flex flex-wrap items-center gap-3.5">
       {ACCENT_SWATCHES.map((swatch) => {
         const selected = value.toLowerCase() === swatch.value.toLowerCase()
+        const color =
+          swatch.value === DEFAULT_ACCENT ? 'var(--primary)' : swatch.value
         return (
           <button
             key={swatch.value}
@@ -28,7 +31,7 @@ export function AccentSwatches({
             title={swatch.name}
             onClick={() => onChange(swatch.value)}
             className={cn(
-              'size-8 rounded-full border-[3px] transition-[opacity,box-shadow]',
+              'size-7 rounded-full border-2 transition-[opacity,box-shadow]',
               'outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
               selected
                 ? 'border-white opacity-100 shadow-[0_0_0_2px_var(--swatch-color)]'
@@ -36,8 +39,8 @@ export function AccentSwatches({
             )}
             style={
               {
-                backgroundColor: swatch.value,
-                '--swatch-color': swatch.value,
+                backgroundColor: color,
+                '--swatch-color': color,
               } as React.CSSProperties
             }
           />

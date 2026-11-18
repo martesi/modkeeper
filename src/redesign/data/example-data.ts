@@ -6,6 +6,7 @@
  * by a sync reflect each other, exactly as the real backend's returned workspace would.
  */
 import type { LibraryWorkspace, ModSummary } from './redesign-types'
+import { DEFAULT_ACCENT } from './settings-defaults'
 
 const now = () => new Date().toISOString()
 
@@ -54,6 +55,20 @@ function seedMods(): ModSummary[] {
 
 const SECOND_LIBRARY_ID = 'lib-test-bench'
 
+export function emptyWorkspace(): LibraryWorkspace {
+  return {
+    libraries: [],
+    modsByLibraryId: {},
+    toolsByLibraryId: {},
+    settings: {
+      theme: 'system',
+      accentColor: DEFAULT_ACCENT,
+      language: 'en-US',
+      enableModsOnInstall: true,
+    },
+  }
+}
+
 function seedWorkspace(): LibraryWorkspace {
   return {
     activeLibraryId: LIBRARY_ID,
@@ -86,7 +101,7 @@ function seedWorkspace(): LibraryWorkspace {
     toolsByLibraryId: { [LIBRARY_ID]: [], [SECOND_LIBRARY_ID]: [] },
     settings: {
       theme: 'system',
-      accentColor: '#e91e63',
+      accentColor: DEFAULT_ACCENT,
       language: 'en-US',
       enableModsOnInstall: true,
     },

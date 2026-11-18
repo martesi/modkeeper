@@ -33,7 +33,11 @@ export function DeleteLibraryConfirmDialog({
   async function handleConfirm() {
     setPending(true)
     try {
-      await deleteLibrary({ libraryId: library.id, deleteFiles })
+      const outcome = await deleteLibrary({
+        libraryId: library.id,
+        deleteFiles,
+      })
+      if (outcome.status !== 'success') return
       onOpenChange(false)
       onDeleted()
     } finally {
@@ -53,7 +57,7 @@ export function DeleteLibraryConfirmDialog({
       busy={pending}
       onConfirm={() => void handleConfirm()}
     >
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-2 text-[13px]">
         <FidelityCheckbox
           checked={deleteFiles}
           onCheckedChange={setDeleteFiles}

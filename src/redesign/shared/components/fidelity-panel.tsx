@@ -5,14 +5,15 @@ import { cn } from '@/lib/utils'
 const panelVariants = cva('text-foreground border', {
   variants: {
     variant: {
-      standard: 'mk-glass-standard bg-card border-border shadow-sm',
-      strong: 'mk-glass-strong bg-popover border-border shadow-xl',
+      standard: 'bg-card border-border',
+      strong: 'bg-popover border-border-strong',
       solid: 'bg-background border-border',
     },
     radius: {
-      panel: 'rounded-[1.25rem]',
-      dialog: 'rounded-[2rem]',
-      control: 'rounded-lg',
+      panel: 'rounded-lg',
+      dialog: 'rounded-lg',
+      card: 'rounded-md',
+      control: 'rounded-sm',
     },
   },
   defaultVariants: {

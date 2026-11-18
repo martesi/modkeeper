@@ -27,13 +27,13 @@ export function LanguageSelect({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         aria-label={settingsText.language()}
-        className="min-w-40 justify-between rounded-[0.875rem] border-border bg-secondary font-bold"
+        className="h-8 min-w-40 justify-between rounded-sm border-border bg-secondary px-2.5 text-[13px] font-semibold"
       >
         <SelectValue />
       </SelectTrigger>
       <SelectContent
         position="popper"
-        className="mk-glass-standard rounded-2xl border-border bg-popover"
+        className="rounded-lg border-border bg-popover"
       >
         {LOCALES.map((locale) => (
           <SelectItem key={locale.value} value={locale.value}>

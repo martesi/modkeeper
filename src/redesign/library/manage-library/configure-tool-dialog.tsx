@@ -39,9 +39,9 @@ export function ConfigureToolDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mk-glass-strong w-[min(48rem,calc(100vw-2rem))] rounded-[2rem] border-border bg-popover sm:max-w-none">
+      <DialogContent className="w-[min(48rem,calc(100vw-2rem))] rounded-lg bg-popover sm:max-w-none">
         <DialogHeader>
-          <DialogTitle className="font-heading text-2xl font-extrabold">
+          <DialogTitle className="font-heading text-xl font-semibold">
             {libraryText.configureToolTitle()}
           </DialogTitle>
           <DialogDescription>
@@ -122,7 +122,7 @@ function ConfigureToolForm({
 
         <div className="hidden md:block" />
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-[0.875rem] bg-primary/15 text-primary [&_svg]:size-5">
+          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/15 text-primary [&_svg]:size-4">
             <ToolIconGlyph tool={previewTool} />
           </span>
           <FidelityInput
@@ -134,7 +134,7 @@ function ConfigureToolForm({
         </div>
 
         <FieldLabel>{libraryText.executablePathLabel()}</FieldLabel>
-        <div className="flex gap-2.5">
+        <div className="flex gap-2">
           <FidelityInput
             value={draft.executablePath}
             onChange={set('executablePath')}
@@ -191,7 +191,9 @@ function ConfigureToolForm({
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <span className="pt-2.5 text-sm font-bold text-foreground">{children}</span>
+    <span className="pt-2 text-[13px] font-semibold text-foreground">
+      {children}
+    </span>
   )
 }
 

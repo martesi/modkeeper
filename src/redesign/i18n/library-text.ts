@@ -6,6 +6,97 @@ import { t } from '@lingui/core/macro'
 
 export const libraryText = {
   title: () => t({ id: 'library.header.title', message: 'Library' }),
+  workspaceLoading: () =>
+    t({ id: 'library.status.workspaceLoading', message: 'Loading workspace…' }),
+  workspaceLoadFailed: () =>
+    t({
+      id: 'library.status.workspaceLoadFailed',
+      message: 'Could not load the workspace.',
+    }),
+  taskUpdatesUnavailable: () =>
+    t({
+      id: 'library.status.taskUpdatesUnavailable',
+      message: 'Task updates are unavailable. The operation was not started.',
+    }),
+  libraryBusy: () =>
+    t({
+      id: 'library.status.libraryBusy',
+      message: 'Another operation is still running for this library.',
+    }),
+  taskOutcomeUnknown: () =>
+    t({
+      id: 'library.status.taskOutcomeUnknown',
+      message:
+        'The operation may still be running. Refresh the workspace before trying again.',
+    }),
+  taskResultLabel: () =>
+    t({ id: 'library.taskResult.label', message: 'Latest task result' }),
+  dismissTaskResult: () =>
+    t({ id: 'library.taskResult.dismiss', message: 'Dismiss task result' }),
+  installImported: (successCount: number, submittedCount: number) =>
+    t({
+      id: 'library.taskResult.installImported',
+      message: `Imported ${successCount} of ${submittedCount}`,
+    }),
+  installFailedCount: (count: number) =>
+    t({
+      id: 'library.taskResult.installFailedCount',
+      message: `${count} archive(s) failed`,
+    }),
+  installCompleted: () =>
+    t({
+      id: 'library.taskResult.installCompleted',
+      message: 'Import completed.',
+    }),
+  failedArchives: () =>
+    t({ id: 'library.taskResult.failedArchives', message: 'Failed archives' }),
+  moreFailedArchives: (count: number) =>
+    t({
+      id: 'library.taskResult.moreFailedArchives',
+      message: `And ${count} more failed archive(s)`,
+    }),
+  fullPaths: () =>
+    t({ id: 'library.taskResult.fullPaths', message: 'Full paths' }),
+  retryFailedArchives: () =>
+    t({ id: 'library.taskResult.retryFailed', message: 'Retry failed' }),
+  retryUnavailable: () =>
+    t({
+      id: 'library.taskResult.retryUnavailable',
+      message: 'Retry is available only for the active idle library.',
+    }),
+  unknownArchive: () =>
+    t({ id: 'library.taskResult.unknownArchive', message: 'Unknown archive' }),
+  syncSucceeded: () =>
+    t({ id: 'library.taskResult.syncSucceeded', message: 'Sync completed.' }),
+  syncFailed: () =>
+    t({
+      id: 'library.taskResult.syncFailed',
+      message: 'Sync completed with an operation error.',
+    }),
+  moreSyncErrors: (count: number) =>
+    t({
+      id: 'library.taskResult.moreSyncErrors',
+      message: `And ${count} more sync error(s)`,
+    }),
+  cacheRebuildFailed: () =>
+    t({
+      id: 'library.taskResult.cacheRebuildFailed',
+      message: 'Cache rebuild failed.',
+    }),
+  cacheStateReady: () =>
+    t({ id: 'library.taskResult.cacheReady', message: 'Cache state: Ready' }),
+  cacheStateDirty: () =>
+    t({ id: 'library.taskResult.cacheDirty', message: 'Cache state: Dirty' }),
+  cacheStateRebuilding: () =>
+    t({
+      id: 'library.taskResult.cacheRebuilding',
+      message: 'Cache state: Rebuilding',
+    }),
+  cacheDiagnostic: () =>
+    t({
+      id: 'library.taskResult.cacheDiagnostic',
+      message: 'Backend message',
+    }),
   subtitleEmpty: () =>
     t({
       id: 'library.header.subtitleEmpty',
@@ -32,12 +123,6 @@ export const libraryText = {
     t({ id: 'library.card.enableMod', message: `Enable ${name}` }),
   selectMod: (name: string) =>
     t({ id: 'library.card.selectMod', message: `Select ${name}` }),
-  taskItemsFailed: (count: number) =>
-    t({
-      id: 'library.status.taskItemsFailed',
-      message: `${count} item(s) failed`,
-    }),
-
   // Import surfaces
   addMod: () => t({ id: 'library.actions.addMod', message: 'Add mod' }),
   emptyActivateTitle: () =>
@@ -107,6 +192,18 @@ export const libraryText = {
     t({ id: 'library.toolbar.filterEnabled', message: 'Enabled only' }),
   filterDisabled: () =>
     t({ id: 'library.toolbar.filterDisabled', message: 'Disabled only' }),
+  typeFilterLabel: () =>
+    t({ id: 'library.toolbar.typeFilterLabel', message: 'Type' }),
+  typeFilterAll: () =>
+    t({ id: 'library.toolbar.typeFilterAll', message: 'All types' }),
+  typeFilterClient: () =>
+    t({ id: 'library.toolbar.typeFilterClient', message: 'Client' }),
+  typeFilterServer: () =>
+    t({ id: 'library.toolbar.typeFilterServer', message: 'Server' }),
+  typeFilterBoth: () =>
+    t({ id: 'library.toolbar.typeFilterBoth', message: 'Both' }),
+  typeFilterUnknown: () =>
+    t({ id: 'library.toolbar.typeFilterUnknown', message: 'Unknown' }),
   actions: (count: number) =>
     t({ id: 'library.toolbar.actions', message: `Actions · ${count}` }),
   noVisibleMods: () =>
@@ -114,6 +211,15 @@ export const libraryText = {
       id: 'library.grid.noVisibleMods',
       message: 'No mods match the current filter',
     }),
+  noSearchOrFiltersResults: () =>
+    t({
+      id: 'library.grid.noSearchOrFiltersResults',
+      message: 'No mods match your search or filters.',
+    }),
+  clearSearch: () =>
+    t({ id: 'library.grid.clearSearch', message: 'Clear search' }),
+  clearFilters: () =>
+    t({ id: 'library.grid.clearFilters', message: 'Clear filters' }),
 
   // Bulk actions
   enableSelected: () =>
@@ -141,7 +247,7 @@ export const libraryText = {
   manageDialogDescription: () =>
     t({
       id: 'library.manage.dialogDescription',
-      message: 'Configure paths and tools for your modding profiles.',
+      message: 'Configure paths for your modding libraries.',
     }),
   addLibraryTab: () =>
     t({ id: 'library.manage.addLibraryTab', message: 'Add library' }),

@@ -19,7 +19,7 @@ const FALLBACK_SETTINGS: AppSettings = {
 }
 
 /**
- * Settings screen (reference Modkeeper.dc.html settings view): page header, then ONE glass card
+ * Settings screen: page header, then one neutral panel
  * with divider-separated rows — App Theme, Accent Color, Interface Language. Every change saves
  * the FULL settings object (T1); the initializers' applier turns the replaced atom into visible
  * effect.
@@ -83,10 +83,10 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-[62.5rem] flex-col">
-      <h1 className="font-heading text-[26px] font-extrabold leading-tight text-foreground">
+      <h1 className="font-heading text-2xl font-semibold leading-tight text-foreground">
         {settingsText.title()}
       </h1>
-      <p className="mb-3 text-[13px] text-muted-foreground">
+      <p className="mb-3 text-xs text-muted-foreground">
         {settingsText.subtitle()}
       </p>
 

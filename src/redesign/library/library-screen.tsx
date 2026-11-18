@@ -1,16 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Plus, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { FidelityIconButton } from '../shared/components/fidelity-icon-button'
+import { FidelityButton } from '../shared/components/fidelity-button'
 import {
   activeLibraryAtom,
-  activeLibraryToolsAtom,
   libraryBusyAtom,
   modListAtom,
 } from '../state/library-state'
 import { syncMods } from '../data/library-repository'
-import { launchTool } from '../data/tools-repository'
 import { useArchiveFilePicker } from '../shared/hooks/use-archive-file-picker'
 import { libraryText } from '../i18n/library-text'
 import { LibraryActivateEmptyState } from './library-activate-empty-state'
@@ -18,29 +16,56 @@ import { LibraryDropEmptyState } from './library-drop-empty-state'
 import { ModGridToolbar } from './mod-grid-toolbar'
 import { ModGrid } from './mod-grid'
 import { ManageLibraryDialog } from './manage-library/manage-library-dialog'
-import { ToolIconGlyph } from './tool-icon-glyph'
-import type { ToolSummary } from '../data/redesign-types'
 
 /**
- * Library screen (reference Modkeeper.dc.html library view): clickable page header (opens Manage
- * Library) with the pill toolbar on the right — registered tools, sync, add mod — then the content
- * branch: activate empty state / drop zone / toolbar + grid.
+ * Library screen with named library actions and the active workspace content.
  */
 export function LibraryScreen() {
   const activeLibrary = useAtomValue(activeLibraryAtom)
   const mods = useAtomValue(modListAtom)
   const [manageOpen, setManageOpen] = useState(false)
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'f'
+      ) {
+        return
+      }
+      if (document.querySelector('[role="dialog"][data-state="open"]')) return
+
+      const searchInput = document.querySelector<HTMLInputElement>(
+        '[data-library-search]',
+      )
+      if (!searchInput) return
+
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        target !== searchInput &&
+        (target.isContentEditable ||
+          target.closest('input, textarea, select, [contenteditable="true"]'))
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      searchInput.focus()
+      searchInput.select()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-5">
-        <button
-          type="button"
-          onClick={() => setManageOpen(true)}
-          className="cursor-pointer rounded-lg text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          title={libraryText.manageLibraries()}
-        >
-          <h1 className="font-heading text-[26px] font-extrabold leading-tight text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-[26px] font-semibold leading-tight text-foreground">
             {libraryText.title()}
           </h1>
           <p className="text-[13px] text-muted-foreground">
@@ -48,9 +73,9 @@ export function LibraryScreen() {
               ? libraryText.subtitleModsInstalled(mods.length)
               : libraryText.subtitleEmpty()}
           </p>
-        </button>
+        </div>
 
-        {activeLibrary && <LibraryHeaderToolbar />}
+        <LibraryHeaderToolbar onManageLibraries={() => setManageOpen(true)} />
       </div>
 
       {activeLibrary ? (
@@ -74,74 +99,58 @@ export function LibraryScreen() {
 }
 
 /**
- * The reference's floating pill toolbar: one round button per registered tool, a divider, the
- * sync affordance (spins while the library is busy, primary-tinted while the deployment is
- * stale), and the primary add-mod button.
+ * Named library actions stay visible beside the page title; Manage remains available without an
+ * active library.
  *
  * Note: the reference labels the spinner "Rebuild cache"; the real operation the library needs
  * here is the deploy Sync (rebuild lives in the Manage Library footer).
  */
-function LibraryHeaderToolbar() {
+function LibraryHeaderToolbar({
+  onManageLibraries,
+}: {
+  onManageLibraries: () => void
+}) {
   const activeLibrary = useAtomValue(activeLibraryAtom)
-  const tools = useAtomValue(activeLibraryToolsAtom)
   const libraryBusy = useAtomValue(libraryBusyAtom)
   const pickAndInstall = useArchiveFilePicker()
 
-  if (!activeLibrary) return null
-
-  const syncTitle = libraryBusy
-    ? libraryText.syncing()
-    : activeLibrary.deployStale
-      ? libraryText.deployStale()
-      : libraryText.sync()
-
   return (
-    <div className="mk-glass-standard flex shrink-0 items-center gap-2 rounded-full border border-border bg-card py-2 pl-3 pr-2.5 shadow-lg">
-      {tools.map((tool) => (
-        <ToolLaunchButton key={tool.id} tool={tool} />
-      ))}
-      {tools.length > 0 && <span className="h-4 w-px bg-border" aria-hidden />}
-      <FidelityIconButton
-        size="sm"
-        className="rounded-full"
-        aria-label={syncTitle}
-        title={syncTitle}
-        disabled={libraryBusy}
-        onClick={() => void syncMods(activeLibrary.id)}
-      >
-        <RefreshCw
-          className={cn(
-            libraryBusy && 'animate-spin',
-            activeLibrary.deployStale && 'text-primary',
-          )}
-        />
-      </FidelityIconButton>
-      <FidelityIconButton
-        variant="primary"
-        size="sm"
-        className="rounded-full"
-        aria-label={libraryText.addMod()}
-        title={libraryText.addMod()}
-        disabled={libraryBusy}
-        onClick={() => void pickAndInstall()}
-      >
-        <Plus />
-      </FidelityIconButton>
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <FidelityButton variant="secondary" onClick={onManageLibraries}>
+        {libraryText.manageLibraries()}
+      </FidelityButton>
+      {activeLibrary && (
+        <>
+          <FidelityButton
+            variant="secondary"
+            busy={libraryBusy}
+            className={cn(
+              activeLibrary.deployStale &&
+                'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15',
+            )}
+            title={
+              activeLibrary.deployStale ? libraryText.deployStale() : undefined
+            }
+            onClick={() => void syncMods(activeLibrary.id)}
+          >
+            {!libraryBusy && (
+              <RefreshCw
+                className={activeLibrary.deployStale ? 'text-primary' : ''}
+                aria-hidden
+              />
+            )}
+            {libraryBusy ? libraryText.syncing() : libraryText.sync()}
+          </FidelityButton>
+          <FidelityButton
+            variant="primary"
+            disabled={libraryBusy}
+            onClick={() => void pickAndInstall()}
+          >
+            <Plus aria-hidden />
+            {libraryText.addMod()}
+          </FidelityButton>
+        </>
+      )}
     </div>
-  )
-}
-
-function ToolLaunchButton({ tool }: { tool: ToolSummary }) {
-  return (
-    <FidelityIconButton
-      variant="soft"
-      size="sm"
-      className="rounded-full"
-      aria-label={libraryText.launchToolLabel(tool.name)}
-      title={tool.name}
-      onClick={() => void launchTool(tool)}
-    >
-      <ToolIconGlyph tool={tool} />
-    </FidelityIconButton>
   )
 }

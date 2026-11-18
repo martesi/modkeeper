@@ -88,6 +88,17 @@ fn test_load_missing_file_yields_default() {
     let config = load_from(&path).expect("missing file is a normal first run");
     assert!(config.known_libraries.is_empty());
     assert!(config.app_state.active_library_id.is_none());
+    assert_eq!(config.settings.accent_color, "default");
+}
+
+#[test]
+fn test_missing_accent_field_defaults_to_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = Utf8PathBuf::from_path_buf(tmp.path().join("config.toml")).unwrap();
+    fs::write(&path, "[settings]\ntheme = \"system\"").unwrap();
+
+    let config = load_from(&path).expect("partial settings should use defaults");
+    assert_eq!(config.settings.accent_color, "default");
 }
 
 #[test]
@@ -131,6 +142,19 @@ fn test_save_round_trip() {
         .filter(|e| e.file_name().to_string_lossy().contains(".tmp-"))
         .collect();
     assert!(leftovers.is_empty(), "atomic_write left a temp file behind");
+}
+
+#[test]
+fn test_saved_pink_accent_round_trips_unchanged() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = Utf8PathBuf::from_path_buf(tmp.path().join("config.toml")).unwrap();
+    let mut config = AppConfig::default();
+    config.settings.accent_color = "#e91e63".to_string();
+
+    save_to(&path, &config).expect("save failed");
+
+    let loaded = load_from(&path).expect("load failed");
+    assert_eq!(loaded.settings.accent_color, "#e91e63");
 }
 
 #[test]

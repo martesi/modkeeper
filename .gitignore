@@ -32,3 +32,9 @@ storybook-static
 *.local*
 .direnv/
 .codegraph/
+
+# e2e artifacts
+/e2e/screenshot.png
+
+# Local-only docs and scratch files
+/.local/

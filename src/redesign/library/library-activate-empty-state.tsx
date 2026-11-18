@@ -13,16 +13,13 @@ export function LibraryActivateEmptyState({
 }) {
   return (
     <LibraryEmptyCard>
-      <p className="font-heading text-base font-bold text-muted-foreground">
+      <p className="font-heading text-[13px] font-semibold text-muted-foreground">
         {libraryText.emptyActivateTitle()}
       </p>
-      <p className="max-w-md text-xs text-muted-foreground">
+      <p className="max-w-md text-[13px] text-muted-foreground">
         {libraryText.emptyActivateBody()}
       </p>
-      <FidelityButton
-        className="mt-1.5 rounded-full text-xs font-extrabold uppercase tracking-[0.05em]"
-        onClick={onManageLibraries}
-      >
+      <FidelityButton className="mt-1.5" onClick={onManageLibraries}>
         {libraryText.manageLibraries()}
       </FidelityButton>
     </LibraryEmptyCard>

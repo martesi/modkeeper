@@ -24,7 +24,7 @@ export function FidelitySection({
     >
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h3 className="font-heading text-sm font-bold text-foreground">
+          <h3 className="font-heading text-[13px] font-semibold text-foreground">
             {title}
           </h3>
           {description && (

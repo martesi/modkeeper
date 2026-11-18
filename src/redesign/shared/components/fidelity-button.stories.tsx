@@ -32,7 +32,9 @@ export const WithIcon: Story = {
 }
 
 export const Disabled: Story = { args: { disabled: true } }
-export const Busy: Story = { args: { busy: true, children: 'Rebuilding cache' } }
+export const Busy: Story = {
+  args: { busy: true, children: 'Rebuilding cache' },
+}
 
 export const Sizes: Story = {
   render: (args) => (

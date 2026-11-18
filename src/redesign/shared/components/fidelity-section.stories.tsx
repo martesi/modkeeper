@@ -37,9 +37,7 @@ export const WithAction: Story = {
       </FidelityButton>
     ),
     children: (
-      <p className="text-sm text-muted-foreground">
-        Last rebuilt 2 hours ago.
-      </p>
+      <p className="text-sm text-muted-foreground">Last rebuilt 2 hours ago.</p>
     ),
   },
 }
@@ -48,9 +46,7 @@ export const TitleOnly: Story = {
   args: {
     title: 'Paths',
     children: (
-      <p className="text-sm text-muted-foreground">
-        game_root/.mod_keeper
-      </p>
+      <p className="text-sm text-muted-foreground">game_root/.mod_keeper</p>
     ),
   },
 }
