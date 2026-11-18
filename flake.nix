@@ -85,7 +85,8 @@
             ];
             shellHook = cargoCacheHook + ''
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=${mingw.stdenv.cc.targetPrefix}cc
-              export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L ${mingw.windows.pthreads}/lib"
+              export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-L ${mingw.windows.pthreads}/lib -C link-args=-lwinpthread"
+              export CFLAGS_x86_64_pc_windows_gnu="-I ${mingw.windows.pthreads}/include"
             '';
           };
         };
