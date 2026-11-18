@@ -17,9 +17,11 @@ use crate::core::registry::AppRegistry;
 use crate::models::workspace::WorkspaceEvent;
 use crate::store::AppConfigStore;
 use parking_lot::Mutex;
-use specta_typescript::Typescript;
 use std::sync::Arc;
 use tauri_specta::{Builder, collect_commands, collect_events};
+
+#[cfg(debug_assertions)]
+use specta_typescript::Typescript;
 
 /// Stage 1: Setup command handler with all registered commands
 fn setup_command_handler() -> Builder<tauri::Wry> {
@@ -44,10 +46,10 @@ fn setup_command_handler() -> Builder<tauri::Wry> {
 }
 
 /// Stage 2: Export TypeScript bindings (debug builds only)
-fn export_typescript_bindings(builder: &Builder<tauri::Wry>) {
+fn export_typescript_bindings(_builder: &Builder<tauri::Wry>) {
     #[cfg(debug_assertions)]
     {
-        builder
+        _builder
             .export(
                 // Recent tauri-specta emits inline results; keep the public helper
                 // type used by the repository and Result-unwrapping utilities.
@@ -84,6 +86,8 @@ fn register_plugins() -> tauri::Builder<tauri::Wry> {
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)
                 .targets([
+                    // Stdout can create a console for a Windows GUI executable launched from Explorer.
+                    #[cfg(any(debug_assertions, not(target_os = "windows")))]
                     Target::new(TargetKind::Stdout),
                     // File sink in the platform log dir (consolidated-spec.md §13);
                     // the English error detail trail lives here (§7g).
@@ -101,8 +105,10 @@ fn load_initial_library(
     config_handle: ConfigHandle,
     instance_handle: InstanceHandle,
     warning_handle: WarningHandle,
+    initial_library_load_complete:
+        tokio::sync::watch::Sender<Option<Result<(), String>>>,
 ) {
-    tauri::async_runtime::spawn_blocking(move || {
+    let loader = tauri::async_runtime::spawn_blocking(move || {
         let library_root = {
             let store = config_handle.lock();
             store
@@ -114,50 +120,70 @@ fn load_initial_library(
                 .map(|known| known.library_root.clone())
         };
 
-        let Some(library_root) = library_root else {
-            return;
-        };
-
-        match crate::core::library::Library::load(&library_root) {
-            Ok(library) => {
-                *instance_handle.lock() = Some(library);
-            }
-            Err(e) => {
-                tracing::error!("Failed to load library from {}: {}", library_root, e);
-                // Clear the active id on failure to prevent repeated failures;
-                // a save failure is logged and surfaced later, never fatal (C12).
-                let mut store = config_handle.lock();
-                store.config.app_state.active_library_id = None;
-                if let Err(save_err) = store.save() {
-                    tracing::error!("Failed to persist cleared active library: {save_err}");
-                    *warning_handle.lock() = Some(save_err.to_string());
+        if let Some(library_root) = library_root {
+            match crate::core::library::Library::load(&library_root) {
+                Ok(library) => {
+                    *instance_handle.lock() = Some(library);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load library from {}: {}", library_root, e);
+                    // Clear the active id on failure to prevent repeated failures;
+                    // a save failure is logged and surfaced later, never fatal (C12).
+                    let mut store = config_handle.lock();
+                    store.config.app_state.active_library_id = None;
+                    if let Err(save_err) = store.save() {
+                        tracing::error!("Failed to persist cleared active library: {save_err}");
+                        *warning_handle.lock() = Some(save_err.to_string());
+                    }
                 }
             }
         }
     });
+    tauri::async_runtime::spawn(crate::core::registry::signal_initial_library_load(
+        initial_library_load_complete,
+        loader,
+    ));
 }
 
-/// Helper: Watchdog for the startup handshake. `get_library_workspace` is both the frontend's
-/// first backend call and the thing that shows the main window — so if it hasn't arrived within
-/// 10 seconds, the frontend almost certainly crashed before its first render, and the failure
-/// would otherwise be an invisible window plus a dead-looking process. Show the window anyway so
-/// the error surface (boundary screen, devtools) is reachable instead of hard-exiting.
+/// Helper: Watchdog for the startup handshake. If the first workspace has not finished loading
+/// within 10 seconds, the frontend would otherwise remain an invisible window and dead-looking
+/// process. Show the window anyway so the loading or error surface remains reachable.
 fn start_init_timeout_checker(
     app_handle: tauri::AppHandle,
-    init_called: Arc<std::sync::atomic::AtomicBool>,
+    startup_ready: Arc<std::sync::atomic::AtomicBool>,
+    initial_library_load_complete: tokio::sync::watch::Sender<Option<Result<(), String>>>,
 ) {
     use tauri::Manager;
 
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
-        if !init_called.load(std::sync::atomic::Ordering::Relaxed) {
-            tracing::error!(
-                "get_library_workspace was not called within 10 seconds of setup; the frontend likely crashed before its first backend call. Showing the window so the failure is visible."
-            );
+        if !startup_ready.load(std::sync::atomic::Ordering::Relaxed) {
+            let mut load_status = initial_library_load_complete.subscribe();
+            match load_status.borrow_and_update().clone() {
+                None => tracing::error!(
+                    timeout_seconds = 10,
+                    "startup watchdog expired while the initial library load was still pending; showing the main window"
+                ),
+                Some(Err(error)) => tracing::error!(
+                    timeout_seconds = 10,
+                    %error,
+                    "startup watchdog observed an initial library load failure; showing the main window"
+                ),
+                Some(Ok(())) => tracing::error!(
+                    timeout_seconds = 10,
+                    "startup watchdog expired after library load completed but before the initial workspace request finished; showing the main window"
+                ),
+            }
             if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+                if let Err(error) = window.show() {
+                    tracing::error!(%error, "startup watchdog could not show the main window");
+                }
+                if let Err(error) = window.set_focus() {
+                    tracing::warn!(%error, "startup watchdog could not focus the main window");
+                }
+            } else {
+                tracing::error!("startup watchdog could not find the main webview window");
             }
         }
     });
@@ -169,17 +195,28 @@ fn setup_application(
     config_handle: ConfigHandle,
     instance_handle: InstanceHandle,
     warning_handle: WarningHandle,
-    init_called: Arc<std::sync::atomic::AtomicBool>,
+    initial_library_load_complete:
+        tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    startup_ready: Arc<std::sync::atomic::AtomicBool>,
 ) -> impl FnOnce(&mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     move |app| {
         // Mount events for the command handler
         builder.mount_events(app);
 
         // Load the initial library in the background
-        load_initial_library(config_handle, instance_handle, warning_handle);
+        load_initial_library(
+            config_handle,
+            instance_handle,
+            warning_handle,
+            initial_library_load_complete.clone(),
+        );
 
-        // Start timer to check if the startup command was called within 10 seconds
-        start_init_timeout_checker(app.handle().clone(), init_called);
+        // Start timer to check whether the first workspace is ready within 10 seconds
+        start_init_timeout_checker(
+            app.handle().clone(),
+            startup_ready,
+            initial_library_load_complete,
+        );
 
         Ok(())
     }
@@ -196,7 +233,8 @@ pub fn run() {
 
     // Stage 3: Initialize application state
     let (app_registry, config_handle, instance_handle, warning_handle) = initialize_app_state();
-    let init_called = app_registry.init_called.clone();
+    let initial_library_load_complete = app_registry.initial_library_load_complete.clone();
+    let startup_ready = app_registry.startup_ready.clone();
 
     // Stage 4: Register plugins
     let tauri_builder = register_plugins();
@@ -210,7 +248,8 @@ pub fn run() {
         config_handle,
         instance_handle,
         warning_handle,
-        init_called,
+        initial_library_load_complete,
+        startup_ready,
     );
 
     // Stage 7: Build and run the application

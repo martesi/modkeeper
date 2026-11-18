@@ -71,36 +71,45 @@ pub async fn get_library_workspace(
     app_handle: AppHandle,
     state: State<'_, AppRegistry>,
 ) -> Result<LibraryWorkspace, SError> {
-    // Watchdog handoff: the startup timeout checker watches this flag (C11)
-    state
-        .init_called
-        .store(true, std::sync::atomic::Ordering::Relaxed);
-
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
     let warning_handle = state.config_warning.clone();
 
-    let result = log_err(
-        tauri::async_runtime::spawn_blocking(move || {
-            let store = config_handle.lock();
-            let instance = instance_handle.lock();
-            let warning = warning_handle.lock().take();
-            Ok(global_service::assemble_workspace(
-                &store.config,
-                instance.as_ref(),
-                warning,
-            ))
-        })
-        .await
-        .map_err(|e| SError::AsyncRuntimeError(e.to_string()))
-        .and_then(|r| r),
-    );
+    let result = match state.wait_for_initial_library_load().await {
+        Ok(()) => log_err(
+            tauri::async_runtime::spawn_blocking(move || {
+                let store = config_handle.lock();
+                let instance = instance_handle.lock();
+                let warning = warning_handle.lock().take();
+                Ok(global_service::assemble_workspace(
+                    &store.config,
+                    instance.as_ref(),
+                    warning,
+                ))
+            })
+            .await
+            .map_err(|error| SError::AsyncRuntimeError(error.to_string()))
+            .and_then(|result| result),
+        ),
+        Err(error) => log_err(Err(error)),
+    };
+    state
+        .startup_ready
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
-    app_handle.get_webview_window("main").inspect(|window| {
-        let _ = window.center();
-        let _ = window.show();
-        let _ = window.set_focus();
-    });
+    if let Some(window) = app_handle.get_webview_window("main") {
+        if let Err(error) = window.center() {
+            tracing::warn!(%error, "could not center the main window after workspace initialization");
+        }
+        if let Err(error) = window.show() {
+            tracing::error!(%error, "could not show the main window after workspace initialization");
+        }
+        if let Err(error) = window.set_focus() {
+            tracing::warn!(%error, "could not focus the main window after workspace initialization");
+        }
+    } else if result.is_err() {
+        tracing::error!("workspace initialization failed and the main window is unavailable");
+    }
     result
 }
 

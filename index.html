@@ -5,10 +5,148 @@
     <link rel="icon" type="image/svg+xml" href="/mod_keeper.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Modkeeper</title>
+    <style>
+      #boot-fallback {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 1rem;
+        background: #101116;
+        color: #f5f5f7;
+        font:
+          16px system-ui,
+          sans-serif;
+        padding: 2rem;
+        text-align: center;
+      }
+      #boot-fallback[hidden],
+      #boot-reload[hidden] {
+        display: none;
+      }
+      #boot-reload {
+        border: 1px solid #777;
+        border-radius: 0.4rem;
+        background: #25262d;
+        color: inherit;
+        cursor: pointer;
+        padding: 0.6rem 1rem;
+      }
+    </style>
   </head>
 
   <body>
+    <div id="boot-fallback" role="status">
+      <p data-boot-message>Starting Modkeeper…</p>
+      <button
+        id="boot-reload"
+        data-boot-reload
+        hidden
+        type="button"
+        onclick="window.location.reload()"
+      >
+        Reload Modkeeper
+      </button>
+    </div>
     <div id="root"></div>
+    <script>
+      window.__MODKEEPER_BOOTED__ = false
+      const bootErrorStorageKey = 'modkeeper.boot-error'
+      const maxBootErrorLength = 2000
+      const bootFallback = document.getElementById('boot-fallback')
+      let bootErrorReported = false
+      const bootTimeout = window.setTimeout(() => {
+        if (!window.__MODKEEPER_BOOTED__ && !bootErrorReported) {
+          showStartupError('The app did not finish mounting within 8 seconds')
+        }
+      }, 8000)
+
+      function showStartupError(message, error) {
+        if (window.__MODKEEPER_BOOTED__) return
+        const safeMessage = message.slice(0, maxBootErrorLength)
+        const detail = document.querySelector('[data-boot-message]')
+        const reload = document.querySelector('[data-boot-reload]')
+        if (!bootFallback || !detail || !reload) return
+        bootErrorReported = true
+        detail.textContent = `Modkeeper could not start: ${safeMessage}`
+        bootFallback.hidden = false
+        bootFallback.setAttribute('role', 'alert')
+        reload.hidden = false
+        if (window.__MODKEEPER_REPORT_BOOT_ERROR__) {
+          window.__MODKEEPER_REPORT_BOOT_ERROR__(safeMessage, error ?? message)
+          return
+        }
+        // This path runs before the typed app API loads; Web Storage throws synchronously.
+        try {
+          localStorage.setItem(bootErrorStorageKey, safeMessage)
+        } catch (storageError) {
+          console.error('[startup] could not persist boot error', storageError)
+        }
+        console.error('[startup] uncaught frontend error', error || message)
+      }
+
+      function handleBootError(event) {
+        if (window.__MODKEEPER_BOOTED__) return
+        if (event.target !== window) {
+          const resource = event.target
+          if (
+            resource instanceof HTMLScriptElement ||
+            resource instanceof HTMLLinkElement ||
+            resource instanceof HTMLImageElement
+          ) {
+            const url = resource.src || resource.href || resource.currentSrc
+            showStartupError(
+              `Unable to load ${resource.tagName.toLowerCase()}: ${url}`,
+            )
+          }
+          return
+        }
+        const location = event.filename
+          ? ` (${event.filename}:${event.lineno}:${event.colno})`
+          : ''
+        showStartupError(
+          `${event.message || 'Unknown JavaScript error'}${location}`,
+          event.error,
+        )
+      }
+
+      function handleBootRejection(event) {
+        if (window.__MODKEEPER_BOOTED__) return
+        const reason = event.reason
+        showStartupError(
+          reason instanceof Error ? reason.message : String(reason),
+          reason,
+        )
+      }
+
+      function markModkeeperBooted() {
+        window.__MODKEEPER_BOOTED__ = true
+        window.clearTimeout(bootTimeout)
+        window.removeEventListener('error', handleBootError, true)
+        window.removeEventListener('unhandledrejection', handleBootRejection)
+        if (bootFallback) bootFallback.hidden = true
+        window.__MODKEEPER_MARK_BOOTED__ = undefined
+      }
+
+      window.__MODKEEPER_MARK_BOOTED__ = markModkeeperBooted
+      window.addEventListener('error', handleBootError, true)
+      window.addEventListener('unhandledrejection', handleBootRejection)
+
+      // Read before the app module loads; Web Storage can throw when storage is disabled.
+      try {
+        const previousError = localStorage.getItem(bootErrorStorageKey)
+        if (previousError && previousError.length <= maxBootErrorLength) {
+          showStartupError(previousError)
+        }
+      } catch (storageError) {
+        console.error(
+          '[startup] could not read persisted boot error',
+          storageError,
+        )
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

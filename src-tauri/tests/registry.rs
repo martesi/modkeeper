@@ -28,8 +28,26 @@ fn test_registry(tmp: &tempfile::TempDir) -> AppRegistry {
         in_flight_tasks: Arc::new(Mutex::new(HashSet::new())),
         #[cfg(target_os = "windows")]
         sys: Mutex::new(System::new()),
-        init_called: Arc::new(AtomicBool::new(false)),
+        initial_library_load_complete: tokio::sync::watch::channel(None).0,
+        startup_ready: Arc::new(AtomicBool::new(false)),
     }
+}
+
+#[tokio::test]
+async fn startup_library_waits_for_background_load_completion() {
+    let (tmp, _game_root, _repo_root) = setup_test_env();
+    let registry = test_registry(&tmp);
+    let load_complete = registry.initial_library_load_complete.clone();
+
+    let waiting = tokio::spawn(async move { registry.wait_for_initial_library_load().await });
+    tokio::task::yield_now().await;
+    assert!(!waiting.is_finished());
+
+    load_complete.send_replace(Some(Ok(())));
+    waiting
+        .await
+        .expect("startup wait task should complete")
+        .expect("startup load completion should unblock waiters");
 }
 
 #[test]

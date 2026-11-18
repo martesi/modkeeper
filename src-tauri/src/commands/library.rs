@@ -102,6 +102,8 @@ pub async fn bulk_update_mods(
     state: State<'_, AppRegistry>,
     input: BulkUpdateModsInput,
 ) -> Result<LibraryWorkspace, SError> {
+    log_err(state.wait_for_initial_library_load().await)?;
+
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
 

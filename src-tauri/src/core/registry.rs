@@ -12,8 +12,11 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 #[cfg(target_os = "windows")]
 use sysinfo::System;
+
+const INITIAL_LIBRARY_LOAD_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct AppRegistry {
     // Arc<Mutex<Option>> allows us to "swap" the entire instance safely
@@ -25,8 +28,11 @@ pub struct AppRegistry {
     pub in_flight_tasks: Arc<Mutex<HashSet<String>>>,
     #[cfg(target_os = "windows")]
     pub sys: Mutex<Result<System, sysinfo::Error>>,
-    /// Tracks whether the startup command has been called (watchdog handoff, C11)
-    pub init_called: Arc<AtomicBool>,
+    /// Signals when the background load of the configured startup library finishes.
+    pub initial_library_load_complete:
+        tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    /// Tracks completion of the first workspace request (watchdog handoff, C11).
+    pub startup_ready: Arc<AtomicBool>,
 }
 
 impl AppRegistry {
@@ -91,10 +97,58 @@ impl AppRegistry {
             Err(SError::TaskIdInUse(task_id.to_string()))
         }
     }
+
+    /// Waits for the configured startup library load, bounded by the watchdog budget.
+    pub async fn wait_for_initial_library_load(&self) -> Result<(), SError> {
+        wait_for_initial_library_load(
+            self.initial_library_load_complete.subscribe(),
+            INITIAL_LIBRARY_LOAD_TIMEOUT,
+        )
+        .await
+    }
+}
+
+async fn wait_for_initial_library_load(
+    mut load_complete: tokio::sync::watch::Receiver<Option<Result<(), String>>>,
+    timeout: Duration,
+) -> Result<(), SError> {
+    let wait_for_signal = async {
+        loop {
+            if let Some(result) = load_complete.borrow_and_update().clone() {
+                return result.map_err(|error| {
+                    SError::AsyncRuntimeError(format!("Initial library load failed: {error}"))
+                });
+            }
+            load_complete.changed().await.map_err(|error| {
+                SError::AsyncRuntimeError(format!(
+                    "Initial library load notification failed: {error}"
+                ))
+            })?;
+        }
+    };
+
+    tokio::time::timeout(timeout, wait_for_signal)
+        .await
+        .map_err(|_| {
+            SError::AsyncRuntimeError(format!("Initial library load timed out after {timeout:?}"))
+        })?
+}
+
+/// Publishes completion or the task failure so startup waiters cannot hang on a panicked loader.
+pub(crate) async fn signal_initial_library_load(
+    load_complete: tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    loader: tauri::async_runtime::JoinHandle<()>,
+) {
+    let result = loader.await.map_err(|error| {
+        tracing::error!(%error, "initial library loader task failed");
+        error.to_string()
+    });
+    load_complete.send_replace(Some(result));
 }
 
 impl Default for AppRegistry {
     fn default() -> Self {
+        let (initial_library_load_complete, _) = tokio::sync::watch::channel(None);
         let old_config = GlobalConfig::load();
         let (app_config, mut config_warning) = store::load_or_migrate(&old_config);
         if config_warning.is_none() {
@@ -115,7 +169,61 @@ impl Default for AppRegistry {
             in_flight_tasks: Arc::new(Mutex::new(HashSet::new())),
             #[cfg(target_os = "windows")]
             sys: Mutex::new(System::new()),
-            init_called: Arc::new(AtomicBool::new(false)),
+            initial_library_load_complete,
+            startup_ready: Arc::new(AtomicBool::new(false)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{signal_initial_library_load, wait_for_initial_library_load};
+    use std::time::Duration;
+    use tokio::sync::watch;
+
+    #[tokio::test]
+    async fn initial_library_load_success_wakes_waiters() {
+        let (load_complete, _) = watch::channel(None);
+        let loader = tauri::async_runtime::spawn(async {});
+
+        signal_initial_library_load(load_complete.clone(), loader).await;
+
+        assert!(
+            wait_for_initial_library_load(load_complete.subscribe(), Duration::from_secs(1))
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn loader_panic_wakes_waiters_with_an_error() {
+        let (load_complete, _) = watch::channel(None);
+        let loader = tauri::async_runtime::spawn(async { panic!("initial loader failed") });
+
+        signal_initial_library_load(load_complete.clone(), loader).await;
+
+        let result =
+            wait_for_initial_library_load(load_complete.subscribe(), Duration::from_secs(1)).await;
+        assert!(matches!(
+            result,
+            Err(crate::models::error::SError::AsyncRuntimeError(message))
+                if message.contains("Initial library load failed")
+        ));
+    }
+
+    #[tokio::test]
+    async fn stalled_initial_library_load_times_out() {
+        let (load_complete, _) = watch::channel(None);
+
+        let result = wait_for_initial_library_load(
+            load_complete.subscribe(),
+            Duration::from_millis(1),
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(crate::models::error::SError::AsyncRuntimeError(message))
+                if message.contains("Initial library load timed out")
+        ));
     }
 }
