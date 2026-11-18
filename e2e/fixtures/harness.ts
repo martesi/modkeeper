@@ -23,6 +23,13 @@ import { spawn, type Subprocess } from 'bun'
 export const repoRoot = resolve(import.meta.dir, '..', '..')
 export const scratchRoot = '/tmp/opencode/e2e/modkeeper-native-smoke'
 
+/** Run-scoped folder for local artifacts. Never writes into tracked paths. */
+export const runStamp = new Date().toISOString().replace(/[:.]/g, '-')
+
+export function e2eArtifactPath(...parts: string[]): string {
+  return join(repoRoot, '.local', 'e2e', runStamp, ...parts)
+}
+
 export class E2eError extends Error {
   constructor(
     message: string,

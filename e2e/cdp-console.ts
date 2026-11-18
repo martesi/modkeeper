@@ -3,11 +3,15 @@
  *
  * Usage:
  *   bun run dev:e2e            # launches the app with --remote-debugging-port=9222
- *   bun run e2e/cdp-console.ts # attaches, prints console+exceptions, saves screenshot.png
+ *   bun run e2e/cdp-console.ts # attaches, prints console+exceptions, saves .local/e2e/<run-timestamp>/cdp-console.png
  *
  * This is the validated flow that diagnosed the §0 boot crash: WebView2 honors
  * WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, and http://127.0.0.1:9222/json exposes the page target.
  */
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { e2eArtifactPath } from './fixtures/harness'
+
 const base = process.env.CDP_URL ?? 'http://127.0.0.1:9222'
 
 type Target = { type: string; title: string; webSocketDebuggerUrl: string }
@@ -67,8 +71,10 @@ await new Promise((resolve) => setTimeout(resolve, 5000))
 const shot = (await send('Page.captureScreenshot', { format: 'png' })) as
   { data?: string } | undefined
 if (shot?.data) {
-  await Bun.write('e2e/screenshot.png', Buffer.from(shot.data, 'base64'))
-  console.log('screenshot saved to e2e/screenshot.png')
+  const screenshotPath = e2eArtifactPath('cdp-console.png')
+  mkdirSync(dirname(screenshotPath), { recursive: true })
+  await Bun.write(screenshotPath, Buffer.from(shot.data, 'base64'))
+  console.log('screenshot saved to', screenshotPath)
 }
 ws.close()
 process.exit(0)

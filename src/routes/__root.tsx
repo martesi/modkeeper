@@ -8,7 +8,7 @@ import { RedesignRoot } from '@/redesign/app/redesign-root'
  * renamed backend commands, and a persisted flag booting into it crashed the frontend before
  * `get_library_workspace` ever fired — tripping the backend init watchdog into a silent exit(1)
  * with the window still hidden. Original content preserved at
- * docs/2026-07-13_redesign/reference/current-frontend/routes/__root.tsx.
+ * .local/2026-07-13_redesign/reference/current-frontend/routes/__root.tsx.
  */
 export const Route = createRootRoute({
   component: RootComponent,

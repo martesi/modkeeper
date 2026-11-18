@@ -14,7 +14,7 @@
  * Reproduce from the repo root:
  *   nix develop .#e2e -c bun e2e/native-smoke.ts
  *
- * Optional: --screenshots <dir> (defaults to docs/argus-benchmark/screenshots)
+ * Optional: --screenshots <dir> (defaults to .local/e2e/<run-timestamp>/screenshots)
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -23,6 +23,7 @@ import {
   assertSeedHelperRemoved,
   createLibrary,
   E2eError,
+  e2eArtifactPath,
   ensureAppBinary,
   injectBootErrorTrap,
   findFreeDisplay,
@@ -84,7 +85,7 @@ type State = {
 // ---------------------------------------------------------------------------------------------
 
 function parseOptions(argv: string[]): Options {
-  let screenshotsDir = join(repoRoot, 'docs', 'argus-benchmark', 'screenshots')
+  let screenshotsDir = e2eArtifactPath('screenshots')
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') {
