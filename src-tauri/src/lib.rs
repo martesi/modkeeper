@@ -105,8 +105,7 @@ fn load_initial_library(
     config_handle: ConfigHandle,
     instance_handle: InstanceHandle,
     warning_handle: WarningHandle,
-    initial_library_load_complete:
-        tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    initial_library_load_complete: tokio::sync::watch::Sender<Option<Result<(), String>>>,
 ) {
     let loader = tauri::async_runtime::spawn_blocking(move || {
         let library_root = {
@@ -195,8 +194,7 @@ fn setup_application(
     config_handle: ConfigHandle,
     instance_handle: InstanceHandle,
     warning_handle: WarningHandle,
-    initial_library_load_complete:
-        tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    initial_library_load_complete: tokio::sync::watch::Sender<Option<Result<(), String>>>,
     startup_ready: Arc<std::sync::atomic::AtomicBool>,
 ) -> impl FnOnce(&mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     move |app| {

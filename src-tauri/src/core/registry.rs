@@ -29,8 +29,7 @@ pub struct AppRegistry {
     #[cfg(target_os = "windows")]
     pub sys: Mutex<Result<System, sysinfo::Error>>,
     /// Signals when the background load of the configured startup library finishes.
-    pub initial_library_load_complete:
-        tokio::sync::watch::Sender<Option<Result<(), String>>>,
+    pub initial_library_load_complete: tokio::sync::watch::Sender<Option<Result<(), String>>>,
     /// Tracks completion of the first workspace request (watchdog handoff, C11).
     pub startup_ready: Arc<AtomicBool>,
 }
@@ -215,11 +214,9 @@ mod tests {
     async fn stalled_initial_library_load_times_out() {
         let (load_complete, _) = watch::channel(None);
 
-        let result = wait_for_initial_library_load(
-            load_complete.subscribe(),
-            Duration::from_millis(1),
-        )
-        .await;
+        let result =
+            wait_for_initial_library_load(load_complete.subscribe(), Duration::from_millis(1))
+                .await;
         assert!(matches!(
             result,
             Err(crate::models::error::SError::AsyncRuntimeError(message))
