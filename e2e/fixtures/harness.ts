@@ -265,10 +265,7 @@ export function readIfExists(path: string): string {
 export function cargoTargetDir(
   env: Record<string, string | undefined>,
 ): string {
-  return (
-    env.CARGO_TARGET_DIR?.trim() ||
-    join(env.HOME ?? '/tmp', '.cargo', 'target', 'modkeeper')
-  )
+  return env.CARGO_TARGET_DIR?.trim() || join(repoRoot, 'src-tauri', 'target')
 }
 
 function newestMtime(paths: string[]): number {
@@ -338,7 +335,11 @@ export async function ensureAppBinary(opts: {
     ],
     {
       cwd: repoRoot,
-      env: { ...opts.env, CARGO_TERM_COLOR: 'never' },
+      env: {
+        ...opts.env,
+        CARGO_TERM_COLOR: 'never',
+        CARGO_TARGET_DIR: cargoTargetDir(opts.env),
+      },
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -357,6 +358,7 @@ export async function ensureAppBinary(opts: {
     proc.exited,
   ])
   clearTimeout(timer)
+  mkdirSync(dirname(opts.logFile), { recursive: true })
   writeFileSync(opts.logFile, `${stdout}${stderr}`)
   if (code !== 0) {
     throw new E2eError(

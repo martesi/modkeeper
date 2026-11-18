@@ -3,6 +3,11 @@
  * bulk actions, the Manage Library dialog, and the tool registry.
  */
 import { t } from '@lingui/core/macro'
+import type { TaskOperation, TaskProgressStage } from '../data/redesign-types'
+import { taskProgressText } from './task-progress-text'
+
+const unknownTaskLabel = () =>
+  t({ id: 'library.task.operation.unknown', message: 'Task' })
 
 export const libraryText = {
   title: () => t({ id: 'library.header.title', message: 'Library' }),
@@ -31,6 +36,40 @@ export const libraryText = {
     }),
   taskResultLabel: () =>
     t({ id: 'library.taskResult.label', message: 'Latest task result' }),
+  activeTasksLabel: () =>
+    t({ id: 'library.task.activeLabel', message: 'Active tasks' }),
+  unknownTaskOperation: () => unknownTaskLabel(),
+  unknownTaskLibrary: () =>
+    t({ id: 'library.task.library.unknown', message: 'Unknown library' }),
+  taskLibrary: (name: string) =>
+    t({ id: 'library.task.library', message: `Library: ${name}` }),
+  taskOperation: (operation: TaskOperation | null) =>
+    operation ? taskProgressText.operation(operation) : unknownTaskLabel(),
+  taskStage: (stage: TaskProgressStage | null) =>
+    stage ? taskProgressText.stage(stage) : unknownTaskLabel(),
+  taskProgressAccessibleLabel: (operation: string, library: string) =>
+    t({
+      id: 'library.task.progressLabel',
+      message: `${operation} for ${library}`,
+    }),
+  taskProgressValue: (stage: string, percent: number) =>
+    t({
+      id: 'library.task.progressValue',
+      message: `${stage}: ${percent}% of this stage`,
+    }),
+  taskProgressPercentage: (percent: number) =>
+    t({
+      id: 'library.task.progressPercentage',
+      message: `${percent}% of this stage`,
+    }),
+  taskLogLabel: (count: number) =>
+    t({
+      id: 'library.task.logLabel',
+      message: `Show task log (${count})`,
+    }),
+  taskLogError: () => t({ id: 'library.task.logError', message: 'Error' }),
+  taskLogWarning: () =>
+    t({ id: 'library.task.logWarning', message: 'Warning' }),
   dismissTaskResult: () =>
     t({ id: 'library.taskResult.dismiss', message: 'Dismiss task result' }),
   installImported: (successCount: number, submittedCount: number) =>
@@ -121,6 +160,8 @@ export const libraryText = {
     }),
   enableMod: (name: string) =>
     t({ id: 'library.card.enableMod', message: `Enable ${name}` }),
+  disableMod: (name: string) =>
+    t({ id: 'library.card.disableMod', message: `Disable ${name}` }),
   selectMod: (name: string) =>
     t({ id: 'library.card.selectMod', message: `Select ${name}` }),
   // Import surfaces
@@ -152,6 +193,12 @@ export const libraryText = {
     t({
       id: 'library.import.selectModArchives',
       message: 'Select mod archives',
+    }),
+  archiveImportActionFailed: () =>
+    t({
+      id: 'library.import.actionFailed',
+      message:
+        'Could not start the archive import. Check file access and try again.',
     }),
   unsupportedArchiveRejected: () =>
     t({
@@ -206,6 +253,28 @@ export const libraryText = {
     t({ id: 'library.toolbar.typeFilterUnknown', message: 'Unknown' }),
   actions: (count: number) =>
     t({ id: 'library.toolbar.actions', message: `Actions · ${count}` }),
+  actionsLabel: () =>
+    t({ id: 'library.toolbar.actionsLabel', message: 'Mod actions' }),
+  moreOptions: () =>
+    t({ id: 'library.toolbar.moreOptions', message: 'More options' }),
+  viewModeLabel: () =>
+    t({ id: 'library.toolbar.viewModeLabel', message: 'Mod view' }),
+  viewModeList: () =>
+    t({ id: 'library.toolbar.viewModeList', message: 'List view' }),
+  viewModeGrid: () =>
+    t({ id: 'library.toolbar.viewModeGrid', message: 'Grid view' }),
+  viewModeIcons: () =>
+    t({ id: 'library.toolbar.viewModeIcons', message: 'Icon view' }),
+  columnName: () => t({ id: 'library.list.columnName', message: 'Name' }),
+  columnType: () => t({ id: 'library.list.columnType', message: 'Type' }),
+  columnStatus: () =>
+    t({ id: 'library.list.columnStatus', message: 'Enabled' }),
+  modTypeClient: () => t({ id: 'library.list.typeClient', message: 'Client' }),
+  modTypeServer: () => t({ id: 'library.list.typeServer', message: 'Server' }),
+  modTypeBoth: () =>
+    t({ id: 'library.list.typeBoth', message: 'Client + Server' }),
+  modTypeUnknown: () =>
+    t({ id: 'library.list.typeUnknown', message: 'Unknown' }),
   noVisibleMods: () =>
     t({
       id: 'library.grid.noVisibleMods',
@@ -389,3 +458,5 @@ export const libraryText = {
   executable: () =>
     t({ id: 'library.tools.executable', message: 'Executable' }),
 }
+
+export { registryText } from './registry-text'

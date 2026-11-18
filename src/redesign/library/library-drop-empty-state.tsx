@@ -14,12 +14,12 @@ export function LibraryDropEmptyState() {
       onClick={() => void pickAndInstall()}
       badge={libraryText.dropSupported()}
     >
-      <p className="font-heading text-[13px] font-semibold text-foreground">
+      <span className="font-heading text-[13px] font-semibold text-foreground">
         {libraryText.dropTitle()}
-      </p>
-      <p className="text-[13px] font-semibold text-primary underline">
+      </span>
+      <span className="text-[13px] font-semibold text-primary underline">
         {libraryText.dropBrowse()}
-      </p>
+      </span>
     </LibraryEmptyCard>
   )
 }

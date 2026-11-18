@@ -22,6 +22,11 @@ import type {
   BulkModAction,
   OperationAccepted,
   WorkspaceEvent_Serialize as WorkspaceEvent,
+  TaskOperation,
+  TaskProgressEvent_Deserialize as TaskProgressEvent,
+  TaskProgressKind,
+  TaskProgressLog,
+  TaskProgressStage,
   SError,
 } from '@gen/bindings'
 
@@ -39,6 +44,11 @@ export type {
   BulkModAction,
   OperationAccepted,
   WorkspaceEvent,
+  TaskOperation,
+  TaskProgressEvent,
+  TaskProgressKind,
+  TaskProgressLog,
+  TaskProgressStage,
   SError,
 }
 

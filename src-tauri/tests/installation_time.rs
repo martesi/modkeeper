@@ -162,6 +162,13 @@ fn test_cache_rebuild_renames_mismatched_folder() {
             mod_type: mod_keeper_lib::models::mod_dto::ModType::Server,
             name: "Test Mod".to_string(),
             installed_at: Some("2026-01-02T03:04:05Z".into()),
+            version: None,
+            forge_id: None,
+            forge_guid: None,
+            source: mod_keeper_lib::models::mod_dto::ModSource::Local,
+            forge_kind: None,
+            forge_version_id: None,
+            forge_meta_cached_at: None,
         },
     );
 

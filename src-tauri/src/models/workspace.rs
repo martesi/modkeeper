@@ -1,5 +1,5 @@
 use crate::models::error::SError;
-use crate::models::mod_dto::ModType;
+use crate::models::mod_dto::{ForgeKind, ModSource, ModType};
 use crate::store::app_config::AppSettings;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -88,6 +88,22 @@ pub struct ModSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub installed_at: Option<String>,
     pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<u32>)]
+    pub forge_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forge_guid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ModSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forge_kind: Option<ForgeKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<u32>)]
+    pub forge_version_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forge_meta_cached_at: Option<String>,
 }
 
 /// Defined for forward-compat; unused by live commands this pass (§7d).
@@ -232,4 +248,70 @@ pub enum WorkspaceEvent {
         failures: Vec<ModFailure>,
         workspace: LibraryWorkspace,
     },
+}
+
+#[cfg(test)]
+mod task_progress_contract_tests {
+    use super::{CacheState, CacheStatus, LibraryWorkspace, WorkspaceEvent};
+    use crate::store::app_config::AppSettings;
+    use std::collections::BTreeMap;
+
+    fn workspace() -> LibraryWorkspace {
+        LibraryWorkspace {
+            active_library_id: None,
+            libraries: Vec::new(),
+            mods_by_library_id: BTreeMap::new(),
+            tools_by_library_id: BTreeMap::new(),
+            settings: AppSettings::default(),
+            config_warning: None,
+        }
+    }
+
+    const WORKSPACE_JSON: &str = r#"{"libraries":[],"modsByLibraryId":{},"toolsByLibraryId":{},"settings":{"theme":"system","accentColor":"default","language":"en-US","enableModsOnInstall":true}}"#;
+
+    #[test]
+    fn existing_completion_event_payloads_keep_their_wire_shapes() {
+        let sync = WorkspaceEvent::SyncCompleted {
+            task_id: "task".into(),
+            library_id: "library".into(),
+            failures: Vec::new(),
+            workspace: workspace(),
+        };
+        assert_eq!(
+            serde_json::to_string(&sync).unwrap(),
+            format!(
+                r#"{{"type":"sync_completed","taskId":"task","libraryId":"library","failures":[],"workspace":{WORKSPACE_JSON}}}"#
+            )
+        );
+
+        let install = WorkspaceEvent::ModInstallCompleted {
+            task_id: "task".into(),
+            library_id: "library".into(),
+            failures: Vec::new(),
+            workspace: workspace(),
+        };
+        assert_eq!(
+            serde_json::to_string(&install).unwrap(),
+            format!(
+                r#"{{"type":"mod_install_completed","taskId":"task","libraryId":"library","failures":[],"workspace":{WORKSPACE_JSON}}}"#
+            )
+        );
+
+        let cache = WorkspaceEvent::CacheRebuildCompleted {
+            task_id: "task".into(),
+            library_id: "library".into(),
+            cache_status: CacheStatus {
+                state: CacheState::Ready,
+                message: None,
+                last_rebuilt_at: None,
+            },
+            workspace: workspace(),
+        };
+        assert_eq!(
+            serde_json::to_string(&cache).unwrap(),
+            format!(
+                r#"{{"type":"cache_rebuild_completed","taskId":"task","libraryId":"library","cacheStatus":{{"state":"ready"}},"workspace":{WORKSPACE_JSON}}}"#
+            )
+        );
+    }
 }

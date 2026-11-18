@@ -16,15 +16,23 @@ export function ModInitialIcon({
   name,
   type,
   enabled = true,
+  size = 'md',
 }: {
   name: string
   type: ModType
   enabled?: boolean
+  size?: 'sm' | 'md' | 'grid' | 'icons'
 }) {
   const tint = enabled ? TINT_BY_TYPE[type] : 'var(--muted-foreground)'
+  const sizeClass = {
+    sm: 'size-6 text-[10px]',
+    md: 'size-8 text-[13px]',
+    grid: 'size-12 text-[16px]',
+    icons: 'size-16 text-[20px]',
+  }[size]
   return (
     <span
-      className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm font-heading text-[13px] font-semibold"
+      className={`inline-flex shrink-0 items-center justify-center rounded-sm font-heading font-semibold ${sizeClass}`}
       style={{
         backgroundColor: enabled
           ? `color-mix(in srgb, ${tint} 13%, transparent)`

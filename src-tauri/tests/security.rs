@@ -47,6 +47,13 @@ fn deleting_unknown_or_unsafe_mod_ids_preserves_external_files() {
                 mod_type: ModType::Unknown,
                 name: "Forged mod".into(),
                 installed_at: None,
+                version: None,
+                forge_id: None,
+                forge_guid: None,
+                source: mod_keeper_lib::models::mod_dto::ModSource::Local,
+                forge_kind: None,
+                forge_version_id: None,
+                forge_meta_cached_at: None,
             },
         );
         assert!(

@@ -5,6 +5,7 @@ import {
   deriveArchiveOutcome,
   deriveCacheOutcome,
   deriveSyncOutcome,
+  parseForgeParentGateFailure,
 } from './task-outcome'
 
 describe('task outcomes', () => {
@@ -137,6 +138,48 @@ describe('task outcomes', () => {
       cacheState: 'failed',
       message: 'Cache index could not be written',
     })
+  })
+
+  test('parses Forge parent install failures for actionable task banners', () => {
+    expect(
+      parseForgeParentGateFailure({
+        code: 'ParseError',
+        data: 'Forge addon requires installed parent 2658 (author.parent)',
+      }),
+    ).toEqual({
+      kind: 'missing',
+      parentId: 2658,
+      parentGuid: 'author.parent',
+    })
+    expect(
+      parseForgeParentGateFailure({
+        code: 'ParseError',
+        data: 'Installed Forge parent author.parent has no recorded version',
+      }),
+    ).toEqual({ kind: 'missing-version', parentGuid: 'author.parent' })
+    expect(
+      parseForgeParentGateFailure({
+        code: 'ParseError',
+        data: 'Forge addon requires parent author.parent at ^1.20, installed version is 1.18.0',
+      }),
+    ).toEqual({
+      kind: 'mismatch',
+      parentGuid: 'author.parent',
+      constraint: '^1.20',
+      installedVersion: '1.18.0',
+    })
+  })
+
+  test('ignores errors unrelated to the Forge addon parent gate', () => {
+    expect(
+      parseForgeParentGateFailure({
+        code: 'ParseError',
+        data: 'bad archive',
+      }),
+    ).toBeNull()
+    expect(
+      parseForgeParentGateFailure({ code: 'IOError', data: 'network error' }),
+    ).toBeNull()
   })
 
   test('allows retry only for the same active idle library', () => {

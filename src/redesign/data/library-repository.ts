@@ -27,6 +27,7 @@ import type {
   BulkModAction,
   OperationAccepted,
   WorkspaceEvent,
+  TaskProgressEvent,
   SError,
 } from './redesign-types'
 import { isLibrarySummary } from './redesign-types'
@@ -49,9 +50,11 @@ import {
   activeLibraryIdAtom,
   libraryBusyAtom,
   libraryWorkspaceAtom,
+  type PendingTaskSource,
   setWorkspace,
   addPendingTask,
   removePendingTask,
+  applyTaskProgress,
   isLibraryTaskPending,
   setWorkspaceStatus,
 } from '../state/library-state'
@@ -59,6 +62,18 @@ import { canRetryFailedArchives } from './task-outcome'
 import type { InstallTaskOutcome } from './task-outcome'
 import { setSettings } from '../state/settings-state'
 import { getDefaultStore } from 'jotai'
+
+type TaskProgressE2eFixture = {
+  registerTask: (taskId: string, libraryId: LibraryId) => Promise<void>
+  emit: (event: Parameters<typeof events.taskProgress.emit>[0]) => Promise<void>
+  clearTask: (taskId: string) => void
+}
+
+declare global {
+  interface Window {
+    __MK_TASK_PROGRESS_E2E__?: TaskProgressE2eFixture
+  }
+}
 
 // --- The single persistent event bus (§10) ---
 
@@ -72,6 +87,9 @@ const submittedArchivePathsByTaskId = new Map<string, string[]>()
 const connectWorkspaceEvents = createRetryableConnection((error) => {
   console.error('[redesign] workspace event source unavailable', error)
 })
+const connectTaskProgressEvents = createRetryableConnection((error) => {
+  console.error('[redesign] task progress event source unavailable', error)
+})
 
 /**
  * Dispatch a completion event — from the real Tauri listener OR the mock emitter, identically.
@@ -83,6 +101,11 @@ function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
   submittedArchivePathsByTaskId.delete(event.taskId)
   applyWorkspace(event.workspace)
   subscribers.forEach((handler) => handler(event, submittedPaths))
+}
+
+/** Dispatch a progress event from the real listener or a deterministic UI fixture. */
+function dispatchTaskProgressEvent(event: TaskProgressEvent): void {
+  applyTaskProgress(event)
 }
 
 /** Register a workspace-event subscriber. Returns an unsubscribe. */
@@ -99,15 +122,45 @@ export function listenWorkspaceEvent(
  */
 export function ensureWorkspaceEventBus(): Promise<boolean> {
   if (!isTauri()) return Promise.resolve(true)
-  return connectWorkspaceEvents(() =>
-    events.workspaceEvent.listen((event) =>
-      dispatchWorkspaceEvent(event.payload),
+  return Promise.all([
+    connectWorkspaceEvents(() =>
+      events.workspaceEvent.listen((event) =>
+        dispatchWorkspaceEvent(event.payload),
+      ),
     ),
-  )
+    connectTaskProgressEvents(() =>
+      events.taskProgress.listen((event) =>
+        dispatchTaskProgressEvent(event.payload),
+      ),
+    ),
+  ]).then(([workspaceReady, progressReady]) => workspaceReady && progressReady)
 }
 
 export function initWorkspaceEventBus(): Promise<boolean> {
   return ensureWorkspaceEventBus()
+}
+
+if (
+  typeof window !== 'undefined' &&
+  import.meta.env.VITE_E2E_TASK_PROGRESS === '1'
+) {
+  window.__MK_TASK_PROGRESS_E2E__ = {
+    async registerTask(taskId, libraryId) {
+      if (!(await ensureWorkspaceEventBus())) {
+        throw new Error('Task progress listener is unavailable')
+      }
+      addPendingTask({ taskId, libraryId, source: 'sync-button' })
+    },
+    async emit(event) {
+      if (!(await ensureWorkspaceEventBus())) {
+        throw new Error('Task progress listener is unavailable')
+      }
+      await events.taskProgress.emit(event)
+    },
+    clearTask(taskId) {
+      removePendingTask(taskId)
+    },
+  }
 }
 
 function surfaceError(error: SError): void {
@@ -180,6 +233,7 @@ async function plainCommand(
 async function fireAndTrack(
   label: string,
   libraryId: LibraryId,
+  source: PendingTaskSource,
   real: (taskId: string) => Promise<CommandResult<OperationAccepted, SError>>,
   mockComplete: (taskId: string) => void,
   onTaskRegistered?: (taskId: string) => void,
@@ -192,7 +246,7 @@ async function fireAndTrack(
     invoke: real,
     registerPending: () => {
       const taskId = crypto.randomUUID()
-      addPendingTask({ taskId, libraryId })
+      addPendingTask({ taskId, libraryId, source })
       onTaskRegistered?.(taskId)
       return taskId
     },
@@ -405,6 +459,7 @@ export async function syncMods(
   return fireAndTrack(
     'syncMods',
     libraryId,
+    'sync-button',
     (taskId) => commands.syncMods({ taskId, libraryId }),
     (taskId) => {
       const workspace = structuredClone(getMockWorkspace())
@@ -429,6 +484,7 @@ export async function rebuildLibraryCache(
   return fireAndTrack(
     'rebuildLibraryCache',
     libraryId,
+    'other',
     (taskId) => commands.rebuildLibraryCache({ taskId, libraryId }),
     (taskId) => {
       const workspace = structuredClone(getMockWorkspace())
@@ -453,11 +509,13 @@ export async function rebuildLibraryCache(
 export async function installModArchives(input: {
   libraryId: LibraryId
   paths: string[]
+  source?: PendingTaskSource
 }): Promise<OperationAccepted> {
-  const { libraryId, paths } = input
+  const { libraryId, paths, source = 'other' } = input
   return fireAndTrack(
     'installModArchives',
     libraryId,
+    source,
     (taskId) =>
       commands.installModArchives({ taskId, libraryId, archivePaths: paths }),
     (taskId) => {

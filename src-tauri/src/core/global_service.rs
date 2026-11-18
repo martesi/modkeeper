@@ -181,6 +181,13 @@ pub fn assemble_workspace(
                     } else {
                         library_updated_at.clone()
                     },
+                    version: m.version.clone(),
+                    forge_id: m.forge_id,
+                    forge_guid: m.forge_guid.clone(),
+                    source: Some(m.source.clone()),
+                    forge_kind: m.forge_kind.clone(),
+                    forge_version_id: m.forge_version_id,
+                    forge_meta_cached_at: m.forge_meta_cached_at.clone(),
                 }
             })
             .collect();

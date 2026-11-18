@@ -284,6 +284,13 @@ impl Library {
     /// Plan/preflight → compatibility purge → Deploy → Mark Clean → Persist.
     /// The canonical way to apply mod activation changes to the game directory.
     pub fn sync(&mut self) -> Result<(), SError> {
+        self.sync_with_progress(|_, _| {})
+    }
+
+    pub fn sync_with_progress(
+        &mut self,
+        mut progress: impl FnMut(crate::models::task_progress::TaskProgressStage, Option<f64>),
+    ) -> Result<(), SError> {
         use crate::core::{cleanup, deployment};
         let current_rules = SPTPathRules::for_game_root(&self.game_root)?;
         let current_paths = current_rules.clone().to_absolute(&self.game_root);
@@ -300,11 +307,31 @@ impl Library {
         self.game_rules = current_rules;
         self.spt_paths_canonical = SPTPathCanonical::from_spt_paths(current_paths)?;
         self.spt_version = current_version;
+        progress(
+            crate::models::task_progress::TaskProgressStage::SyncPlan,
+            None,
+        );
         let plan = deployment::plan(self)?;
+        progress(
+            crate::models::task_progress::TaskProgressStage::SyncPreflight,
+            None,
+        );
         deployment::preflight(self, &plan)?;
+        progress(
+            crate::models::task_progress::TaskProgressStage::SyncCleanup,
+            None,
+        );
         cleanup::purge(self)?;
+        progress(
+            crate::models::task_progress::TaskProgressStage::SyncDeploy,
+            None,
+        );
         deployment::deploy(self, plan)?;
         self.mark_clean();
+        progress(
+            crate::models::task_progress::TaskProgressStage::SyncPersist,
+            None,
+        );
         self.persist()
     }
 }

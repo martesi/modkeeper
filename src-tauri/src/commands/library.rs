@@ -1,8 +1,10 @@
 use crate::commands::log_err;
 use crate::core::library::Library;
 use crate::core::registry::AppRegistry;
+use crate::core::task_progress::{TaskProgressEmitter, TaskProgressOutcome, archive_outcome};
 use crate::core::{global_service, library_service};
 use crate::models::error::SError;
+use crate::models::task_progress::{TaskOperation, TaskProgressStage};
 use crate::models::workspace::{
     BulkUpdateModsInput, CacheState, CacheStatus, DeleteLibraryInput, InstallModArchivesInput,
     LibraryWorkspace, ModFailure, OperationAccepted, RebuildLibraryCacheInput, RenameLibraryInput,
@@ -133,22 +135,29 @@ pub async fn sync_mods(
     state: State<'_, AppRegistry>,
     input: SyncModsInput,
 ) -> Result<OperationAccepted, SError> {
-    log_err((|| {
+    let mut progress = TaskProgressEmitter::new(
+        app.clone(),
+        input.task_id.clone(),
+        input.library_id.clone(),
+        TaskOperation::Sync,
+    );
+    log_err(progress.start_after_admission((|| {
         if state.is_game_or_server_running()? {
             return Err(SError::GameOrServerRunning);
         }
         state.assert_active_library(&input.library_id)?;
         state.begin_task(&input.task_id)
-    })())?;
+    })()))?;
 
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
     let tasks = state.in_flight_tasks.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let failures = match library_service::sync_active_library(
+        let failures = match library_service::sync_active_library_with_progress(
             instance_handle.clone(),
             &input.library_id,
+            |stage, percent| progress.progress(stage, percent),
         ) {
             Ok(()) => Vec::new(),
             Err(error) => {
@@ -160,7 +169,12 @@ pub async fn sync_mods(
             }
         };
 
-        finish_task(&tasks, &input.task_id);
+        progress.completed(if failures.is_empty() {
+            TaskProgressOutcome::Success
+        } else {
+            TaskProgressOutcome::Failure
+        });
+        let task_id = input.task_id.clone();
         let event = WorkspaceEvent::SyncCompleted {
             task_id: input.task_id,
             library_id: input.library_id,
@@ -170,6 +184,7 @@ pub async fn sync_mods(
         if let Err(e) = event.emit(&app) {
             tracing::error!("Failed to emit sync_completed: {e}");
         }
+        finish_task(&tasks, &task_id);
     });
 
     Ok(OperationAccepted::new())
@@ -184,12 +199,18 @@ pub async fn install_mod_archives(
     state: State<'_, AppRegistry>,
     input: InstallModArchivesInput,
 ) -> Result<OperationAccepted, SError> {
-    let material = log_err((|| {
+    let mut progress = TaskProgressEmitter::new(
+        app.clone(),
+        input.task_id.clone(),
+        input.library_id.clone(),
+        TaskOperation::Install,
+    );
+    let material = log_err(progress.start_after_admission((|| {
         state.assert_active_library(&input.library_id)?;
         let material = state.get_stage_material("Unknown mod".to_string())?;
         state.begin_task(&input.task_id)?;
         Ok(material)
-    })())?;
+    })()))?;
 
     let enable_on_install = state
         .app_config
@@ -200,23 +221,26 @@ pub async fn install_mod_archives(
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
     let tasks = state.in_flight_tasks.clone();
+    let archive_count = input.archive_paths.len();
 
     tauri::async_runtime::spawn_blocking(move || {
         let archives: Vec<Utf8PathBuf> =
             input.archive_paths.iter().map(Utf8PathBuf::from).collect();
 
-        let failures = library_service::install_mod_archives(
+        let failures = library_service::install_mod_archives_with_progress(
             instance_handle.clone(),
             &input.library_id,
             &material,
             &archives,
             enable_on_install,
+            |stage: TaskProgressStage, percent| progress.progress(stage, percent),
         );
         for failure in &failures {
             tracing::error!("{}: {}", failure.archive_path, failure.error);
         }
 
-        finish_task(&tasks, &input.task_id);
+        let task_id = input.task_id.clone();
+        progress.completed(archive_outcome(failures.len(), archive_count));
         let event = WorkspaceEvent::ModInstallCompleted {
             task_id: input.task_id,
             library_id: input.library_id,
@@ -226,6 +250,7 @@ pub async fn install_mod_archives(
         if let Err(e) = event.emit(&app) {
             tracing::error!("Failed to emit mod_install_completed: {e}");
         }
+        finish_task(&tasks, &task_id);
     });
 
     Ok(OperationAccepted::new())
@@ -240,19 +265,26 @@ pub async fn rebuild_library_cache(
     state: State<'_, AppRegistry>,
     input: RebuildLibraryCacheInput,
 ) -> Result<OperationAccepted, SError> {
-    log_err((|| {
+    let mut progress = TaskProgressEmitter::new(
+        app.clone(),
+        input.task_id.clone(),
+        input.library_id.clone(),
+        TaskOperation::CacheRebuild,
+    );
+    log_err(progress.start_after_admission((|| {
         state.assert_active_library(&input.library_id)?;
         state.begin_task(&input.task_id)
-    })())?;
+    })()))?;
 
     let config_handle = state.app_config.clone();
     let instance_handle = state.active_instance.clone();
     let tasks = state.in_flight_tasks.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let cache_status = match library_service::rebuild_active_library_cache(
+        let cache_status = match library_service::rebuild_active_library_cache_with_progress(
             instance_handle.clone(),
             &input.library_id,
+            |stage, percent| progress.progress(stage, percent),
         ) {
             Ok(()) => CacheStatus {
                 state: CacheState::Ready,
@@ -269,7 +301,12 @@ pub async fn rebuild_library_cache(
             }
         };
 
-        finish_task(&tasks, &input.task_id);
+        progress.completed(if cache_status.state == CacheState::Ready {
+            TaskProgressOutcome::Success
+        } else {
+            TaskProgressOutcome::Failure
+        });
+        let task_id = input.task_id.clone();
         let event = WorkspaceEvent::CacheRebuildCompleted {
             task_id: input.task_id,
             library_id: input.library_id,
@@ -279,6 +316,7 @@ pub async fn rebuild_library_cache(
         if let Err(e) = event.emit(&app) {
             tracing::error!("Failed to emit cache_rebuild_completed: {e}");
         }
+        finish_task(&tasks, &task_id);
     });
 
     Ok(OperationAccepted::new())

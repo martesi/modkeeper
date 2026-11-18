@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createStore, getDefaultStore } from 'jotai'
 import { getMockWorkspace } from '../data/example-data'
+import { runTrackedCommand } from '../data/runtime-boundary'
 import type { ModSummary } from '../data/redesign-types'
+import type { TaskProgressEvent } from '../data/redesign-types'
 import {
+  addPendingTask,
+  applyTaskProgress,
   clearLibraryFiltersAtom,
   clearLibrarySearchAtom,
   libraryBusyAtom,
@@ -10,14 +14,49 @@ import {
   librarySortAtom,
   libraryStatusFilterAtom,
   libraryTypeFilterAtom,
+  libraryViewModeAtom,
   libraryWorkspaceAtom,
   pendingTasksAtom,
+  removePendingTask,
   selectedModIdsAtom,
   setWorkspace,
   visibleModsAtom,
   type LibrarySort,
   type LibraryTypeFilter,
+  type PendingTask,
 } from './library-state'
+
+function pendingTask(
+  taskId: string,
+  libraryId: string,
+  source: PendingTask['source'],
+): PendingTask {
+  return {
+    taskId,
+    libraryId,
+    source,
+    operation: null,
+    stage: null,
+    percent: null,
+    logTail: [],
+    lastSequence: -1,
+    terminal: false,
+  }
+}
+
+function progress(
+  input: Partial<TaskProgressEvent> &
+    Pick<TaskProgressEvent, 'taskId' | 'libraryId' | 'sequence'>,
+): TaskProgressEvent {
+  return {
+    operation: 'sync',
+    kind: 'progress',
+    stage: 'sync_plan',
+    percent: null,
+    log: null,
+    ...input,
+  }
+}
 
 function setupLibrary() {
   const workspace = structuredClone(getMockWorkspace())
@@ -84,6 +123,15 @@ function resetDefaultStore() {
 
 beforeEach(resetDefaultStore)
 afterEach(resetDefaultStore)
+
+describe('library view mode', () => {
+  test('defaults to list and accepts the other presentations', () => {
+    const store = createStore()
+    expect(store.get(libraryViewModeAtom)).toBe('list')
+    store.set(libraryViewModeAtom, 'icons')
+    expect(store.get(libraryViewModeAtom)).toBe('icons')
+  })
+})
 
 describe('library sorting', () => {
   const cases: [LibrarySort, string[]][] = [
@@ -227,13 +275,13 @@ describe('default library store helpers', () => {
     const { workspace } = setupLibrary()
     setWorkspace(workspace)
     store.set(pendingTasksAtom, [
-      { taskId: 'active-task', libraryId: 'lib-example' },
-      { taskId: 'other-task', libraryId: 'lib-other' },
+      pendingTask('active-task', 'lib-example', 'sync-button'),
+      pendingTask('other-task', 'lib-other', 'other'),
     ])
     expect(store.get(libraryBusyAtom)).toBe(true)
 
     store.set(pendingTasksAtom, [
-      { taskId: 'other-task', libraryId: 'lib-other' },
+      pendingTask('other-task', 'lib-other', 'other'),
     ])
     expect(store.get(libraryBusyAtom)).toBe(false)
 
@@ -242,5 +290,226 @@ describe('default library store helpers', () => {
     otherWorkspace.modsByLibraryId['lib-other'] = []
     setWorkspace(otherWorkspace)
     expect(store.get(libraryBusyAtom)).toBe(true)
+  })
+
+  test('interleaved updates stay isolated by task and library', () => {
+    const store = getDefaultStore()
+    addPendingTask(pendingTask('sync-a', 'lib-a', 'sync-button'))
+    addPendingTask(pendingTask('install-b', 'lib-b', 'add-button'))
+
+    expect(
+      applyTaskProgress(
+        progress({
+          taskId: 'sync-a',
+          libraryId: 'lib-a',
+          sequence: 1,
+          operation: 'sync',
+          stage: 'sync_deploy',
+          percent: 35,
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      applyTaskProgress(
+        progress({
+          taskId: 'install-b',
+          libraryId: 'lib-b',
+          sequence: 0,
+          operation: 'forge_install',
+          stage: 'forge_download',
+          percent: 72,
+        }),
+      ),
+    ).toBe(true)
+
+    expect(store.get(pendingTasksAtom)).toMatchObject([
+      {
+        taskId: 'sync-a',
+        source: 'sync-button',
+        operation: 'sync',
+        stage: 'sync_deploy',
+        percent: 35,
+        lastSequence: 1,
+      },
+      {
+        taskId: 'install-b',
+        source: 'add-button',
+        operation: 'forge_install',
+        stage: 'forge_download',
+        percent: 72,
+        lastSequence: 0,
+      },
+    ])
+  })
+
+  test('ignores unknown, misrouted, duplicate, out-of-order, and terminal updates', () => {
+    const store = getDefaultStore()
+    addPendingTask(pendingTask('known', 'lib-a', 'sync-button'))
+    const first = progress({
+      taskId: 'known',
+      libraryId: 'lib-a',
+      sequence: 3,
+      percent: 20,
+    })
+
+    expect(applyTaskProgress(progress({ ...first, taskId: 'unknown' }))).toBe(
+      false,
+    )
+    expect(applyTaskProgress(progress({ ...first, libraryId: 'lib-b' }))).toBe(
+      false,
+    )
+    expect(applyTaskProgress(first)).toBe(true)
+    expect(applyTaskProgress(first)).toBe(false)
+    expect(
+      applyTaskProgress(progress({ ...first, sequence: 2, percent: 90 })),
+    ).toBe(false)
+
+    expect(
+      applyTaskProgress(
+        progress({
+          ...first,
+          sequence: 4,
+          kind: 'completed',
+          stage: 'task_failed',
+          percent: null,
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      applyTaskProgress(progress({ ...first, sequence: 5, percent: 100 })),
+    ).toBe(false)
+    expect(store.get(pendingTasksAtom)[0]).toMatchObject({
+      percent: null,
+      stage: 'task_failed',
+      lastSequence: 4,
+      terminal: true,
+    })
+  })
+
+  test('bounds the log tail and ignores late progress after completion clears pending', () => {
+    const store = getDefaultStore()
+    addPendingTask(pendingTask('logged-task', 'lib-a', 'add-button'))
+
+    for (let sequence = 0; sequence < 25; sequence += 1) {
+      applyTaskProgress(
+        progress({
+          taskId: 'logged-task',
+          libraryId: 'lib-a',
+          sequence,
+          log: { level: 'info', code: `step-${sequence}`, message: 'Updated' },
+        }),
+      )
+    }
+
+    expect(store.get(pendingTasksAtom)[0]?.logTail).toHaveLength(20)
+    expect(store.get(pendingTasksAtom)[0]?.logTail[0]?.code).toBe('step-5')
+
+    const unmount = store.sub(pendingTasksAtom, () => {})
+    unmount()
+    expect(store.get(pendingTasksAtom)[0]?.logTail).toHaveLength(20)
+
+    removePendingTask('logged-task')
+    expect(
+      applyTaskProgress(
+        progress({
+          taskId: 'logged-task',
+          libraryId: 'lib-a',
+          sequence: 26,
+        }),
+      ),
+    ).toBe(false)
+    expect(store.get(pendingTasksAtom)).toEqual([])
+  })
+
+  test('completion can clear a task when every progress event was lost', () => {
+    const store = getDefaultStore()
+    addPendingTask(pendingTask('no-progress', 'lib-a', 'sync-button'))
+
+    expect(removePendingTask('no-progress')).toBe(true)
+    expect(
+      applyTaskProgress(
+        progress({
+          taskId: 'no-progress',
+          libraryId: 'lib-a',
+          sequence: 1,
+          percent: 50,
+        }),
+      ),
+    ).toBe(false)
+    expect(store.get(pendingTasksAtom)).toEqual([])
+  })
+
+  test('action loaders follow exact task IDs through completion, rejection, and remount', async () => {
+    const store = getDefaultStore()
+    addPendingTask({
+      taskId: 'unrelated-task',
+      libraryId: 'lib-example',
+      source: 'other',
+    })
+
+    const unmount = store.sub(pendingTasksAtom, () => {})
+    unmount()
+    const remount = store.sub(pendingTasksAtom, () => {})
+    expect(store.get(pendingTasksAtom)).toHaveLength(1)
+    remount()
+
+    const completed = await runTrackedCommand({
+      isTauri: true,
+      registerPending: () => {
+        addPendingTask({
+          taskId: 'fast-sync',
+          libraryId: 'lib-example',
+          source: 'sync-button',
+        })
+        return 'fast-sync'
+      },
+      invoke: async (taskId) => {
+        removePendingTask('unrelated-task')
+        expect(store.get(pendingTasksAtom)).toEqual([
+          pendingTask(taskId, 'lib-example', 'sync-button'),
+        ])
+        applyTaskProgress(
+          progress({
+            taskId,
+            libraryId: 'lib-example',
+            sequence: 0,
+            stage: 'sync_deploy',
+            percent: 50,
+          }),
+        )
+        expect(store.get(pendingTasksAtom)[0]?.source).toBe('sync-button')
+        removePendingTask(taskId)
+        return { status: 'ok', data: { accepted: true } }
+      },
+      clearPending: removePendingTask,
+      mockComplete: () => {},
+      schedule: () => {},
+      onDomainError: () => {},
+      onTransportError: () => {},
+    })
+    expect(completed.accepted).toBe(true)
+    expect(store.get(pendingTasksAtom)).toEqual([])
+
+    const rejected = await runTrackedCommand({
+      isTauri: true,
+      registerPending: () => {
+        addPendingTask({
+          taskId: 'rejected-add',
+          libraryId: 'lib-example',
+          source: 'add-button',
+        })
+        return 'rejected-add'
+      },
+      invoke: async () => ({ status: 'error', error: 'rejected' }),
+      clearPending: (taskId) => {
+        removePendingTask(taskId)
+      },
+      mockComplete: () => {},
+      schedule: () => {},
+      onDomainError: () => {},
+      onTransportError: () => {},
+    })
+    expect(rejected.accepted).toBe(false)
+    expect(store.get(pendingTasksAtom)).toEqual([])
   })
 })

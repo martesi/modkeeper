@@ -33,6 +33,16 @@ export const commands = {
 	 *  otherwise only the row goes, so re-adding re-adopts the id (C7).
 	 */
 	deleteLibrary: (input: DeleteLibraryInput) => typedError<LibraryWorkspace_Serialize, SError>(__TAURI_INVOKE("delete_library", { input })),
+	forgeSearch: (query: string, modPage: number, addonPage: number, perPage: number) => typedError<ForgeSearchResponse_Serialize, SError>(__TAURI_INVOKE("forge_search", { query, modPage, addonPage, perPage })),
+	forgeModDetail: (kind: ForgeKind, id: number) => typedError<ForgeDetail_Serialize, SError>(__TAURI_INVOKE("forge_mod_detail", { kind, id })),
+	forgeModVersions: (kind: ForgeKind, id: number, page: number) => typedError<ForgeVersionsPage_Serialize, SError>(__TAURI_INVOKE("forge_mod_versions", { kind, id, page })),
+	forgeAddonVersions: (id: number, page: number) => typedError<ForgeVersionsPage_Serialize, SError>(__TAURI_INVOKE("forge_addon_versions", { id, page })),
+	forgeDownloadVersion: (input: ForgeDownloadVersionInput) => typedError<OperationAccepted, SError>(__TAURI_INVOKE("forge_download_version", { input })),
+	/**
+	 *  Applies a user-selected Forge match to an existing local install without
+	 *  attempting to inspect its DLLs or archive contents.
+	 */
+	forgeMatchInstalledMod: (input: ForgeMatchInstalledModInput) => typedError<LibraryWorkspace_Serialize, SError>(__TAURI_INVOKE("forge_match_installed_mod", { input })),
 	/**
 	 *  The startup command: returns the full workspace and, as the first frontend
 	 *  call, carries the watchdog handoff (C11) and shows the window (prevents an
@@ -53,6 +63,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	taskProgress: makeEvent<TaskProgressEvent_Serialize, TaskProgressEvent_Deserialize>("task_progress"),
 	workspaceEvent: makeEvent<WorkspaceEvent_Serialize, WorkspaceEvent_Deserialize>("workspace-event"),
 };
 
@@ -123,6 +134,224 @@ export type CreateLibraryInput_Serialize = {
 export type DeleteLibraryInput = {
 	libraryId: string,
 	deleteFiles: boolean,
+};
+
+export type ForgeAddonParent = ForgeAddonParent_Serialize | ForgeAddonParent_Deserialize;
+
+export type ForgeAddonParent_Deserialize = {
+	id: number,
+	guid: string,
+	name: string,
+	detailUrl?: string | null,
+};
+
+export type ForgeAddonParent_Serialize = {
+	id: number,
+	guid: string,
+	name: string,
+	detailUrl: string | null,
+};
+
+export type ForgeDependency = ForgeDependency_Serialize | ForgeDependency_Deserialize;
+
+export type ForgeDependency_Deserialize = {
+	modId?: number | null,
+	modGuid?: string | null,
+	modName?: string | null,
+	versionConstraint?: string | null,
+	isOptional?: boolean | null,
+};
+
+export type ForgeDependency_Serialize = {
+	modId: number | null,
+	modGuid: string | null,
+	modName: string | null,
+	versionConstraint: string | null,
+	isOptional: boolean | null,
+};
+
+export type ForgeDetail = ForgeDetail_Serialize | ForgeDetail_Deserialize;
+
+export type ForgeDetail_Deserialize = {
+	kind: ForgeKind,
+	id: number,
+	guid: string,
+	name: string,
+	slug?: string | null,
+	teaser?: string | null,
+	description?: string | null,
+	thumbnail?: string | null,
+	detailUrl?: string | null,
+	fikaCompatibility?: boolean | null,
+	parentModId?: number | null,
+	parent?: ForgeAddonParent_Deserialize | null,
+	modVersionConstraint?: string | null,
+	isDetached?: boolean | null,
+	stale: boolean,
+};
+
+export type ForgeDetail_Serialize = {
+	kind: ForgeKind,
+	id: number,
+	guid: string,
+	name: string,
+	slug: string | null,
+	teaser: string | null,
+	description: string | null,
+	thumbnail: string | null,
+	detailUrl: string | null,
+	fikaCompatibility: boolean | null,
+	parentModId: number | null,
+	parent: ForgeAddonParent_Serialize | null,
+	modVersionConstraint: string | null,
+	isDetached: boolean | null,
+	stale: boolean,
+};
+
+export type ForgeDownloadVersionInput = {
+	taskId: string,
+	libraryId: string,
+	kind: ForgeKind,
+	itemId: number,
+	versionId: number,
+};
+
+export type ForgeKind = "mod" | "addon";
+
+export type ForgeMatchInstalledModInput = {
+	libraryId: string,
+	installedModId: string,
+	kind: ForgeKind,
+	itemId: number,
+	versionId: number,
+};
+
+export type ForgePageInfo = ForgePageInfo_Serialize | ForgePageInfo_Deserialize;
+
+export type ForgePageInfo_Deserialize = {
+	currentPage?: number | null,
+	lastPage?: number | null,
+	perPage?: number | null,
+	total?: number | null,
+};
+
+export type ForgePageInfo_Serialize = {
+	currentPage: number | null,
+	lastPage: number | null,
+	perPage: number | null,
+	total: number | null,
+};
+
+export type ForgeSearchItem = ForgeSearchItem_Serialize | ForgeSearchItem_Deserialize;
+
+export type ForgeSearchItem_Deserialize = {
+	kind: ForgeKind,
+	id: number,
+	guid: string,
+	name: string,
+	slug?: string | null,
+	teaser?: string | null,
+	thumbnail?: string | null,
+	detailUrl?: string | null,
+	fikaCompatibility?: boolean | null,
+	parentModId?: number | null,
+	parentModGuid?: string | null,
+	parentModName?: string | null,
+	parentModDetailUrl?: string | null,
+	modVersionConstraint?: string | null,
+	isDetached?: boolean | null,
+};
+
+export type ForgeSearchItem_Serialize = {
+	kind: ForgeKind,
+	id: number,
+	guid: string,
+	name: string,
+	slug: string | null,
+	teaser: string | null,
+	thumbnail: string | null,
+	detailUrl: string | null,
+	fikaCompatibility: boolean | null,
+	parentModId: number | null,
+	parentModGuid: string | null,
+	parentModName: string | null,
+	parentModDetailUrl: string | null,
+	modVersionConstraint: string | null,
+	isDetached: boolean | null,
+};
+
+export type ForgeSearchPage = ForgeSearchPage_Serialize | ForgeSearchPage_Deserialize;
+
+export type ForgeSearchPage_Deserialize = {
+	items: ForgeSearchItem_Deserialize[],
+	pagination: ForgePageInfo_Deserialize,
+	stale: boolean,
+};
+
+export type ForgeSearchPage_Serialize = {
+	items: ForgeSearchItem_Serialize[],
+	pagination: ForgePageInfo_Serialize,
+	stale: boolean,
+};
+
+export type ForgeSearchResponse = ForgeSearchResponse_Serialize | ForgeSearchResponse_Deserialize;
+
+export type ForgeSearchResponse_Deserialize = {
+	sptVersion: string,
+	mods: ForgeSearchPage_Deserialize,
+	addons: ForgeSearchPage_Deserialize,
+};
+
+export type ForgeSearchResponse_Serialize = {
+	sptVersion: string,
+	mods: ForgeSearchPage_Serialize,
+	addons: ForgeSearchPage_Serialize,
+};
+
+export type ForgeVersion = ForgeVersion_Serialize | ForgeVersion_Deserialize;
+
+export type ForgeVersion_Deserialize = {
+	kind: ForgeKind,
+	itemId: number,
+	id: number,
+	version: string,
+	description?: string | null,
+	link: string,
+	contentLength: number | null,
+	sptVersionConstraint?: string | null,
+	fikaCompatibility?: string | null,
+	dependencies: ForgeDependency_Deserialize[],
+};
+
+export type ForgeVersion_Serialize = {
+	kind: ForgeKind,
+	itemId: number,
+	id: number,
+	version: string,
+	description: string | null,
+	link: string,
+	contentLength: number | null,
+	sptVersionConstraint: string | null,
+	fikaCompatibility: string | null,
+	dependencies: ForgeDependency_Serialize[],
+};
+
+export type ForgeVersionsPage = ForgeVersionsPage_Serialize | ForgeVersionsPage_Deserialize;
+
+export type ForgeVersionsPage_Deserialize = {
+	kind: ForgeKind,
+	itemId: number,
+	versions: ForgeVersion_Deserialize[],
+	pagination: ForgePageInfo_Deserialize,
+	stale: boolean,
+};
+
+export type ForgeVersionsPage_Serialize = {
+	kind: ForgeKind,
+	itemId: number,
+	versions: ForgeVersion_Serialize[],
+	pagination: ForgePageInfo_Serialize,
+	stale: boolean,
 };
 
 export type InstallModArchivesInput = {
@@ -221,6 +450,8 @@ export type ModFailure = {
 	error: SError,
 };
 
+export type ModSource = "local" | "forge";
+
 export type ModSummary = ModSummary_Serialize | ModSummary_Deserialize;
 
 export type ModSummary_Deserialize = {
@@ -233,6 +464,13 @@ export type ModSummary_Deserialize = {
 	installedPath?: string | null,
 	installedAt?: string | null,
 	updatedAt: string,
+	version?: string | null,
+	forgeId?: number | null,
+	forgeGuid?: string | null,
+	source?: ModSource | null,
+	forgeKind?: ForgeKind | null,
+	forgeVersionId?: number | null,
+	forgeMetaCachedAt?: string | null,
 };
 
 export type ModSummary_Serialize = {
@@ -245,6 +483,13 @@ export type ModSummary_Serialize = {
 	installedPath?: string,
 	installedAt?: string,
 	updatedAt: string,
+	version?: string,
+	forgeId?: number,
+	forgeGuid?: string,
+	source?: ModSource,
+	forgeKind?: ForgeKind,
+	forgeVersionId?: number,
+	forgeMetaCachedAt?: string,
 };
 
 export type ModType = ModType_Serialize | ModType_Deserialize;
@@ -282,6 +527,56 @@ export type SyncModsInput = {
 	taskId: string,
 	libraryId: string,
 };
+
+export type TaskOperation = "sync" | "install" | "forge_install" | "cache_rebuild";
+
+/**
+ *  Progress is deliberately separate from WorkspaceEvent, which remains the
+ *  authoritative completion and workspace refresh event.
+ */
+export type TaskProgressEvent = TaskProgressEvent_Serialize | TaskProgressEvent_Deserialize;
+
+/**
+ *  Progress is deliberately separate from WorkspaceEvent, which remains the
+ *  authoritative completion and workspace refresh event.
+ */
+export type TaskProgressEvent_Deserialize = {
+	taskId: string,
+	libraryId: string,
+	operation: TaskOperation,
+	sequence: number,
+	kind: TaskProgressKind,
+	stage: TaskProgressStage,
+	percent?: number | null,
+	log?: TaskProgressLog | null,
+};
+
+/**
+ *  Progress is deliberately separate from WorkspaceEvent, which remains the
+ *  authoritative completion and workspace refresh event.
+ */
+export type TaskProgressEvent_Serialize = {
+	taskId: string,
+	libraryId: string,
+	operation: TaskOperation,
+	sequence: number,
+	kind: TaskProgressKind,
+	stage: TaskProgressStage,
+	percent: number | null,
+	log: TaskProgressLog | null,
+};
+
+export type TaskProgressKind = "started" | "progress" | "completed";
+
+export type TaskProgressLevel = "info" | "warn" | "error";
+
+export type TaskProgressLog = {
+	level: TaskProgressLevel,
+	code: string,
+	message: string,
+};
+
+export type TaskProgressStage = "task_started" | "task_completed" | "task_partial_failure" | "task_failed" | "sync_plan" | "sync_preflight" | "sync_cleanup" | "sync_deploy" | "sync_persist" | "install_archives" | "install_archive_stage" | "install_commit" | "forge_metadata" | "forge_versions" | "forge_download" | "forge_size_verification" | "forge_parent_validation" | "forge_stage" | "forge_install" | "cache_normalize" | "cache_scan" | "cache_persist";
 
 export type ThemeMode = "system" | "light" | "dark";
 

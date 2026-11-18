@@ -16,6 +16,8 @@ import {
   deriveCacheOutcome,
   deriveSyncOutcome,
 } from '../data/task-outcome'
+import type { TaskOutcome } from '../data/task-outcome'
+import { recordTaskHistory } from '../data/task-history'
 import { useWindowDropZone } from '../shared/hooks/use-window-drop-zone'
 import { setTaskResult } from '../state/library-state'
 import { settingsAtom } from '../state/settings-state'
@@ -57,7 +59,7 @@ function handleWorkspaceEvent(
   submittedPaths?: readonly string[],
 ): void {
   if (event.type === 'mod_install_completed') {
-    setTaskResult(
+    publishTaskResult(
       deriveArchiveOutcome(
         event.failures,
         submittedPaths,
@@ -69,15 +71,20 @@ function handleWorkspaceEvent(
   }
 
   if (event.type === 'sync_completed') {
-    setTaskResult(
+    publishTaskResult(
       deriveSyncOutcome(event.failures, event.libraryId, event.taskId),
     )
     return
   }
 
-  setTaskResult(
+  publishTaskResult(
     deriveCacheOutcome(event.cacheStatus, event.libraryId, event.taskId),
   )
+}
+
+function publishTaskResult(outcome: TaskOutcome): void {
+  setTaskResult(outcome)
+  recordTaskHistory(outcome)
 }
 
 /**

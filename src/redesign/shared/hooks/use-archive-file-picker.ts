@@ -5,7 +5,10 @@
 import { useCallback } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { useAtomValue } from 'jotai'
-import { activeLibraryIdAtom } from '../../state/library-state'
+import {
+  activeLibraryIdAtom,
+  type PendingTaskSource,
+} from '../../state/library-state'
 import { installModArchives } from '../../data/library-repository'
 import { SUPPORTED_ARCHIVE_EXTENSIONS } from '../utils/file-filters'
 import { libraryText } from '../../i18n/library-text'
@@ -32,14 +35,20 @@ async function pickModArchives(): Promise<string[]> {
   return Array.isArray(selection) ? selection : [selection]
 }
 
-/** Returns a callback that picks supported archives and installs them into the active library. */
-export function useArchiveFilePicker(): () => Promise<void> {
+/** Returns a callback that picks archives and tracks them under its initiating control. */
+export function useArchiveFilePicker(
+  source: PendingTaskSource = 'other',
+): () => Promise<void> {
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
 
   return useCallback(async () => {
     if (!activeLibraryId) return
     const paths = await pickModArchives()
     if (paths.length === 0) return
-    await installModArchives({ libraryId: activeLibraryId, paths })
-  }, [activeLibraryId])
+    await installModArchives({
+      libraryId: activeLibraryId,
+      paths,
+      source,
+    })
+  }, [activeLibraryId, source])
 }

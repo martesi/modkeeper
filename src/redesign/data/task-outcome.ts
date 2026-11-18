@@ -8,6 +8,16 @@ import type {
 export type ArchiveTaskFailure = { path: string; error: SError }
 export type SyncTaskFailure = { modId: string; error: SError }
 
+export type ForgeParentGateFailure =
+  | { kind: 'missing'; parentId: number; parentGuid: string }
+  | { kind: 'missing-version'; parentGuid: string }
+  | {
+      kind: 'mismatch'
+      parentGuid: string
+      constraint: string
+      installedVersion: string
+    }
+
 type TaskIdentity = { taskId: string; libraryId: string }
 
 export type InstallTaskOutcome = TaskIdentity & {
@@ -32,6 +42,43 @@ export type CacheTaskOutcome = TaskIdentity & {
 
 export type TaskOutcome =
   InstallTaskOutcome | SyncTaskOutcome | CacheTaskOutcome
+
+export function parseForgeParentGateFailure(
+  error: SError,
+): ForgeParentGateFailure | null {
+  if (error.code !== 'ParseError' || typeof error.data !== 'string') return null
+
+  const missing = error.data.match(
+    /^Forge addon requires installed parent (\d+) \(([^)]+)\)$/,
+  )
+  if (missing) {
+    const parentId = Number(missing[1])
+    if (Number.isSafeInteger(parentId)) {
+      return { kind: 'missing', parentId, parentGuid: missing[2] }
+    }
+  }
+
+  const missingVersion = error.data.match(
+    /^Installed Forge parent (.+) has no recorded version$/,
+  )
+  if (missingVersion) {
+    return { kind: 'missing-version', parentGuid: missingVersion[1] }
+  }
+
+  const mismatch = error.data.match(
+    /^Forge addon requires parent (.+?) at (.+), installed version is (.+)$/,
+  )
+  if (mismatch) {
+    return {
+      kind: 'mismatch',
+      parentGuid: mismatch[1],
+      constraint: mismatch[2],
+      installedVersion: mismatch[3],
+    }
+  }
+
+  return null
+}
 
 export function archiveBasename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path

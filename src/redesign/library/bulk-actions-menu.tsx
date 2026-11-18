@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { ChevronDown, Play, Square, Trash2 } from 'lucide-react'
+import { Loader2, ListChecks, Play, Square, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FidelityButton } from '../shared/components/fidelity-button'
 import { ConfirmDialog } from '../shared/components/confirm-dialog'
+import { LibraryActionIconButton } from './library-action-icon-button'
 import {
   activeLibraryIdAtom,
   libraryBusyAtom,
@@ -20,23 +20,22 @@ import { libraryText } from '../i18n/library-text'
 import { commonText } from '../i18n/common-text'
 
 /**
- * Bulk `ACTIONS · count` menu (reference Modkeeper.dc.html toolbar) on the shadcn DropdownMenu
- * (fix_plan_0.md §7): enable/disable/delete over the current selection via `bulkUpdateMods` —
- * plain awaited, local pending, delete behind a local confirmation.
+ * Selection-gated bulk actions with a per-button pending indicator and delete confirmation.
  */
 export function BulkActionsMenu() {
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const libraryBusy = useAtomValue(libraryBusyAtom)
   const selectedIds = useAtomValue(selectedModIdsAtom)
-  const [pending, setPending] = useState(false)
+  const [pendingAction, setPendingAction] = useState<BulkModAction | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const count = selectedIds.size
+  const pending = pendingAction !== null
   const disabled = count === 0 || libraryBusy || pending || !activeLibraryId
 
   async function run(action: BulkModAction) {
-    if (!activeLibraryId) return
-    setPending(true)
+    if (!activeLibraryId || pendingAction) return
+    setPendingAction(action)
     try {
       const outcome = await bulkUpdateMods({
         libraryId: activeLibraryId,
@@ -45,7 +44,7 @@ export function BulkActionsMenu() {
       })
       if (outcome.status === 'success') setConfirmDelete(false)
     } finally {
-      setPending(false)
+      setPendingAction(null)
     }
   }
 
@@ -53,14 +52,12 @@ export function BulkActionsMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <FidelityButton
+          <LibraryActionIconButton
+            icon={ListChecks}
+            label={libraryText.actionsLabel()}
             disabled={disabled}
             busy={pending}
-            className="text-[13px] font-semibold"
-          >
-            {libraryText.actions(count)}
-            <ChevronDown />
-          </FidelityButton>
+          />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
@@ -69,21 +66,38 @@ export function BulkActionsMenu() {
         >
           <DropdownMenuItem
             className="rounded-sm"
-            onSelect={() => void run('enable')}
+            disabled={pending}
+            onSelect={(event) => {
+              event.preventDefault()
+              void run('enable')
+            }}
           >
-            <Play aria-hidden />
+            {pendingAction === 'enable' ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Play aria-hidden />
+            )}
             {libraryText.enableSelected()}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="rounded-sm"
-            onSelect={() => void run('disable')}
+            disabled={pending}
+            onSelect={(event) => {
+              event.preventDefault()
+              void run('disable')
+            }}
           >
-            <Square aria-hidden />
+            {pendingAction === 'disable' ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Square aria-hidden />
+            )}
             {libraryText.disableSelected()}
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             className="rounded-sm"
+            disabled={pending}
             onSelect={() => setConfirmDelete(true)}
           >
             <Trash2 aria-hidden />
@@ -100,7 +114,7 @@ export function BulkActionsMenu() {
         confirmLabel={libraryText.deleteConfirm()}
         cancelLabel={commonText.cancel()}
         destructive
-        busy={pending}
+        busy={pendingAction === 'delete'}
         onConfirm={() => void run('delete')}
       />
     </>

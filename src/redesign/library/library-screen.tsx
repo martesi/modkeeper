@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { Plus, RefreshCw } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { FidelityButton } from '../shared/components/fidelity-button'
+import { Plus, RefreshCw, Settings2 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   activeLibraryAtom,
+  activeLibraryIdAtom,
   libraryBusyAtom,
   modListAtom,
+  pendingTasksAtom,
 } from '../state/library-state'
 import { syncMods } from '../data/library-repository'
 import { useArchiveFilePicker } from '../shared/hooks/use-archive-file-picker'
@@ -16,6 +17,7 @@ import { LibraryDropEmptyState } from './library-drop-empty-state'
 import { ModGridToolbar } from './mod-grid-toolbar'
 import { ModGrid } from './mod-grid'
 import { ManageLibraryDialog } from './manage-library/manage-library-dialog'
+import { LibraryActionIconButton } from './library-action-icon-button'
 
 /**
  * Library screen with named library actions and the active workspace content.
@@ -38,7 +40,7 @@ export function LibraryScreen() {
       if (document.querySelector('[role="dialog"][data-state="open"]')) return
 
       const searchInput = document.querySelector<HTMLInputElement>(
-        '[data-library-search]',
+        '[data-library-search]:not(:disabled)',
       )
       if (!searchInput) return
 
@@ -65,9 +67,6 @@ export function LibraryScreen() {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-[26px] font-semibold leading-tight text-foreground">
-            {libraryText.title()}
-          </h1>
           <p className="text-[13px] text-muted-foreground">
             {activeLibrary
               ? libraryText.subtitleModsInstalled(mods.length)
@@ -99,8 +98,7 @@ export function LibraryScreen() {
 }
 
 /**
- * Named library actions stay visible beside the page title; Manage remains available without an
- * active library.
+ * Library actions remain available in the section header; Manage works without an active library.
  *
  * Note: the reference labels the spinner "Rebuild cache"; the real operation the library needs
  * here is the deploy Sync (rebuild lives in the Manage Library footer).
@@ -111,44 +109,73 @@ function LibraryHeaderToolbar({
   onManageLibraries: () => void
 }) {
   const activeLibrary = useAtomValue(activeLibraryAtom)
+  const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const libraryBusy = useAtomValue(libraryBusyAtom)
-  const pickAndInstall = useArchiveFilePicker()
+  const pendingTasks = useAtomValue(pendingTasksAtom)
+  const pickAndInstall = useArchiveFilePicker('add-button')
+  const [pickerPending, setPickerPending] = useState(false)
+  const syncPending = pendingTasks.some(
+    (task) =>
+      task.libraryId === activeLibrary?.id && task.source === 'sync-button',
+  )
+  const installPending =
+    pickerPending ||
+    pendingTasks.some(
+      (task) =>
+        task.libraryId === activeLibrary?.id && task.source === 'add-button',
+    )
+
+  function handleSync() {
+    if (!activeLibrary) return
+    void syncMods(activeLibrary.id).catch((error: unknown) => {
+      console.error('[redesign] sync action failed', error)
+    })
+  }
+
+  function handleInstall() {
+    if (!activeLibraryId) return
+    setPickerPending(true)
+    void pickAndInstall()
+      .then(() => setPickerPending(false))
+      .catch((error: unknown) => {
+        setPickerPending(false)
+        toast.error(libraryText.archiveImportActionFailed())
+        console.error('[redesign] archive import action failed', error)
+      })
+  }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-      <FidelityButton variant="secondary" onClick={onManageLibraries}>
-        {libraryText.manageLibraries()}
-      </FidelityButton>
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+      <LibraryActionIconButton
+        icon={Settings2}
+        label={libraryText.manageLibraries()}
+        variant="ghost"
+        onClick={onManageLibraries}
+      />
       {activeLibrary && (
         <>
-          <FidelityButton
-            variant="secondary"
-            busy={libraryBusy}
-            className={cn(
-              activeLibrary.deployStale &&
-                'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15',
-            )}
-            title={
-              activeLibrary.deployStale ? libraryText.deployStale() : undefined
+          <LibraryActionIconButton
+            icon={RefreshCw}
+            label={libraryText.sync()}
+            tooltip={
+              activeLibrary.deployStale
+                ? libraryText.deployStale()
+                : libraryText.sync()
             }
-            onClick={() => void syncMods(activeLibrary.id)}
-          >
-            {!libraryBusy && (
-              <RefreshCw
-                className={activeLibrary.deployStale ? 'text-primary' : ''}
-                aria-hidden
-              />
-            )}
-            {libraryBusy ? libraryText.syncing() : libraryText.sync()}
-          </FidelityButton>
-          <FidelityButton
-            variant="primary"
+            variant={activeLibrary.deployStale ? 'soft' : 'ghost'}
+            busy={syncPending}
             disabled={libraryBusy}
-            onClick={() => void pickAndInstall()}
-          >
-            <Plus aria-hidden />
-            {libraryText.addMod()}
-          </FidelityButton>
+            className={activeLibrary.deployStale ? 'text-primary' : undefined}
+            onClick={handleSync}
+          />
+          <LibraryActionIconButton
+            icon={Plus}
+            label={libraryText.addMod()}
+            variant="primary"
+            busy={installPending}
+            disabled={libraryBusy}
+            onClick={handleInstall}
+          />
         </>
       )}
     </div>

@@ -1,10 +1,20 @@
 import { useAtom, useAtomValue } from 'jotai'
-import { ChevronDown, Search } from 'lucide-react'
+import { useRouterState } from '@tanstack/react-router'
+import {
+  ArrowUpDown,
+  ListFilter,
+  MoreHorizontal,
+  Search,
+  Tags,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { FidelityPanel } from '../shared/components/fidelity-panel'
@@ -12,6 +22,8 @@ import { FidelityCheckbox } from '../shared/components/fidelity-checkbox'
 import { FidelityButton } from '../shared/components/fidelity-button'
 import { FidelityInput } from '../shared/components/fidelity-input'
 import { BulkActionsMenu } from './bulk-actions-menu'
+import { LibraryActionIconButton } from './library-action-icon-button'
+import { LibraryViewModeSelector } from './library-view-mode-selector'
 import {
   libraryBusyAtom,
   librarySearchAtom,
@@ -26,13 +38,11 @@ import {
 } from '../state/library-state'
 import { libraryText } from '../i18n/library-text'
 
-/**
- * Grid toolbar (reference Modkeeper.dc.html): one card row with Select All, the Sort and Filter
- * dropdowns, the bulk ACTIONS menu, and search. Bulk-affecting controls are disabled while the
- * library is busy so a queued action reads as "library busy," not a hang; search/sort/filter stay
- * live — they are local.
- */
+/** Search, presentation, sorting and bulk actions for the active library. */
 export function ModGridToolbar() {
+  const titlebarSearchEnabled = useRouterState({
+    select: (state) => state.location.pathname.startsWith('/library'),
+  })
   const libraryBusy = useAtomValue(libraryBusyAtom)
   const visibleMods = useAtomValue(visibleModsAtom)
   const [selectedIds, setSelectedIds] = useAtom(selectedModIdsAtom)
@@ -47,7 +57,6 @@ export function ModGridToolbar() {
   const allVisibleSelected =
     visibleMods.length > 0 && visibleSelectedCount === visibleMods.length
 
-  // Select All operates on the VISIBLE set only (§12.3); off-screen selections are untouched.
   function handleSelectAll(checked: boolean) {
     const next = new Set(selectedIds)
     for (const mod of visibleMods) {
@@ -77,13 +86,6 @@ export function ModGridToolbar() {
     { value: 'unknown', label: libraryText.typeFilterUnknown() },
   ]
 
-  const sortLabel =
-    sortOptions.find((option) => option.value === sort)?.label ?? ''
-  const filterLabel =
-    filterOptions.find((option) => option.value === statusFilter)?.label ?? ''
-  const typeFilterLabel =
-    typeFilterOptions.find((option) => option.value === typeFilter)?.label ?? ''
-
   return (
     <FidelityPanel className="flex flex-wrap items-center gap-2 p-2">
       <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-muted-foreground">
@@ -94,72 +96,91 @@ export function ModGridToolbar() {
           disabled={libraryBusy || visibleMods.length === 0}
           aria-label={libraryText.selectAllVisible()}
         />
-        {libraryText.selectAll()}
+        <span className="hidden lg:inline">{libraryText.selectAll()}</span>
       </label>
 
-      <OptionMenu
-        label={libraryText.sortLabel()}
-        valueLabel={sortLabel}
-        value={sort}
-        options={sortOptions}
-        onChange={(value) => setSort(value)}
-      />
-      <OptionMenu
-        label={libraryText.filterLabel()}
-        valueLabel={filterLabel}
-        value={statusFilter}
-        options={filterOptions}
-        onChange={(value) => setStatusFilter(value)}
-      />
-      <OptionMenu
-        label={libraryText.typeFilterLabel()}
-        valueLabel={typeFilterLabel}
-        value={typeFilter}
-        options={typeFilterOptions}
-        onChange={(value) => setTypeFilter(value)}
-      />
+      <div className="hidden items-center gap-1 sm:flex">
+        <OptionMenu
+          label={libraryText.sortLabel()}
+          icon={ArrowUpDown}
+          value={sort}
+          options={sortOptions}
+          onChange={setSort}
+        />
+        <OptionMenu
+          label={libraryText.filterLabel()}
+          icon={ListFilter}
+          value={statusFilter}
+          options={filterOptions}
+          onChange={setStatusFilter}
+        />
+        <OptionMenu
+          label={libraryText.typeFilterLabel()}
+          icon={Tags}
+          value={typeFilter}
+          options={typeFilterOptions}
+          onChange={setTypeFilter}
+        />
+      </div>
+
+      <div className="sm:hidden">
+        <OverflowOptions
+          sort={sort}
+          statusFilter={statusFilter}
+          typeFilter={typeFilter}
+          sortOptions={sortOptions}
+          filterOptions={filterOptions}
+          typeFilterOptions={typeFilterOptions}
+          onSortChange={setSort}
+          onStatusFilterChange={setStatusFilter}
+          onTypeFilterChange={setTypeFilter}
+        />
+      </div>
 
       <BulkActionsMenu />
 
-      <div className="relative min-w-44 flex-1">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <FidelityInput
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={libraryText.searchPlaceholder()}
-          aria-label={libraryText.searchLabel()}
-          data-library-search=""
-          onKeyDown={(event) => {
-            if (
-              event.key !== 'Escape' ||
-              event.nativeEvent.isComposing ||
-              search === ''
-            ) {
-              return
-            }
-            setSearch('')
-          }}
-          className="pl-9"
-        />
-      </div>
+      {!titlebarSearchEnabled && (
+        <div className="relative min-w-36 flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <FidelityInput
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={libraryText.searchPlaceholder()}
+            aria-label={libraryText.searchLabel()}
+            data-library-search=""
+            onKeyDown={(event) => {
+              if (
+                event.key !== 'Escape' ||
+                event.nativeEvent.isComposing ||
+                search === ''
+              ) {
+                return
+              }
+              setSearch('')
+            }}
+            className="pl-9"
+          />
+        </div>
+      )}
+
+      <LibraryViewModeSelector />
     </FidelityPanel>
   )
 }
 
-/** A "Label: Value ⌄" dropdown on the shadcn DropdownMenu radio group (fix_plan_0.md §2/§7). */
 function OptionMenu<Value extends string>({
   label,
-  valueLabel,
+  icon: Icon,
   value,
   options,
   onChange,
 }: {
   label: string
-  valueLabel: string
+  icon: typeof ArrowUpDown
   value: Value
   options: { value: Value; label: string }[]
   onChange: (value: Value) => void
@@ -167,19 +188,23 @@ function OptionMenu<Value extends string>({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <FidelityButton variant="secondary" className="text-[13px]">
-          {label}: {valueLabel}
-          <ChevronDown />
+        <FidelityButton
+          type="button"
+          variant="ghost"
+          title={label}
+          aria-label={label}
+          className="size-8 px-1.5 [&_svg]:size-5"
+        >
+          <Icon aria-hidden />
         </FidelityButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        sideOffset={8}
-        className="min-w-[11.5rem] rounded-lg p-1"
-      >
+      <DropdownMenuContent align="start" className="min-w-[11.5rem]">
         <DropdownMenuRadioGroup
           value={value}
-          onValueChange={(next) => onChange(next as Value)}
+          onValueChange={(next) => {
+            const option = options.find((item) => item.value === next)
+            if (option) onChange(option.value)
+          }}
         >
           {options.map((option) => (
             <DropdownMenuRadioItem
@@ -193,5 +218,103 @@ function OptionMenu<Value extends string>({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function OverflowOptions<
+  Sort extends string,
+  Status extends string,
+  Type extends string,
+>({
+  sort,
+  statusFilter,
+  typeFilter,
+  sortOptions,
+  filterOptions,
+  typeFilterOptions,
+  onSortChange,
+  onStatusFilterChange,
+  onTypeFilterChange,
+}: {
+  sort: Sort
+  statusFilter: Status
+  typeFilter: Type
+  sortOptions: { value: Sort; label: string }[]
+  filterOptions: { value: Status; label: string }[]
+  typeFilterOptions: { value: Type; label: string }[]
+  onSortChange: (value: Sort) => void
+  onStatusFilterChange: (value: Status) => void
+  onTypeFilterChange: (value: Type) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <LibraryActionIconButton
+          icon={MoreHorizontal}
+          label={libraryText.moreOptions()}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[11.5rem]">
+        <OptionSubmenu
+          label={libraryText.sortLabel()}
+          icon={ArrowUpDown}
+          value={sort}
+          options={sortOptions}
+          onChange={onSortChange}
+        />
+        <OptionSubmenu
+          label={libraryText.filterLabel()}
+          icon={ListFilter}
+          value={statusFilter}
+          options={filterOptions}
+          onChange={onStatusFilterChange}
+        />
+        <OptionSubmenu
+          label={libraryText.typeFilterLabel()}
+          icon={Tags}
+          value={typeFilter}
+          options={typeFilterOptions}
+          onChange={onTypeFilterChange}
+        />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function OptionSubmenu<Value extends string>({
+  label,
+  icon: Icon,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  icon: typeof ArrowUpDown
+  value: Value
+  options: { value: Value; label: string }[]
+  onChange: (value: Value) => void
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Icon aria-hidden />
+        {label}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => {
+            const option = options.find((item) => item.value === next)
+            if (option) onChange(option.value)
+          }}
+        >
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }

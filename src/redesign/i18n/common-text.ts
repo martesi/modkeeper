@@ -8,8 +8,24 @@
 import { t } from '@lingui/core/macro'
 
 export const commonText = {
+  appName: () => t({ id: 'common.app.name', message: 'Modkeeper' }),
   home: () => t({ id: 'common.nav.home', message: 'Home' }),
   settings: () => t({ id: 'common.nav.settings', message: 'Settings' }),
+  primaryNavigation: () =>
+    t({ id: 'common.nav.primaryNavigation', message: 'Primary navigation' }),
+  workspace: () => t({ id: 'common.nav.workspace', message: 'Workspace' }),
+  preferences: () =>
+    t({ id: 'common.nav.preferences', message: 'Preferences' }),
+  collapseNavigation: () =>
+    t({ id: 'common.nav.collapseNavigation', message: 'Collapse navigation' }),
+  expandNavigation: () =>
+    t({ id: 'common.nav.expandNavigation', message: 'Expand navigation' }),
+  minimizeWindow: () =>
+    t({ id: 'common.window.minimize', message: 'Minimize window' }),
+  maximizeWindow: () =>
+    t({ id: 'common.window.maximize', message: 'Maximize or restore window' }),
+  searchUnavailable: () =>
+    t({ id: 'common.search.unavailable', message: 'Search unavailable here' }),
   libraryBusy: () =>
     t({ id: 'common.status.libraryBusy', message: 'Library busy' }),
   somethingWentWrong: () =>

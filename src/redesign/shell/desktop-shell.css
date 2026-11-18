@@ -1,0 +1,94 @@
+.mk-navigation-indicator {
+  transition: transform var(--t-med) var(--ease-move);
+}
+
+.mk-navigation-item {
+  transition-property: color, background-color;
+  transition-duration: var(--t-fast);
+  transition-timing-function: var(--ease-move);
+}
+
+.mk-registry-inspector-enter {
+  animation: mk-registry-inspector-enter var(--t-slow) var(--ease-move) both;
+}
+
+@keyframes mk-registry-inspector-enter {
+  from {
+    transform: translateX(4px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.mk-titlebar-search {
+  width: min(320px, max(0px, calc(100% - 276px)));
+}
+
+.mk-titlebar-app-title {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .mk-titlebar-app-title {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .mk-titlebar[data-macos='true'] .mk-titlebar-app-title {
+    display: none;
+  }
+}
+
+/* Narrow windows collapse the titlebar search behind an icon button; opening
+   it expands the field as an overlay between the window controls. */
+.mk-titlebar-search-toggle,
+.mk-titlebar-search-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 360px) {
+  .mk-titlebar-search:not([data-search-open='true']) {
+    display: none;
+  }
+
+  .mk-titlebar-search[data-search-open='true'] {
+    top: 4px;
+    bottom: 4px;
+    left: 44px;
+    right: 8px;
+    width: auto;
+    translate: none;
+  }
+
+  .mk-titlebar[data-macos='true'] .mk-titlebar-search[data-search-open='true'] {
+    left: 108px;
+  }
+
+  .mk-titlebar[data-caption='true']
+    .mk-titlebar-search[data-search-open='true'] {
+    right: 146px;
+  }
+
+  .mk-titlebar-search-toggle,
+  .mk-titlebar-search[data-search-open='true'] .mk-titlebar-search-close {
+    display: flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-navigation-item,
+  .mk-navigation-indicator {
+    transition: none;
+  }
+
+  .mk-registry-inspector-enter {
+    animation: none;
+  }
+}

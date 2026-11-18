@@ -39,7 +39,6 @@
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
               export CARGO_HOME=/agt/xdg/cache/rust
             fi
-            export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-''${CARGO_HOME:-$HOME/.cargo}/target/modkeeper}"
           '';
           tauriHook = ''
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath tauriLibs}:$LD_LIBRARY_PATH"

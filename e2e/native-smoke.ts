@@ -304,7 +304,7 @@ async function main(): Promise<number> {
         const build = await runOnce({
           cmd: ['bun', 'run', 'build'],
           cwd: repoRoot,
-          env: state.env,
+          env: { ...state.env, VITE_E2E_TASK_PROGRESS: '1' },
           timeoutMs: 5 * 60_000,
           allowFailure: true,
         })
@@ -315,7 +315,9 @@ async function main(): Promise<number> {
             tail(build.output, 6_000),
           )
         }
-        info('bun run build OK (tsc typecheck + vite production build)')
+        info(
+          'bun run build OK (production bundle with native progress fixture enabled for this smoke run)',
+        )
 
         // The debug binary loads http://localhost:1420; serving the production bundle there makes
         // boot fast and deterministic (no HMR churn from concurrent edits, no dependency-optimize
@@ -539,12 +541,12 @@ async function main(): Promise<number> {
 
     // ---------------------------------------------------------------------------------------
     await step(
-      'assertion 2: the seeded library renders in the Manage libraries dialog',
+      'assertion 2: registered progress listener renders; real sync completes',
       async () => {
         const client = requireClient(state)
         const manageButtons = await client.findElements(
-          'xpath',
-          "//button[normalize-space(.)='Manage libraries']",
+          'css selector',
+          'button[aria-label="Manage libraries"]',
         )
         if (manageButtons.length === 0) {
           throw new E2eError(
@@ -620,6 +622,203 @@ async function main(): Promise<number> {
               : true,
           { timeoutMs: 10_000 },
         )
+
+        const fixtureAvailable = await client.execute<boolean>(
+          'return !!window.__MK_TASK_PROGRESS_E2E__',
+        )
+        if (!fixtureAvailable) {
+          throw new E2eError(
+            'The native progress fixture is missing from the smoke build',
+          )
+        }
+        const fixtureTaskId = 'native-smoke-task-progress-fixture'
+        const registrationStarted = await client.execute<boolean>(
+          `const fixture = window.__MK_TASK_PROGRESS_E2E__;
+           fixture.status = 'registering';
+           fixture.registerTask(arguments[0], arguments[1]).then(
+             () => { fixture.status = 'registered'; },
+             (error) => { fixture.status = 'error'; fixture.error = String(error); },
+           );
+           return true;`,
+          [fixtureTaskId, state.library.id],
+        )
+        if (!registrationStarted) {
+          throw new E2eError('Could not register the pending progress fixture')
+        }
+        const registration = await waitFor(
+          'fixture task registered with the real progress listener ready',
+          async () =>
+            client.execute<{ status: string; error?: string }>(`
+              const fixture = window.__MK_TASK_PROGRESS_E2E__;
+              return ['registered', 'error'].includes(fixture.status)
+                ? { status: fixture.status, error: fixture.error }
+                : null;
+            `),
+          { timeoutMs: 10_000, intervalMs: 25 },
+        )
+        if (registration.status !== 'registered') {
+          throw new E2eError(
+            'Could not register the progress fixture',
+            registration.error,
+          )
+        }
+        info(
+          `fixture task ${fixtureTaskId} registered after the production listener connected`,
+        )
+
+        const fixtureEvent = {
+          taskId: fixtureTaskId,
+          libraryId: state.library.id,
+          operation: 'sync',
+          sequence: 0,
+          kind: 'progress',
+          stage: 'sync_deploy',
+          percent: 42,
+          log: {
+            level: 'info',
+            code: 'native-smoke-fixture',
+            message: 'Synthetic progress fixture log entry',
+          },
+        }
+        const fixtureEmitStarted = await client.execute<boolean>(
+          `const fixture = window.__MK_TASK_PROGRESS_E2E__;
+           fixture.status = 'emitting';
+           fixture.emit(arguments[0]).then(
+             () => { fixture.status = 'emitted'; },
+             (error) => { fixture.status = 'error'; fixture.error = String(error); },
+           );
+           return true;`,
+          [fixtureEvent],
+        )
+        if (!fixtureEmitStarted) {
+          throw new E2eError('Could not emit the synthetic progress fixture')
+        }
+        const emission = await waitFor(
+          'Tauri event plugin to emit the progress fixture',
+          async () =>
+            client.execute<{ status: string; error?: string }>(`
+              const fixture = window.__MK_TASK_PROGRESS_E2E__;
+              return ['emitted', 'error'].includes(fixture.status)
+                ? { status: fixture.status, error: fixture.error }
+                : null;
+            `),
+          { timeoutMs: 10_000, intervalMs: 25 },
+        )
+        if (emission.status !== 'emitted') {
+          throw new E2eError(
+            'Tauri event plugin could not emit task_progress',
+            emission.error,
+          )
+        }
+        const renderedProgress = await waitFor(
+          'registered task_progress listener to render the active banner',
+          async () =>
+            client.execute<{
+              valueText: string | null
+              valueNow: string | null
+              live: string | null
+              svgClass: string
+              stageText: string
+            } | null>(`
+              const active = document.querySelector('[aria-label="Active tasks"]');
+              const bar = active?.querySelector('[role="progressbar"]');
+              if (!bar) return null;
+              return {
+                valueText: bar.getAttribute('aria-valuetext'),
+                valueNow: bar.getAttribute('aria-valuenow'),
+                live: bar.getAttribute('aria-live'),
+                svgClass: active.querySelector('svg')?.getAttribute('class') ?? '',
+                stageText: active.innerText,
+              };
+            `),
+          { timeoutMs: 10_000, intervalMs: 25 },
+        )
+        if (
+          renderedProgress.valueNow !== '42' ||
+          renderedProgress.valueText !== 'Deploying files: 42% of this stage' ||
+          renderedProgress.live !== 'off' ||
+          !renderedProgress.svgClass.includes('-rotate-90') ||
+          renderedProgress.svgClass.includes('animate-spin') ||
+          !renderedProgress.stageText.includes('Deploying files')
+        ) {
+          throw new E2eError(
+            'Synthetic progress did not render with determinate semantics',
+            JSON.stringify(renderedProgress),
+          )
+        }
+        info(
+          'fixture event rendered Deploying files at 42% via the registered listener',
+        )
+
+        const logSummary = await client.findElement(
+          'css selector',
+          '[aria-label="Active tasks"] details > summary',
+        )
+        await client.click(logSummary)
+        const openLog = await waitFor(
+          'task log disclosure to open from a browser click',
+          async () =>
+            client.execute<{ open: boolean; text: string } | null>(`
+              const details = document.querySelector('[aria-label="Active tasks"] details');
+              return details?.open
+                ? { open: true, text: details.innerText }
+                : null;
+            `),
+          { timeoutMs: 5_000, intervalMs: 25 },
+        )
+        if (
+          !openLog.open ||
+          !openLog.text.includes('Synthetic progress fixture log entry')
+        ) {
+          throw new E2eError(
+            'The opened task log did not contain its fixture entry',
+            openLog.text,
+          )
+        }
+        info(
+          'browser click opened the task log and displayed the fixture entry',
+        )
+
+        await client.execute(
+          `window.__MK_TASK_PROGRESS_E2E__.clearTask(arguments[0])`,
+          [fixtureTaskId],
+        )
+        await waitFor(
+          'fixture task to clear before the real sync',
+          async () =>
+            (await client.execute<boolean>(
+              `return !document.querySelector('[aria-label="Active tasks"]')`,
+            ))
+              ? true
+              : null,
+          { timeoutMs: 5_000, intervalMs: 25 },
+        )
+
+        const syncButton = await client.findElement(
+          'css selector',
+          'button[aria-label="Sync"]',
+        )
+        await activateElement(client, syncButton)
+        await waitFor(
+          'real sync completion after the separate UI fixture',
+          async () =>
+            (await client.execute<boolean>(
+              'return !!document.querySelector(\'section[aria-label="Latest task result"]\')',
+            ))
+              ? true
+              : null,
+          { timeoutMs: 15_000, intervalMs: 100 },
+        )
+        const resultText = await client.execute<string>(
+          `return document.querySelector('section[aria-label="Latest task result"]')?.innerText ?? ''`,
+        )
+        if (!resultText.includes('Sync completed')) {
+          throw new E2eError(
+            'Real sync ended without its authoritative completion result',
+            resultText,
+          )
+        }
+        info('real sync completed through the authoritative workspace event')
       },
     )
 
@@ -675,17 +874,17 @@ async function main(): Promise<number> {
           { timeoutMs: 10_000 },
         )
         const heading = await waitFor(
-          'Settings heading',
+          'Settings appearance controls',
           async () => {
-            const text = await client.execute<string>(
-              `return document.querySelector('main h1')?.textContent?.trim() || ''`,
+            const hasAppearanceControls = await client.execute<boolean>(
+              `return Array.from(document.querySelectorAll('main [role="radio"]')).some((radio) => radio.textContent?.trim() === 'Dark')`,
             )
-            return text.length > 0 ? text : null
+            return hasAppearanceControls ? true : null
           },
           { timeoutMs: 10_000 },
         )
-        if (heading !== 'Settings') {
-          throw new E2eError(`Expected Settings heading, got "${heading}"`)
+        if (!heading) {
+          throw new E2eError('Settings appearance controls did not render')
         }
         info(
           `navigated via real nav link to ${await client.execute<string>('return location.pathname')}`,
@@ -775,10 +974,10 @@ async function main(): Promise<number> {
         )
       }
       await waitFor(
-        'library screen content after navigation',
+        'Library screen controls after navigation',
         async () =>
           (await client.execute<boolean>(
-            `return !!document.querySelector('main h1') && document.querySelectorAll('[role="dialog"]').length === 0`,
+            `return !!document.querySelector('main button[aria-label="Manage libraries"]') && document.querySelectorAll('[role="dialog"]').length === 0`,
           ))
             ? true
             : null,

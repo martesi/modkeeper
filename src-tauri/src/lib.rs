@@ -13,7 +13,12 @@ use crate::commands::library::{
     bulk_update_mods, delete_library, install_mod_archives, rebuild_library_cache, rename_library,
     sync_mods,
 };
+use crate::core::forge::{
+    forge_addon_versions, forge_download_version, forge_match_installed_mod, forge_mod_detail,
+    forge_mod_versions, forge_search,
+};
 use crate::core::registry::AppRegistry;
+use crate::models::task_progress::TaskProgressEvent;
 use crate::models::workspace::WorkspaceEvent;
 use crate::store::AppConfigStore;
 use parking_lot::Mutex;
@@ -34,6 +39,13 @@ fn setup_command_handler() -> Builder<tauri::Wry> {
             rebuild_library_cache,
             rename_library,
             delete_library,
+            // Forge registry
+            forge_search,
+            forge_mod_detail,
+            forge_mod_versions,
+            forge_addon_versions,
+            forge_download_version,
+            forge_match_installed_mod,
             // global
             get_library_workspace,
             activate_library,
@@ -42,7 +54,7 @@ fn setup_command_handler() -> Builder<tauri::Wry> {
             get_settings,
             save_settings,
         ])
-        .events(collect_events![WorkspaceEvent])
+        .events(collect_events![WorkspaceEvent, TaskProgressEvent])
 }
 
 /// Stage 2: Export TypeScript bindings (debug builds only)

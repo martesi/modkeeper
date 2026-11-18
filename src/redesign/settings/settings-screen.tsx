@@ -83,9 +83,6 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-[62.5rem] flex-col">
-      <h1 className="font-heading text-2xl font-semibold leading-tight text-foreground">
-        {settingsText.title()}
-      </h1>
       <p className="mb-3 text-xs text-muted-foreground">
         {settingsText.subtitle()}
       </p>

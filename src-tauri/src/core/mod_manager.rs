@@ -4,7 +4,7 @@ use crate::core::library::Library;
 use crate::core::mod_snapshot;
 use crate::core::mod_stager::StagedMod;
 use crate::models::error::SError;
-use crate::models::mod_dto::Mod;
+use crate::models::mod_dto::{ForgeInstallMetadata, Mod, ModSource};
 use crate::utils::file;
 use crate::utils::time::{file_created_at, now_iso8601_utc};
 
@@ -16,6 +16,15 @@ pub fn add_mod(
     library: &mut Library,
     staged: StagedMod,
     enable_on_install: bool,
+) -> Result<(), SError> {
+    add_mod_with_metadata(library, staged, enable_on_install, None)
+}
+
+pub fn add_mod_with_metadata(
+    library: &mut Library,
+    staged: StagedMod,
+    enable_on_install: bool,
+    metadata: Option<&ForgeInstallMetadata>,
 ) -> Result<(), SError> {
     let mod_id = staged.fs.id.clone();
     let dst = library.lib_paths.mods.join(&mod_id);
@@ -52,6 +61,11 @@ pub fn add_mod(
             // Preserve the existing name and first installation time on updates.
             m.mod_type = staged.fs.mod_type.clone();
             m.installed_at = Some(installed_at.clone());
+            if let Some(metadata) = metadata {
+                apply_forge_metadata(m, metadata);
+            } else {
+                clear_forge_metadata(m);
+            }
         })
         .or_insert_with(|| Mod {
             id: mod_id.clone(),
@@ -59,12 +73,43 @@ pub fn add_mod(
             mod_type: staged.fs.mod_type.clone(),
             name: staged.name.clone(),
             installed_at: Some(installed_at),
+            version: metadata.map(|metadata| metadata.version.clone()),
+            forge_id: metadata.map(|metadata| metadata.forge_id),
+            forge_guid: metadata.map(|metadata| metadata.forge_guid.clone()),
+            source: if metadata.is_some() {
+                ModSource::Forge
+            } else {
+                ModSource::Local
+            },
+            forge_kind: metadata.map(|metadata| metadata.kind.clone()),
+            forge_version_id: metadata.map(|metadata| metadata.version_id),
+            forge_meta_cached_at: metadata.map(|metadata| metadata.cached_at.clone()),
         });
 
     library.cache.add(staged.fs);
     library.mark_dirty();
     library.persist()?;
     Ok(())
+}
+
+fn apply_forge_metadata(mod_entry: &mut Mod, metadata: &ForgeInstallMetadata) {
+    mod_entry.version = Some(metadata.version.clone());
+    mod_entry.forge_id = Some(metadata.forge_id);
+    mod_entry.forge_guid = Some(metadata.forge_guid.clone());
+    mod_entry.source = ModSource::Forge;
+    mod_entry.forge_kind = Some(metadata.kind.clone());
+    mod_entry.forge_version_id = Some(metadata.version_id);
+    mod_entry.forge_meta_cached_at = Some(metadata.cached_at.clone());
+}
+
+fn clear_forge_metadata(mod_entry: &mut Mod) {
+    mod_entry.version = None;
+    mod_entry.forge_id = None;
+    mod_entry.forge_guid = None;
+    mod_entry.source = ModSource::Local;
+    mod_entry.forge_kind = None;
+    mod_entry.forge_version_id = None;
+    mod_entry.forge_meta_cached_at = None;
 }
 
 /// Removes a mod from the library.

@@ -13,6 +13,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Route as rootRouteImport } from './../routes/__root'
 import { Route as IndexRouteImport } from './../routes/index'
 import { Route as LibraryRouteImport } from './../routes/library'
+import { Route as RegistryRouteImport } from './../routes/registry'
 import { Route as LibraryIndexRouteImport } from './../routes/library.index'
 import { Route as LibraryIdRouteImport } from './../routes/library.$id'
 
@@ -26,6 +27,11 @@ const IndexRoute = IndexRouteImport.update({
 const LibraryRoute = LibraryRouteImport.update({
   id: '/library',
   path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistryRoute = RegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsLazyRoute = SettingsLazyRouteImport.update({
@@ -47,12 +53,14 @@ const LibraryIdRoute = LibraryIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/library': typeof LibraryRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/settings': typeof SettingsLazyRoute
   '/library/$id': typeof LibraryIdRoute
   '/library/': typeof LibraryIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/registry': typeof RegistryRoute
   '/settings': typeof SettingsLazyRoute
   '/library/$id': typeof LibraryIdRoute
   '/library': typeof LibraryIndexRoute
@@ -61,21 +69,31 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/library': typeof LibraryRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/settings': typeof SettingsLazyRoute
   '/library/$id': typeof LibraryIdRoute
   '/library/': typeof LibraryIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/library' | '/settings' | '/library/$id' | '/library/'
+  fullPaths:
+    '/' | '/library' | '/registry' | '/settings' | '/library/$id' | '/library/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/library/$id' | '/library'
-  id: '__root__' | '/' | '/library' | '/settings' | '/library/$id' | '/library/'
+  to: '/' | '/registry' | '/settings' | '/library/$id' | '/library'
+  id:
+    | '__root__'
+    | '/'
+    | '/library'
+    | '/registry'
+    | '/settings'
+    | '/library/$id'
+    | '/library/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LibraryRoute: typeof LibraryRouteWithChildren
+  RegistryRoute: typeof RegistryRoute
   SettingsLazyRoute: typeof SettingsLazyRoute
 }
 
@@ -93,6 +111,13 @@ declare module '@tanstack/react-router' {
       path: '/library'
       fullPath: '/library'
       preLoaderRoute: typeof LibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registry': {
+      id: '/registry'
+      path: '/registry'
+      fullPath: '/registry'
+      preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -135,6 +160,7 @@ const LibraryRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LibraryRoute: LibraryRouteWithChildren,
+  RegistryRoute: RegistryRoute,
   SettingsLazyRoute: SettingsLazyRoute,
 }
 export const routeTree = rootRouteImport

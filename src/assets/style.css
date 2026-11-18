@@ -72,6 +72,7 @@ body {
   --t-med: 167ms;
   --t-slow: 250ms;
   --ease-out-fluent: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --ease-move: cubic-bezier(0.33, 0, 0.1, 1);
   --background: #f3f3f3;
   --foreground: #1b1c22;
   --card: rgba(255, 255, 255, 0.62);

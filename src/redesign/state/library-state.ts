@@ -12,6 +12,7 @@
  * atom to the repository directly — store access stays in the state layer.
  */
 import { atom, getDefaultStore } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
 import type {
   LibraryWorkspace,
   LibraryEntry,
@@ -21,6 +22,10 @@ import type {
   ToolSummary,
   LibraryId,
   ModId,
+  TaskOperation,
+  TaskProgressEvent,
+  TaskProgressLog,
+  TaskProgressStage,
 } from '../data/redesign-types'
 import type { TaskOutcome } from '../data/task-outcome'
 import { isLibrarySummary } from '../data/redesign-types'
@@ -66,6 +71,14 @@ export const activeLibraryToolsAtom = atom<ToolSummary[]>((get) => {
 })
 
 // --- Durable view state (§10): selection, search, sort, status/type filters ---
+
+export type LibraryViewMode = 'list' | 'grid' | 'icons'
+
+/** Persist the Library section's presentation independently from other sections. */
+export const libraryViewModeAtom = atomWithStorage<LibraryViewMode>(
+  'modkeeper.library.viewMode',
+  'list',
+)
 
 export const selectedModIdsAtom = atom<ReadonlySet<ModId>>(new Set<ModId>())
 
@@ -128,8 +141,34 @@ function compareInstallationTime(
   return difference || compareByName(a, b)
 }
 
-/** An accepted-but-not-yet-completed fire-and-track operation. */
-export type PendingTask = { taskId: string; libraryId: LibraryId }
+/** The initiating control whose loader should follow a tracked task. */
+export type PendingTaskSource = 'sync-button' | 'add-button' | 'other'
+
+/** A task stays tied to its initiating control until its exact taskId completes. */
+export type PendingTask = {
+  taskId: string
+  libraryId: LibraryId
+  source: PendingTaskSource
+  operation: TaskOperation | null
+  stage: TaskProgressStage | null
+  percent: number | null
+  logTail: TaskProgressLog[]
+  lastSequence: number
+  terminal: boolean
+}
+
+type NewPendingTask = Pick<PendingTask, 'taskId' | 'libraryId' | 'source'> &
+  Partial<
+    Pick<
+      PendingTask,
+      | 'operation'
+      | 'stage'
+      | 'percent'
+      | 'logTail'
+      | 'lastSequence'
+      | 'terminal'
+    >
+  >
 
 export const pendingTasksAtom = atom<PendingTask[]>([])
 
@@ -171,8 +210,71 @@ export function clearTaskResult(): void {
   store.set(taskResultAtom, null)
 }
 
-export function addPendingTask(task: PendingTask): void {
-  store.set(pendingTasksAtom, [...store.get(pendingTasksAtom), task])
+export function addPendingTask(task: NewPendingTask): void {
+  store.set(pendingTasksAtom, [
+    ...store.get(pendingTasksAtom),
+    {
+      ...task,
+      operation: task.operation ?? null,
+      stage: task.stage ?? null,
+      percent: task.percent ?? null,
+      logTail: task.logTail ?? [],
+      lastSequence: task.lastSequence ?? -1,
+      terminal: task.terminal ?? false,
+    },
+  ])
+}
+
+const TASK_LOG_LIMIT = 20
+const TASK_LOG_MESSAGE_LIMIT = 500
+const TASK_LOG_CODE_LIMIT = 80
+
+/** Apply only the next update for a registered, non-terminal task. */
+export function applyTaskProgress(event: TaskProgressEvent): boolean {
+  if (!Number.isSafeInteger(event.sequence) || event.sequence < 0) return false
+
+  let applied = false
+  const nextTasks = store.get(pendingTasksAtom).map((task) => {
+    if (
+      task.taskId !== event.taskId ||
+      task.libraryId !== event.libraryId ||
+      task.terminal ||
+      event.sequence <= task.lastSequence
+    ) {
+      return task
+    }
+
+    applied = true
+    const logTail = event.log
+      ? [
+          ...task.logTail,
+          {
+            ...event.log,
+            code: event.log.code.slice(0, TASK_LOG_CODE_LIMIT),
+            message: event.log.message.slice(0, TASK_LOG_MESSAGE_LIMIT),
+          },
+        ].slice(-TASK_LOG_LIMIT)
+      : task.logTail
+
+    return {
+      ...task,
+      operation: event.operation,
+      stage: event.stage,
+      percent:
+        typeof event.percent === 'number' &&
+        Number.isFinite(event.percent) &&
+        event.percent >= 0 &&
+        event.percent <= 100
+          ? event.percent
+          : null,
+      logTail,
+      lastSequence: event.sequence,
+      terminal: event.kind === 'completed',
+    }
+  })
+
+  if (applied) store.set(pendingTasksAtom, nextTasks)
+  return applied
 }
 
 export function removePendingTask(taskId: string): boolean {
