@@ -4,7 +4,7 @@ import { getWailsMock } from './mock'
 
 type Callback<T> = (event: { event: string; id: number; payload: T }) => void
 
-function makeEvent<T>(name: string) {
+function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
   const listen = (callback: Callback<T>): Promise<() => void> => {
     const runtime = wailsWindow()?.runtime
     if (!runtime?.EventsOn) {
@@ -19,9 +19,7 @@ function makeEvent<T>(name: string) {
         )
         return Promise.resolve(unlisten)
       }
-      return tauriEvents[name as keyof typeof tauriEvents].listen(
-        callback as never,
-      )
+      return tauriEvents[tauriName].listen(callback as never)
     }
     let active = true
     const unlisten = runtime.EventsOn(name, (...args) => {
@@ -40,9 +38,7 @@ function makeEvent<T>(name: string) {
   const once = (callback: Callback<T>): Promise<() => void> => {
     const runtime = wailsWindow()?.runtime
     if (!runtime?.EventsOnce)
-      return tauriEvents[name as keyof typeof tauriEvents].once(
-        callback as never,
-      )
+      return tauriEvents[tauriName].once(callback as never)
     let active = true
     runtime.EventsOnce(name, (...args) => {
       if (active)
@@ -76,9 +72,7 @@ function makeEvent<T>(name: string) {
           runtime.EventsEmit(name, payload)
           return Promise.resolve()
         }
-        return tauriEvents[name as keyof typeof tauriEvents].emit(
-          payload as never,
-        )
+        return tauriEvents[tauriName].emit(payload as never)
       },
       emitTo: (_target: unknown, payload: T) => {
         const runtime = wailsWindow()?.runtime
@@ -91,22 +85,18 @@ function makeEvent<T>(name: string) {
           runtime.EventsEmit(name, payload)
           return Promise.resolve()
         }
-        return tauriEvents[name as keyof typeof tauriEvents].emitTo(
-          _target as never,
-          payload as never,
-        )
+        return tauriEvents[tauriName].emitTo(_target as never, payload as never)
       },
     },
   )
 }
 
 export const events = {
-  taskProgress:
-    makeEvent<Parameters<typeof tauriEvents.taskProgress.emit>[0]>(
-      'task_progress',
-    ),
-  workspaceEvent:
-    makeEvent<Parameters<typeof tauriEvents.workspaceEvent.emit>[0]>(
-      'workspace-event',
-    ),
+  taskProgress: makeEvent<Parameters<typeof tauriEvents.taskProgress.emit>[0]>(
+    'task_progress',
+    'taskProgress',
+  ),
+  workspaceEvent: makeEvent<
+    Parameters<typeof tauriEvents.workspaceEvent.emit>[0]
+  >('workspace-event', 'workspaceEvent'),
 }

@@ -19,6 +19,7 @@
 import { toast } from 'sonner'
 import { commands, events } from '@/wails'
 import { hasNativeRuntime } from '@/wails/runtime'
+import { createInMemoryWailsMock, installWailsMock } from '@/wails/mock'
 import type {
   LibraryWorkspace,
   LibrarySummary,
@@ -144,6 +145,9 @@ if (
   typeof window !== 'undefined' &&
   import.meta.env.VITE_E2E_TASK_PROGRESS === '1'
 ) {
+  // Serve-mode browser E2E has no native runtime: install the in-memory Wails
+  // mock so the event bus subscribes and the fixture emits over one bus.
+  if (!hasNativeRuntime()) installWailsMock(createInMemoryWailsMock())
   window.__MK_TASK_PROGRESS_E2E__ = {
     async registerTask(taskId, libraryId) {
       if (!(await ensureWorkspaceEventBus())) {

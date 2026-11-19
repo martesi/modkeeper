@@ -28,3 +28,26 @@ export function installWailsMock(mock: WailsMock): () => void {
     if (window.__MK_WAILS_MOCK__ === mock) delete window.__MK_WAILS_MOCK__
   }
 }
+
+/** In-memory bus for serve-mode/browser E2E: listeners + emit without a native runtime. */
+export function createInMemoryWailsMock(): WailsMock {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
+  return {
+    events: {
+      on: (name, callback) => {
+        let set = listeners.get(name)
+        if (!set) {
+          set = new Set()
+          listeners.set(name, set)
+        }
+        set.add(callback)
+        return () => {
+          set.delete(callback)
+        }
+      },
+      emit: (name, ...args) => {
+        for (const callback of listeners.get(name) ?? []) callback(...args)
+      },
+    },
+  }
+}
