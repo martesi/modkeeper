@@ -143,7 +143,8 @@ export function initWorkspaceEventBus(): Promise<boolean> {
 
 if (
   typeof window !== 'undefined' &&
-  import.meta.env.VITE_E2E_TASK_PROGRESS === '1'
+  (import.meta.env.VITE_E2E_TASK_PROGRESS === '1' ||
+    import.meta.env.VITE_E2E_MOCK === '1')
 ) {
   // Serve-mode browser E2E has no native runtime: install the in-memory Wails
   // mock so the event bus subscribes and the fixture emits over one bus.
