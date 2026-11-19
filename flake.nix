@@ -33,8 +33,9 @@
             openssl
             pango
             webkitgtk_4_1
+            webkitgtk_6_0
           ];
-          goPackages = [ pkgs.go pkgs.wails3 ];
+          goPackages = [ pkgs.go pkgs.wails3 pkgs.xvfb-run ];
           basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
