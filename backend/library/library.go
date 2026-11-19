@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -318,4 +319,18 @@ func (s *Service) SaveSettings(v config.AppSettings) (config.AppSettings, error)
 		return config.AppSettings{}, e
 	}
 	return v, nil
+}
+
+// modList returns manifest mods in deterministic order for deployment planning.
+func (l *Library) modList() []models.Mod {
+	ids := make([]string, 0, len(l.manifest.Mods))
+	for id := range l.manifest.Mods {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	mods := make([]models.Mod, 0, len(ids))
+	for _, id := range ids {
+		mods = append(mods, l.manifest.Mods[id])
+	}
+	return mods
 }

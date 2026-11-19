@@ -130,9 +130,28 @@ func TestAppSurfaceEndToEnd(t *testing.T) {
 		t.Fatalf("bulk disable result: %+v", rows)
 	}
 
-	// Duplicate task ids are rejected while the first task is in flight; that is
-	// covered deterministically by the registry guard tests.
+	if _, err := app.BulkUpdateMods(models.BulkUpdateModsInput{
+		LibraryID: libraryID, ModIDs: []string{installed[0].ID}, Action: models.BulkActionEnable,
+	}); err != nil {
+		t.Fatalf("BulkUpdateMods enable: %v", err)
+	}
+	if _, err := app.SyncMods(models.SyncModsInput{TaskID: "sync-1", LibraryID: libraryID}); err != nil {
+		t.Fatalf("SyncMods: %v", err)
+	}
 	app.Library.Wait()
+	deployed := filepath.Join(env.GameRoot, "SPT", "user", "mods", "MyMod", "MyMod.dll")
+	if _, err := os.Stat(deployed); err != nil {
+		t.Fatalf("sync did not deploy the mod: %v", err)
+	}
+	synced := false
+	for _, event := range sink.workspaces {
+		if event.Type == models.WorkspaceEventSyncCompleted && len(event.Failures.([]models.ModFailure)) == 0 {
+			synced = true
+		}
+	}
+	if !synced {
+		t.Fatalf("no clean sync_completed event: %+v", sink.workspaces)
+	}
 }
 
 func writeModArchive(t *testing.T, dll string) string {

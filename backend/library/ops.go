@@ -1,14 +1,17 @@
 package library
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modmanager"
+	"github.com/martes/modkeeper/backend/spt"
 	"github.com/martes/modkeeper/backend/stager"
 	"github.com/martes/modkeeper/backend/task_progress"
 )
@@ -183,13 +186,43 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 		return nil, err
 	}
 	return s.runTask(in.TaskID, func() error {
-		e.Progress(models.TaskStageSyncPlan, nil)
-		e.Progress(models.TaskStageSyncPreflight, nil)
-		e.Progress(models.TaskStageSyncCleanup, nil)
-		e.Progress(models.TaskStageSyncDeploy, nil)
+		rules, err := spt.Discover(s.active.GameRoot)
+		if err != nil {
+			e.Completed(task_progress.Failure)
+			return err
+		}
+		layout := deployment.Layout{LibraryRoot: s.active.Root, GameRoot: s.active.GameRoot, Rules: rules}
+		report, err := deployment.Sync(context.Background(), layout, s.active.modList(), e)
+		failures := make([]models.ModFailure, 0, len(report.Failures))
+		for _, failure := range report.Failures {
+			modFailure := models.ModFailure{ModID: failure.ModID}
+			if failure.Error != nil {
+				modFailure.Error = models.Error{Code: failure.Error.Code, Data: failure.Error.Data}
+			}
+			failures = append(failures, modFailure)
+		}
+		if err != nil {
+			e.Completed(task_progress.Failure)
+			if s.sendWorkspace != nil {
+				_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+			}
+			return err
+		}
+		s.active.manifest.IsDirty = false
+		if err := s.active.Persist(); err != nil {
+			e.Completed(task_progress.Failure)
+			return err
+		}
 		e.Progress(models.TaskStageSyncPersist, nil)
-		e.Completed(task_progress.Failure)
-		return fmt.Errorf("deployment sync unavailable")
+		if len(failures) > 0 {
+			e.Completed(task_progress.PartialFailure)
+		} else {
+			e.Completed(task_progress.Success)
+		}
+		if s.sendWorkspace != nil {
+			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+		}
+		return nil
 	}), nil
 }
 
