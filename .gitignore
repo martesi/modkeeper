@@ -35,3 +35,8 @@ storybook-static
 
 # Local-only docs and scratch files
 /.local/
+.cache/arca/
+cookies.json
+cookies*.txt
+test-results/
+playwright-report/

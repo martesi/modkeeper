@@ -1,0 +1,17 @@
+cacheDir = ".cache/arca"
+playwrightDir = ".cache/arca/playwright"
+targetUrl = "http://127.0.0.1:1420/"
+
+[[dev]]
+command = ["bun", "run", "dev:wails", "--", "--port", "1420", "--strictPort"]
+ready = ["http://127.0.0.1:1420/"]
+
+[dev.env]
+VITE_E2E_TASK_PROGRESS = "1"
+
+[profile.default]
+browser = "firefox"
+
+[profile.chromium]
+browser = "chromium"
+port = 2001
