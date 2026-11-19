@@ -1,18 +1,8 @@
 package backend
 
-import "fmt"
+import "github.com/martes/modkeeper/backend/models"
 
 // Error preserves the Rust SError wire representation: {code, data}.
-type Error struct {
-	Code string `json:"code"`
-	Data any    `json:"data,omitempty"`
-}
+type Error = models.Error
 
-func (e *Error) Error() string {
-	if e.Data == nil {
-		return e.Code
-	}
-	return fmt.Sprintf("%s: %v", e.Code, e.Data)
-}
-
-func failure(code string, data any) *Error { return &Error{Code: code, Data: data} }
+func failure(code string, data any) *Error { return models.Fail(code, data) }
