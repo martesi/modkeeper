@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/martes/modkeeper/backend"
+	"github.com/martes/modkeeper/backend/models"
 )
 
 func TestExtractNestedAndRejectTraversalTransactionally(t *testing.T) {
@@ -64,7 +64,7 @@ func TestExtractMalformedAndUnsupportedLeaveDestinationUntouched(t *testing.T) {
 		if err == nil {
 			t.Fatalf("Extract(%q) succeeded", path)
 		}
-		var be *backend.Error
+		var be *models.Error
 		if !errors.As(err, &be) {
 			t.Fatalf("expected backend error, got %T", err)
 		}

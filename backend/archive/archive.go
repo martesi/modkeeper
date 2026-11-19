@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/bodgit/sevenzip"
-	"github.com/martes/modkeeper/backend"
+	"github.com/martes/modkeeper/backend/models"
 )
 
 type entry struct {
@@ -100,5 +100,5 @@ func within(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 func fail(code string, err error) error {
-	return fmt.Errorf("%w", &backend.Error{Code: code, Data: err.Error()})
+	return fmt.Errorf("%w", &models.Error{Code: code, Data: err.Error()})
 }
