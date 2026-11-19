@@ -1,4 +1,4 @@
-import { hasNativeRuntime, isWails } from '@/wails/runtime'
+import { hasNativeRuntime, isWails, wailsWindow } from '@/wails/runtime'
 
 export type PlatformKind = 'wails' | 'tauri' | 'browser'
 export type FileSelectionOptions = {
@@ -11,7 +11,7 @@ export type FileSelectionOptions = {
 
 export function platformKind(): PlatformKind {
   if (isWails()) return 'wails'
-  if (hasNativeRuntime()) return 'tauri'
+  if (hasNativeRuntime() && !wailsWindow()?.__MK_WAILS_MOCK__) return 'tauri'
   return 'browser'
 }
 
