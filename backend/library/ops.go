@@ -88,6 +88,14 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 		}
 		s.active.manifest.IsDirty = true
 	case models.BulkActionDelete:
+		// Never remove mod data while a recorded deployment is no longer owned.
+		rules, err := spt.Discover(s.active.GameRoot)
+		if err != nil {
+			return err
+		}
+		if err := deployment.VerifyOwnership(deployment.Layout{LibraryRoot: s.active.Root, GameRoot: s.active.GameRoot, Rules: rules}); err != nil {
+			return err
+		}
 		for _, id := range in.ModIDs {
 			if err := modmanager.RemoveMod(&l, id); err != nil {
 				return err
@@ -151,9 +159,20 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 			}
 			e.Progress(models.TaskStageInstallArchiveStage, nil)
 			for _, item := range staged {
-				err := modmanager.AddModWithMetadata(&l, item.FS.ID, item.Name, item.FS.ModType, path, enable, nil)
+				snapshot, snapErr := s.snapshotMod(item.FS.ID)
+				err := snapErr
 				if err == nil {
-					err = copyTree(item.Root, filepath.Join(l.Root, item.FS.ID))
+					err = modmanager.AddModWithMetadata(&l, item.FS.ID, item.Name, item.FS.ModType, path, enable, nil)
+				}
+				if err == nil {
+					err = s.copyModTree(item.Root, filepath.Join(l.Root, item.FS.ID))
+					if err != nil {
+						if restoreErr := s.restoreMod(item.FS.ID, snapshot); restoreErr != nil {
+							err = fmt.Errorf("%w (restore failed: %v)", err, restoreErr)
+						}
+					} else if snapshot != "" {
+						_ = os.RemoveAll(snapshot)
+					}
 				}
 				_ = stager.CleanUp(item.IsStaging, item.Root)
 				if err != nil {

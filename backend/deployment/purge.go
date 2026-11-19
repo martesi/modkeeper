@@ -32,6 +32,15 @@ type purgeRecovery struct {
 func token() (string, error)  { var b [16]byte; _, e := rand.Read(b[:]); return fmt.Sprintf("%x", b), e }
 func journal(l Layout) string { return filepath.Join(l.LibraryRoot, ".modkeeper-purge-recovery.toml") }
 func planPurge(l Layout) ([]purgeLink, error) {
+	// An orphaned quarantine in the library root means a previous purge did not
+	// finish; refuse before walking anything.
+	if entries, e := os.ReadDir(l.LibraryRoot); e == nil {
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".mkp-") {
+				return nil, invalid(l, "Orphaned quarantine requires explicit recovery: "+filepath.Join(l.LibraryRoot, entry.Name()))
+			}
+		}
+	}
 	if _, e := os.Lstat(journal(l)); e == nil {
 		return nil, invalid(l, "Purge recovery is pending; explicit recovery is required before retrying")
 	} else if !os.IsNotExist(e) {
@@ -138,6 +147,13 @@ func syncLinks(links []purgeLink) error {
 
 // Purge removes only links whose resolved target can be proven inside the library.
 // Recorded copies are reconciled by Deploy, not by compatibility purge.
+// ValidatePurge runs the purge preflight without mutating anything, so callers
+// can reject a destructive operation before removing registrations.
+func ValidatePurge(l Layout) error {
+	_, err := planPurge(l)
+	return err
+}
+
 func Purge(l Layout, _ []models.Mod) error {
 	purgeLock.Lock()
 	defer purgeLock.Unlock()
