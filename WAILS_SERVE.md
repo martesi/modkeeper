@@ -35,9 +35,15 @@ scripts/native-smoke.sh
 ```
 
 The script installs frontend dependencies, builds `dist/`, builds the Wails
-application, and checks its dynamic dependencies for WebKitGTK 4.1 and libsoup3.
-It fails if it finds the legacy WebKitGTK 4.0 or libsoup2 dependencies. It also
-requires `xvfb-run`. A successful build and linkage check do not prove native
-window startup, service binding, or event delivery; this repository does not yet
-provide those observations. The script exits unsuccessfully rather than report
-an unverified native smoke as passing.
+application, and checks its dynamic dependencies for WebKitGTK 6.0 or 4.1 and
+libsoup3. It fails if it finds the legacy WebKitGTK 4.0 or libsoup2 dependencies.
+The default Nix dev shell includes `xvfb-run`; run the script inside Xvfb with:
+
+```sh
+nix develop -c xvfb-run -a scripts/native-smoke.sh
+```
+
+The script checks that the process remains alive for 15 seconds. This does not
+prove that Wails-bound service IPC works or that a frontend receives an event.
+Those links are not instrumented in this application. The script exits
+unsuccessfully rather than report an incomplete native smoke as passing.

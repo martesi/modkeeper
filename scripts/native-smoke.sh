@@ -14,8 +14,8 @@ if [[ ! -x "$binary" ]]; then
 fi
 
 ldd "$binary" | tee /tmp/modkeeper-native-smoke-ldd.txt
-if ! grep -E 'libwebkit2gtk-4\.1\.so|libwebkitgtk-4\.1\.so' /tmp/modkeeper-native-smoke-ldd.txt; then
-  echo "native-smoke: expected WebKitGTK 4.1 linkage was not found" >&2
+if ! grep -E 'libwebkitgtk-6\.0\.so|libwebkit2gtk-4\.1\.so' /tmp/modkeeper-native-smoke-ldd.txt; then
+  echo "native-smoke: expected WebKitGTK 6.0 or 4.1 linkage was not found" >&2
   exit 1
 fi
 if ! grep -E 'libsoup-3\.0\.so' /tmp/modkeeper-native-smoke-ldd.txt; then
@@ -32,5 +32,15 @@ if ! command -v xvfb-run >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "native-smoke: window/service/event checks are not implemented; refusing to report a pass" >&2
+echo "native-smoke: launching $binary under Xvfb (15 second startup window)"
+set +e
+timeout --signal=TERM 15s "$binary"
+status=$?
+set -e
+if [[ "$status" -ne 124 && "$status" -ne 143 ]]; then
+  echo "native-smoke: app exited before the startup window (status $status)" >&2
+  exit 1
+fi
+echo "native-smoke: process remained alive for 15 seconds; window startup did not crash"
+echo "native-smoke: BLOCKED: Wails-bound service IPC and frontend event observation are not instrumented"
 exit 1
