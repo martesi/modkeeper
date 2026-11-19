@@ -11,10 +11,10 @@ import (
 type ArtifactKind string
 
 const (
-	Symlink ArtifactKind = "symlink"
+	Symlink  ArtifactKind = "symlink"
 	Junction ArtifactKind = "junction"
 	Hardlink ArtifactKind = "hardlink"
-	Copy ArtifactKind = "copy"
+	Copy     ArtifactKind = "copy"
 )
 
 func ReadTarget(path string) (string, error) { return os.Readlink(path) }
@@ -41,10 +41,16 @@ func Create(source, target string, kind ArtifactKind) error {
 		return os.Link(source, target)
 	case Copy:
 		info, err := os.Stat(source)
-		if err != nil { return err }
-		if info.IsDir() { return os.Mkdir(target, info.Mode().Perm()) }
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return os.Mkdir(target, info.Mode().Perm())
+		}
 		data, err := os.ReadFile(source)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		return os.WriteFile(target, data, info.Mode().Perm())
 	default:
 		return fmt.Errorf("unknown artifact kind: %s", kind)
@@ -53,15 +59,23 @@ func Create(source, target string, kind ArtifactKind) error {
 
 func Remove(target string, kind ArtifactKind) error {
 	info, err := os.Lstat(target)
-	if os.IsNotExist(err) { return nil }
-	if err != nil { return err }
-	if info.IsDir() && info.Mode()&os.ModeSymlink == 0 { return os.RemoveAll(target) }
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		return os.RemoveAll(target)
+	}
 	return os.Remove(target)
 }
 
 func Link(source, target string) error {
 	if dest, err := os.Readlink(target); err == nil {
-		if dest == source { return nil }
+		if dest == source {
+			return nil
+		}
 		return fmt.Errorf("target exists and is not linked to source: %s", target)
 	} else if !os.IsNotExist(err) {
 		if _, statErr := os.Lstat(target); statErr == nil {

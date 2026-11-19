@@ -23,16 +23,26 @@ type ModFS struct {
 func Scan(root string, serverMods, clientPlugins string) (ModFS, error) {
 	out := ModFS{Files: []string{}, Executables: []string{}}
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil { return err }
-		if entry.IsDir() { return nil }
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
 		rel, err := filepath.Rel(root, path)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		rel = filepath.ToSlash(rel)
 		out.Files = append(out.Files, rel)
-		if strings.EqualFold(filepath.Ext(rel), ".exe") { out.Executables = append(out.Executables, rel) }
+		if strings.EqualFold(filepath.Ext(rel), ".exe") {
+			out.Executables = append(out.Executables, rel)
+		}
 		return nil
 	})
-	if err != nil { return out, err }
+	if err != nil {
+		return out, err
+	}
 	sort.Strings(out.Files)
 	sort.Strings(out.Executables)
 	var ids []string
@@ -47,8 +57,19 @@ func Scan(root string, serverMods, clientPlugins string) (ModFS, error) {
 			ids = append(ids, strings.TrimPrefix(filepath.ToSlash(file), strings.TrimSuffix(filepath.ToSlash(clientPlugins), "/")+"/"))
 		}
 	}
-	switch { case client && server: out.ModType="both"; case client: out.ModType="client"; case server: out.ModType="server"; default: out.ModType="unknown" }
-	if len(ids)==0 { return out, errors.New("UnableToDetermineModId") }
+	switch {
+	case client && server:
+		out.ModType = "both"
+	case client:
+		out.ModType = "client"
+	case server:
+		out.ModType = "server"
+	default:
+		out.ModType = "unknown"
+	}
+	if len(ids) == 0 {
+		return out, errors.New("UnableToDetermineModId")
+	}
 	sort.Strings(ids)
 	sum := blake3.Sum256([]byte(strings.ToLower(strings.Join(ids, ""))))
 	out.ID = base64.RawURLEncoding.EncodeToString(sum[:16])
