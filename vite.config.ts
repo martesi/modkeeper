@@ -8,6 +8,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { lingui } from '@lingui/vite-plugin'
 
 const host = process.env.TAURI_DEV_HOST
+const wails = process.env.WAILS_DEV === 'true'
 
 export default defineConfig(() => ({
   envDir: '.config',
@@ -56,8 +57,8 @@ export default defineConfig(() => ({
       '@mod': path.resolve(import.meta.dirname, 'src/modules'),
     },
   },
-  server: {
-    port: 1420,
+    server: {
+    port: wails ? 34115 : 1420,
     strictPort: true,
     host: host || false,
     hmr: host

@@ -6,10 +6,13 @@
   "scripts": {
     "prepare": "lefthook install",
     "dev": "vite",
+    "dev:wails": "WAILS_DEV=true vite --host 127.0.0.1",
     "dev:app": "tauri dev",
     "dev:e2e": "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 tauri dev",
     "e2e:native": "bun e2e/native-smoke.ts",
+    "e2e:wails": "bun e2e/wails-smoke.ts",
     "build": "tsc -p tsconfig.check.json && vite build",
+    "build:wails": "tsc -p tsconfig.check.json && WAILS_DEV=true vite build",
     "typecheck": "tsc -p tsconfig.check.json --pretty false",
     "lint": "eslint src/redesign src/routes src/main.tsx src/components/ui/dialog.tsx e2e --max-warnings 0",
     "format:check": "prettier --check \"src/redesign/**/*.{ts,tsx,css}\" \"src/routes/**/*.{ts,tsx}\" src/main.tsx \"src/components/ui/**/*.{ts,tsx}\" \"e2e/**/*.ts\"",

@@ -34,7 +34,8 @@
             pango
             webkitgtk_4_1
           ];
-          basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs;
+          goPackages = [ pkgs.go pkgs.wails ];
+          basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
               export CARGO_HOME=/agt/xdg/cache/rust
