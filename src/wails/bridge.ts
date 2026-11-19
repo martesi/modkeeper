@@ -1,5 +1,6 @@
 import { commands as tauriCommands } from '@gen/bindings'
 import { wailsMethod } from './runtime'
+import { getWailsMock } from './mock'
 
 type Commands = typeof tauriCommands
 
@@ -13,9 +14,10 @@ export const commands: Commands = Object.fromEntries(
     name,
     (...args: unknown[]) => {
       const method = wailsMethod(name)
-      return method
-        ? Promise.resolve(method(...args))
-        : tauriCall(...(args as never))
+      if (method) return Promise.resolve(method(...args))
+      const mock = getWailsMock()?.commands?.[name]
+      if (mock) return Promise.resolve(mock(...args))
+      return Reflect.apply(tauriCall, undefined, args)
     },
   ]),
 ) as Commands

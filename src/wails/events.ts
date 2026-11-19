@@ -1,15 +1,28 @@
 import { events as tauriEvents } from '@gen/bindings'
 import { wailsWindow } from './runtime'
+import { getWailsMock } from './mock'
 
 type Callback<T> = (event: { event: string; id: number; payload: T }) => void
 
 function makeEvent<T>(name: string) {
   const listen = (callback: Callback<T>): Promise<() => void> => {
     const runtime = wailsWindow()?.runtime
-    if (!runtime?.EventsOn)
+    if (!runtime?.EventsOn) {
+      const mockOn = getWailsMock()?.events?.on
+      if (mockOn) {
+        const unlisten = mockOn(name, (...args) =>
+          callback({
+            event: name,
+            id: 0,
+            payload: (args.length === 1 ? args[0] : args) as T,
+          }),
+        )
+        return Promise.resolve(unlisten)
+      }
       return tauriEvents[name as keyof typeof tauriEvents].listen(
         callback as never,
       )
+    }
     let active = true
     const unlisten = runtime.EventsOn(name, (...args) => {
       if (active)
@@ -54,6 +67,11 @@ function makeEvent<T>(name: string) {
       once,
       emit: (payload: T) => {
         const runtime = wailsWindow()?.runtime
+        const mockEmit = getWailsMock()?.events?.emit
+        if (!runtime?.EventsEmit && mockEmit) {
+          mockEmit(name, payload)
+          return Promise.resolve()
+        }
         if (runtime?.EventsEmit) {
           runtime.EventsEmit(name, payload)
           return Promise.resolve()
@@ -64,6 +82,11 @@ function makeEvent<T>(name: string) {
       },
       emitTo: (_target: unknown, payload: T) => {
         const runtime = wailsWindow()?.runtime
+        const mockEmit = getWailsMock()?.events?.emit
+        if (!runtime?.EventsEmit && mockEmit) {
+          mockEmit(name, payload)
+          return Promise.resolve()
+        }
         if (runtime?.EventsEmit) {
           runtime.EventsEmit(name, payload)
           return Promise.resolve()

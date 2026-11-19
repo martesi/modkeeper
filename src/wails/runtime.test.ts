@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { isWails, wailsMethod, wailsWindow } from './runtime'
+import { hasNativeRuntime, isWails, wailsMethod, wailsWindow } from './runtime'
 
 const originalWindow = globalThis.window
 
@@ -13,6 +13,7 @@ describe('Wails runtime detection', () => {
     // @ts-expect-error Test supplies a minimal window stub.
     globalThis.window = {}
     expect(isWails()).toBe(false)
+    expect(hasNativeRuntime()).toBe(false)
     expect(wailsMethod('getLibraryWorkspace')).toBeUndefined()
   })
 
@@ -27,6 +28,7 @@ describe('Wails runtime detection', () => {
       go: { main: { App: Object.assign(app, { marker: 42 }) } },
     }
     expect(isWails()).toBe(true)
+    expect(hasNativeRuntime()).toBe(true)
     expect(wailsMethod('getLibraryWorkspace')?.()).toBe(42)
   })
 

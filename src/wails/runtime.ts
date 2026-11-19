@@ -1,7 +1,9 @@
 /** Wails runtime detection and access. This module is safe in a normal browser. */
-export type WailsApp = Record<string, (...args: unknown[]) => unknown>
+export type WailsApp = Record<string, unknown>
 
 export type WailsWindow = Window & {
+  __TAURI__?: unknown
+  __MK_WAILS_MOCK__?: unknown
   go?: Record<string, WailsApp>
   runtime?: {
     EventsOn?: (
@@ -27,6 +29,11 @@ export function isWails(): boolean {
   return Boolean(wailsWindow()?.go)
 }
 
+export function hasNativeRuntime(): boolean {
+  const target = wailsWindow()
+  return Boolean(target?.go || target?.__TAURI__ || target?.__MK_WAILS_MOCK__)
+}
+
 export function wailsMethod(
   method: string,
 ): ((...args: unknown[]) => unknown) | undefined {
@@ -35,8 +42,10 @@ export function wailsMethod(
   // Wails exposes bound methods on `go.<package>.<Type>`. For this app the
   // generated Go binding is expected under `go.main.App`.
   for (const app of Object.values(apps)) {
-    const candidate = app.App?.[method] ?? app[method]
-    if (typeof candidate === 'function') return candidate.bind(app.App ?? app)
+    const receiver = (app.App as WailsApp | undefined) ?? app
+    const candidate = receiver[method]
+    if (typeof candidate === 'function')
+      return candidate.bind(receiver) as (...args: unknown[]) => unknown
   }
   return undefined
 }
