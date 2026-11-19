@@ -25,3 +25,19 @@ nix develop -c wails3 generate bindings -ts -i -dir . -d frontend/bindings ./...
 The frontend adapter keeps the Tauri transport and in-memory browser mock for
 their existing paths. This smoke mode checks the page shell only. Use a native
 Wails window to test Go service calls and events.
+
+## Native build and linkage check
+
+Run the native build and linkage check with:
+
+```sh
+scripts/native-smoke.sh
+```
+
+The script installs frontend dependencies, builds `dist/`, builds the Wails
+application, and checks its dynamic dependencies for WebKitGTK 4.1 and libsoup3.
+It fails if it finds the legacy WebKitGTK 4.0 or libsoup2 dependencies. It also
+requires `xvfb-run`. A successful build and linkage check do not prove native
+window startup, service binding, or event delivery; this repository does not yet
+provide those observations. The script exits unsuccessfully rather than report
+an unverified native smoke as passing.
