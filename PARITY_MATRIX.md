@@ -2,30 +2,14 @@
 
 Status is based on Go test files under `backend/`: `ported` names the test and file; `skip` gives the platform blocker; `not-ported` means the equivalent Go test is absent. Rust remains the behavior authority.
 
-Sibling-worktree check found W2's partial Go backend at
-`/agt/xdg/data/opencode/worktree/faf48e/wails-w2-registry/backend`:
-`config`, `store`, `forge`, and `registry` source plus a nested `go.mod`.
-This backend is not in this worktree. W4 has only a `go.mod` scaffold and no
-Go source. Tests against the sibling packages cannot be compiled from this
-worktree without copying backend packages or adding a cross-worktree dependency;
-both would violate the isolation/no-duplication constraints. The two smallest
-store parity candidates are `test_load_missing_file_yields_default` and
-`test_save_round_trip`; add them when W2's backend is merged into this tree.
-
-**Unported coverage:** library sync/install/deploy halves, SPT import/deploy, and Windows-only process tests. Rows below distinguish exact Go test coverage from missing equivalents.
+This matrix reflects the current integrated Go backend. `ported` identifies the
+actual Go test and file. `skip` is reserved for a test that exists but cannot run
+in the current environment. `not-ported` names a Rust behavior with no Go test.
 
 ## Readiness checklist
 
-- [ ] Backend package/API is merged into this worktree; retain its nested Go
-  module instead of adding a root `go.mod`.
-- [ ] Resolve package ownership with W1/W2 before adding `*_parity_test.go`.
-- [ ] Start with missing-config default and config save/load round-trip parity.
-- [ ] Reuse `t.TempDir`, synthetic SPT metadata, local fixture files, and fake
-  transports from `wails-testplan/fixtures.md`.
-- [ ] Keep platform-specific process/link tests behind explicit capability
-  checks; do not relax their safety assertions.
-- [ ] Run Go tests package-by-package first, then the full backend suite.
-- [ ] Keep `bun run check` green after frontend test changes.
+- Ported Go tests named below are verified by `grep -rn "^func Test" backend/`.
+- Rust suite membership comes from the checked-in Rust integration test files.
 
 ## `src-tauri/tests/common/mod.rs`
 
