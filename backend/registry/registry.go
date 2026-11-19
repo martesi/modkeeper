@@ -8,10 +8,27 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/models"
+	"github.com/martes/modkeeper/backend/process"
 	"github.com/martes/modkeeper/backend/store"
 )
 
 type Service struct{ Store *store.AppConfigStore }
+
+// ProcessGuard protects destructive operations from running game/server
+// processes. Inspection errors are propagated and never treated as safe.
+type ProcessGuard struct{ Inspector process.Inspector }
+
+func (g ProcessGuard) AssertStopped(paths []string, code string) error {
+	running, err := g.Inspector.IsRunning(paths)
+	if err != nil {
+		return fmt.Errorf("inspect running processes: %w", err)
+	}
+	if running {
+		return models.Fail(code)
+	}
+	return nil
+}
 
 func (s *Service) GetSettings() config.AppSettings { return s.Store.Config.Settings }
 func (s *Service) SaveSettings(settings config.AppSettings) (config.AppSettings, error) {
