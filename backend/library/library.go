@@ -162,10 +162,12 @@ func (l *Library) DTO() models.LibraryDTO {
 }
 
 type Service struct {
-	Store    *store.AppConfigStore
-	Registry *registry.TaskRegistry
-	active   *Library
-	warning  *string
+	Store         *store.AppConfigStore
+	Registry      *registry.TaskRegistry
+	active        *Library
+	warning       *string
+	sendProgress  func(models.TaskProgressEvent) error
+	sendWorkspace func(models.WorkspaceEvent) error
 }
 
 func New(path string) (*Service, error) {
