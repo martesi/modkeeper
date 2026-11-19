@@ -5,6 +5,21 @@ import { getWailsMock } from './mock'
 
 type Commands = typeof tauriCommands
 
+export function dispatchCommand(
+  mock: (() => unknown) | undefined,
+  wails: (() => unknown) | undefined,
+  tauri: () => unknown,
+): Promise<unknown> {
+  if (mock)
+    return Promise.resolve(mock()).then((value) =>
+      value && typeof value === 'object' && 'status' in value
+        ? value
+        : { status: 'ok', data: value },
+    )
+  if (wails) return Promise.resolve(wails())
+  return Promise.resolve(tauri())
+}
+
 /**
  * Tauri and Wails service methods share this positional-argument adapter.
  * Wails v3 bindings are generated in frontend/bindings by `wails3 generate bindings`.
@@ -14,14 +29,18 @@ export const commands: Commands = Object.fromEntries(
     name,
     (...args: unknown[]) => {
       const mock = getWailsMock()?.commands?.[name]
-      if (mock) return Promise.resolve(mock(...args))
+      let method: (() => unknown) | undefined
       if (isWails()) {
-        const method = wailsApp[
+        const appMethod = wailsApp[
           (name[0]!.toUpperCase() + name.slice(1)) as keyof typeof wailsApp
         ] as ((...args: unknown[]) => unknown) | undefined
-        if (method) return Promise.resolve(method(...args))
+        if (appMethod) method = () => appMethod(...args)
       }
-      return Reflect.apply(tauriCall, undefined, args)
+      return dispatchCommand(
+        mock ? () => mock(...args) : undefined,
+        method,
+        () => Reflect.apply(tauriCall, undefined, args),
+      )
     },
   ]),
 ) as Commands

@@ -14,7 +14,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      'VITE_E2E_TASK_PROGRESS=1 bun run dev -- --port 1420 --strictPort',
+      'VITE_E2E_MOCK=1 VITE_E2E_TASK_PROGRESS=1 bun run dev -- --port 1420 --strictPort',
     url: 'http://127.0.0.1:1420/',
     reuseExistingServer: !process.env.CI,
   },
