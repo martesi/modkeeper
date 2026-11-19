@@ -43,3 +43,6 @@ playwright-report/
 
 # APM dependencies
 apm_modules/
+
+# Native build artifacts (build/config.yml is tracked; binaries are not)
+build/bin/
