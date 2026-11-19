@@ -47,14 +47,46 @@ export function createInMemoryWailsMock(): WailsMock {
         updatedAt: new Date().toISOString(),
       },
     ],
-    modsByLibraryId: { 'mock-library': [] as Record<string, unknown>[] },
-    toolsByLibraryId: { 'mock-library': [] },
-    settings: {
-      theme: 'system',
-      accentColor: '#6750a4',
-      language: 'en-US',
-      enableModsOnInstall: true,
+    modsByLibraryId: {
+      'mock-library': [
+        {
+          id: 'mock-mod-active',
+          libraryId: 'mock-library',
+          name: 'Example Server Mod',
+          type: 'server',
+          isEnabled: true,
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'mock-mod-disabled',
+          libraryId: 'mock-library',
+          name: 'Example Client Mod',
+          type: 'client',
+          isEnabled: false,
+          updatedAt: new Date().toISOString(),
+        },
+      ] as Record<string, unknown>[],
     },
+    toolsByLibraryId: { 'mock-library': [] },
+    settings: (() => {
+      try {
+        return (
+          JSON.parse(localStorage.getItem('mk-e2e-settings') ?? 'null') ?? {
+            theme: 'system',
+            accentColor: '#6750a4',
+            language: 'en-US',
+            enableModsOnInstall: true,
+          }
+        )
+      } catch {
+        return {
+          theme: 'system',
+          accentColor: '#6750a4',
+          language: 'en-US',
+          enableModsOnInstall: true,
+        }
+      }
+    })(),
   }
   const now = () => new Date().toISOString()
   const complete = (type: string, input: any) => {
@@ -128,8 +160,15 @@ export function createInMemoryWailsMock(): WailsMock {
     rebuildLibraryCache: (input: any) =>
       complete('cache_rebuild_completed', input),
     getSettings: () => ({ ...workspace.settings }),
-    saveSettings: (settings: any) =>
-      (workspace.settings = { ...workspace.settings, ...settings }),
+    saveSettings: (settings: any) => {
+      workspace.settings = { ...workspace.settings, ...settings }
+      if (typeof localStorage !== 'undefined')
+        localStorage.setItem(
+          'mk-e2e-settings',
+          JSON.stringify(workspace.settings),
+        )
+      return workspace.settings
+    },
     forgeSearch: async (query: string) =>
       query.trim()
         ? {
