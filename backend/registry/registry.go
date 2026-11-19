@@ -2,9 +2,12 @@
 package registry
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
@@ -12,6 +15,76 @@ import (
 )
 
 type Service struct{ Store *store.AppConfigStore }
+
+// TaskRegistry protects long-running task IDs and the active library handle.
+// Library remains an interface here so registry does not depend on library.
+type TaskRegistry struct {
+	mu          sync.Mutex
+	tasks       map[string]struct{}
+	activeID    string
+	active      bool
+	startup     chan struct{}
+	startupErr  error
+	startupOnce sync.Once
+}
+
+func NewTaskRegistry() *TaskRegistry {
+	return &TaskRegistry{tasks: make(map[string]struct{}), startup: make(chan struct{})}
+}
+
+func (r *TaskRegistry) SetActive(id string, active bool) {
+	r.mu.Lock()
+	r.activeID, r.active = id, active
+	r.mu.Unlock()
+}
+
+func (r *TaskRegistry) AssertActiveLibrary(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.active {
+		return fmt.Errorf("NoActiveLibrary")
+	}
+	if r.activeID != id {
+		return fmt.Errorf("InvalidLibrary: %s is not the active library", id)
+	}
+	return nil
+}
+
+func (r *TaskRegistry) AcquireTaskID(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.tasks[id]; exists {
+		return fmt.Errorf("TaskIdInUse: %s", id)
+	}
+	r.tasks[id] = struct{}{}
+	return nil
+}
+
+func (r *TaskRegistry) FinishTaskID(id string) {
+	r.mu.Lock()
+	delete(r.tasks, id)
+	r.mu.Unlock()
+}
+
+func (r *TaskRegistry) FinishStartupLoad(err error) {
+	r.startupOnce.Do(func() {
+		r.startupErr = err
+		close(r.startup)
+	})
+}
+
+func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-r.startup:
+		return r.startupErr
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return fmt.Errorf("initial library load timed out")
+	}
+}
 
 func (s *Service) GetSettings() config.AppSettings { return s.Store.Config.Settings }
 func (s *Service) SaveSettings(settings config.AppSettings) (config.AppSettings, error) {
