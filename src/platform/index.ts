@@ -134,6 +134,27 @@ export async function isWindowMaximized(): Promise<boolean> {
     return (await import('@wailsio/runtime')).Window.IsMaximised()
   return false
 }
+export async function setWindowChrome(
+  option: 'overlay' | 'frameless',
+): Promise<void> {
+  if (platformKind() === 'tauri') {
+    const win = (await import('@tauri-apps/api/window')).getCurrentWindow()
+    return option === 'overlay'
+      ? win.setTitleBarStyle('overlay')
+      : win.setDecorations(false)
+  }
+  if (platformKind() === 'wails' && option === 'frameless')
+    return (await import('@wailsio/runtime')).Window.SetFrameless(true)
+}
+export async function onWindowResize(
+  callback: () => void,
+): Promise<() => void> {
+  if (platformKind() === 'tauri')
+    return (await import('@tauri-apps/api/window'))
+      .getCurrentWindow()
+      .onResized(callback)
+  return () => {}
+}
 export async function onFileDrop(
   callback: (files: string[]) => void,
 ): Promise<() => void> {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { isTauri } from '@tauri-apps/api/core'
+import { pickDirectory, platformKind } from '@/platform'
 import { toast } from 'sonner'
 import { Copy, FolderOpen, Plus, RefreshCw, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -381,17 +381,11 @@ function entryKey(entry: LibraryEntry): string {
 }
 
 async function pickGameRootFolder(): Promise<string | null> {
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     // MOCK-FALLBACK: no native folder picker in the browser prototype — simulate a selection so
     // the create flow stays exercisable end-to-end.
     console.info('[redesign] no native folder picker, simulating a selection')
     return `C:/SPT-instances/instance-${Date.now() % 1000}`
   }
-  const { open } = await import('@tauri-apps/plugin-dialog')
-  const selection = await open({
-    directory: true,
-    multiple: false,
-    title: libraryText.selectGameRoot(),
-  })
-  return typeof selection === 'string' ? selection : null
+  return pickDirectory({ title: libraryText.selectGameRoot() })
 }

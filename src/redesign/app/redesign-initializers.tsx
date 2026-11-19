@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useAtomValue } from 'jotai'
 import { useTheme } from 'next-themes'
-import { isTauri } from '@tauri-apps/api/core'
+import { platformKind } from '@/platform'
 import { toast } from 'sonner'
 import { commands } from '@gen/bindings'
 import { themeToIsDark } from '@/utils/theme'
@@ -98,7 +98,7 @@ function SettingsApplier() {
   useEffect(() => {
     if (!settings) return
     setTheme(settings.theme)
-    if (isTauri()) {
+    if (platformKind() !== 'browser') {
       void commands
         .applyWindowEffect(themeToIsDark(settings.theme) ?? null)
         .catch((error) =>

@@ -3,9 +3,9 @@
  *
  * Direct bridge to Tauri commands: forgeSearch, forgeModDetail, forgeModVersions,
  * forgeAddonVersions, forgeDownloadVersion, and forgeMatchInstalledMod.
- * Provides browser mock fallback for dev/testing when !isTauri().
+ * Provides browser mock fallback for dev/testing when platformKind() === 'browser'.
  */
-import { isTauri } from '@tauri-apps/api/core'
+import { platformKind } from '@/platform'
 import { getDefaultStore } from 'jotai'
 import { toast } from 'sonner'
 import { commands } from '@gen/bindings'
@@ -192,7 +192,7 @@ export async function searchForge({
 }): Promise<ForgeSearchResponse> {
   ensureInstallListener()
 
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     const q = query.trim().toLowerCase()
     const filteredMods = mockMods.filter(
       (m) =>
@@ -244,7 +244,7 @@ export async function getForgeModDetail(
   kind: ForgeKind,
   id: number,
 ): Promise<ForgeDetail> {
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     const item = [...mockMods, ...mockAddons].find(
       (i) => i.kind === kind && i.id === id,
     )
@@ -287,7 +287,7 @@ export async function getForgeModVersions(
   id: number,
   page: number = 1,
 ): Promise<ForgeVersionsPage> {
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     return {
       kind,
       itemId: id,
@@ -365,7 +365,7 @@ export async function installForgeVersion({
   ensureInstallListener()
   const key = `${kind}:${itemId}:${versionId}`
   return runRegistryInstallTask({
-    isTauri: isTauri(),
+    isTauri: platformKind() !== 'browser',
     ensureReady: ensureWorkspaceEventBus,
     onNotReady: () => toast.error(libraryText.taskUpdatesUnavailable()),
     canStart: () => !isLibraryTaskPending(libraryId),
@@ -425,7 +425,7 @@ export async function installForgeVersion({
 
 export async function matchInstalledMod(input: ForgeMatchInstalledModInput) {
   const key = `${input.kind}:${input.itemId}:${input.versionId}:${input.installedModId}`
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     toast.success('Matched mod with Forge metadata (mock)')
     return
   }
