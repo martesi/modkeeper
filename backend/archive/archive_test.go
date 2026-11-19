@@ -2,9 +2,12 @@ package archive
 
 import (
 	"archive/zip"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/martes/modkeeper/backend"
 )
 
 func TestExtractNestedAndRejectTraversalTransactionally(t *testing.T) {
@@ -46,5 +49,38 @@ func TestExtractNestedAndRejectTraversalTransactionally(t *testing.T) {
 	}
 	if _, err := os.Stat(failedDest); !os.IsNotExist(err) {
 		t.Fatalf("destination changed: %v", err)
+	}
+}
+
+func TestExtractMalformedAndUnsupportedLeaveDestinationUntouched(t *testing.T) {
+	root := t.TempDir()
+	bad := filepath.Join(root, "bad.zip")
+	if err := os.WriteFile(bad, []byte("not zip"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{bad, filepath.Join(root, "archive.rar")} {
+		dest := filepath.Join(root, filepath.Base(path)+"-out")
+		err := Extract(path, dest)
+		if err == nil {
+			t.Fatalf("Extract(%q) succeeded", path)
+		}
+		var be *backend.Error
+		if !errors.As(err, &be) {
+			t.Fatalf("expected backend error, got %T", err)
+		}
+		if _, statErr := os.Lstat(dest); !os.IsNotExist(statErr) {
+			t.Fatalf("destination changed: %v", statErr)
+		}
+	}
+}
+
+func TestExtractSevenZipFixture(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "out")
+	if err := Extract(filepath.Join("testdata", "fixture.7z"), dest); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("fixture extracted no entries: %v", err)
 	}
 }

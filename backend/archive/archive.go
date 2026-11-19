@@ -1,5 +1,4 @@
-// Package archive extracts supported mod archives without writing outside the
-// destination. Extraction is transactional: failures leave destination intact.
+// Package archive safely and transactionally extracts mod archives.
 package archive
 
 import (
@@ -10,78 +9,96 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bodgit/sevenzip"
 	"github.com/martes/modkeeper/backend"
 )
 
+type entry struct {
+	name string
+	dir  bool
+	mode os.FileMode
+	open func() (io.ReadCloser, error)
+}
+
 func Extract(archivePath, destination string) error {
-	if strings.EqualFold(filepath.Ext(archivePath), ".7z") {
-		return backendError("UnhandledCompression", archivePath)
+	ext := strings.ToLower(filepath.Ext(archivePath))
+	var entries []entry
+	switch ext {
+	case ".zip":
+		r, err := zip.OpenReader(archivePath)
+		if err != nil {
+			return fail("UnhandledCompression", err)
+		}
+		defer r.Close()
+		for _, f := range r.File {
+			f := f
+			entries = append(entries, entry{f.Name, f.FileInfo().IsDir(), f.Mode(), f.Open})
+		}
+	case ".7z":
+		r, err := sevenzip.OpenReader(archivePath)
+		if err != nil {
+			return fail("UnhandledCompression", err)
+		}
+		defer r.Close()
+		for _, f := range r.File {
+			f := f
+			entries = append(entries, entry{f.Name, f.FileInfo().IsDir(), f.Mode(), f.Open})
+		}
+	default:
+		return fail("UnhandledCompression", fmt.Errorf("unsupported archive extension: %s", ext))
 	}
-	if !strings.EqualFold(filepath.Ext(archivePath), ".zip") {
-		return backendError("UnhandledCompression", archivePath)
-	}
-	zr, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return backendError("IOError", err.Error())
-	}
-	defer zr.Close()
 	parent := filepath.Dir(filepath.Clean(destination))
 	tmp, err := os.MkdirTemp(parent, ".extract-*")
 	if err != nil {
-		return backendError("IOError", err.Error())
+		return fail("IOError", err)
 	}
 	defer os.RemoveAll(tmp)
-	for _, f := range zr.File {
-		name := filepath.ToSlash(f.Name)
+	for _, e := range entries {
+		name := filepath.ToSlash(e.name)
 		clean := filepath.Clean(filepath.FromSlash(name))
 		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.Contains(name, `\`) {
-			return backendError("ParseError", "unsafe archive path: "+f.Name)
+			return fail("UnhandledCompression", fmt.Errorf("unsafe archive path: %s", name))
 		}
-		if f.Mode()&os.ModeSymlink != 0 {
-			return backendError("ParseError", "symlink archive entry: "+f.Name)
+		if e.mode&os.ModeSymlink != 0 {
+			return fail("UnhandledCompression", fmt.Errorf("symlink archive entry: %s", name))
 		}
 		out := filepath.Join(tmp, clean)
 		if !within(tmp, out) {
-			return backendError("ParseError", "unsafe archive path: "+f.Name)
+			return fail("UnhandledCompression", fmt.Errorf("unsafe archive path: %s", name))
 		}
-		if f.FileInfo().IsDir() {
+		if e.dir {
 			err = os.MkdirAll(out, 0755)
-		} else {
-			err = os.MkdirAll(filepath.Dir(out), 0755)
+		} else if err = os.MkdirAll(filepath.Dir(out), 0755); err == nil {
+			var src io.ReadCloser
+			src, err = e.open()
 			if err == nil {
-				var src io.ReadCloser
-				src, err = f.Open()
+				var dst *os.File
+				dst, err = os.OpenFile(out, os.O_CREATE|os.O_EXCL|os.O_WRONLY, e.mode.Perm()&0777)
 				if err == nil {
-					var dst *os.File
-					dst, err = os.OpenFile(out, os.O_CREATE|os.O_EXCL|os.O_WRONLY, f.Mode().Perm()&0777)
-					if err == nil {
-						_, err = io.Copy(dst, src)
-						if closeErr := dst.Close(); err == nil {
-							err = closeErr
-						}
+					_, err = io.Copy(dst, src)
+					if closeErr := dst.Close(); err == nil {
+						err = closeErr
 					}
-					_ = src.Close()
 				}
+				_ = src.Close()
 			}
 		}
 		if err != nil {
-			return backendError("IOError", err.Error())
+			return fail("UnhandledCompression", err)
 		}
 	}
-	if _, err = os.Stat(destination); err == nil {
-		return backendError("IOError", "destination already exists")
+	if _, err = os.Lstat(destination); err == nil {
+		return fail("IOError", fmt.Errorf("destination already exists"))
 	}
 	if err = os.Rename(tmp, destination); err != nil {
-		return backendError("IOError", err.Error())
+		return fail("IOError", err)
 	}
 	return nil
 }
-
 func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
-
-func backendError(code string, data any) error {
-	return fmt.Errorf("%w", &backend.Error{Code: code, Data: data})
+func fail(code string, err error) error {
+	return fmt.Errorf("%w", &backend.Error{Code: code, Data: err.Error()})
 }
