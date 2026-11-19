@@ -5,10 +5,9 @@ Source of truth for behavior: `src-tauri/` (Rust, 13.2k LOC). Do not delete `src
 
 ## Definition of done
 
-1. All 15 frontend-visible commands are implemented in Go behind the Wails `App` service with
+1. All 21 frontend-visible commands are implemented in Go behind the Wails `App` service with
    Rust-equivalent semantics and the same `{code, data}` error codes.
-2. Every Rust test suite listed in `PARITY_MATRIX.md` has a Go equivalent, except the two
-   Windows-only process tests, which use an injected process inspector.
+2. `PARITY_MATRIX.md` records exact current test coverage. Several Rust tests remain unported.
 3. `nix develop -c go test -p 2 ./backend/...`, `bun run check`, and
    `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/run/agent/bin/chromium bun run test:e2e` pass.
 4. `nix develop -c wails3 build` passes and a native smoke proves service binding + event delivery.
@@ -36,13 +35,17 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `forgeModVersions` | `ForgeModVersions(modID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeAddonVersions` | `ForgeAddonVersions(addonID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeDownloadVersion` | `ForgeDownloadVersion(input models.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
+| `openPath` | `OpenPath(path string) error` | Wails runtime limitation; console fallback |
+| `selectFiles` | `SelectFiles() ([]string, error)` | Wails runtime limitation; no-op fallback |
+| `setWindowEffect` | `SetWindowEffect(effect string) error` | WX |
+| `getVersion` | `GetVersion() string` | WA |
 
 Wails derives the JS name by lowercasing the first letter of the exported method, so Go names must
 match the TS names exactly. `ApplyWindowEffect` stays as-is.
 
 ## Wire contract (`backend/models`)
 
-Rust serde is the authority. Go structs use camelCase JSON tags, lowercase wire enum values, and
+Rust serde is the authority. Go structs use camelCase JSON tags. Wire enum constants use Go type-prefixed names.
 `omitempty` only where Rust uses `skip_serializing_if = "Option::is_none"`.
 
 - `models.Error{Code string, Data any}` = `SError`. Codes are the Rust variant names verbatim:
@@ -216,6 +219,19 @@ integrated code, not whether a branch has been deleted.
 | Process checks | `wails/wq-process` | integrated |
 | Platform | `wails/wx-platform` | integrated |
 | Documentation | `wails/wp-docs` | current |
+
+Merged delivery summary: `wails/wa-foundation` established models, config, store, registry,
+security and fixtures; `wails/wb-forge` added Forge client and commands; `wails/wc-library-crud`
+added workspace, settings and library CRUD; `wails/wd-library-ops` added install, bulk actions,
+sync and cache rebuild; `wails/we-deployment` added owned deployment and purge; `wails/wf-spt`
+added SPT layout and metadata inspection; `wails/wg-frontend` added the Wails bridge and UI;
+`wails/wh-native` added native builds and smoke coverage; `wails/wi-parity` added parity tests;
+`wails/wk-recovery` added journal recovery; `wails/wl-staging` added safe archive staging;
+`wails/wq-process` added process checks; `wails/wx-platform` added platform abstraction.
+
+Remaining gaps: Windows junction behavior is not proven equivalent; inspecting a real SPT
+installation remains opt-in; the Wails runtime has no openPath or file-drop API, so those
+actions are console output or no-ops rather than native integrations.
 
 ## Work protocol
 

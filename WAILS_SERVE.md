@@ -1,6 +1,6 @@
 # Wails v3 development, bindings, and native build
 
-The application uses Wails v3. Run commands from the repository root. Install the frontend dependencies with `bun install` before running frontend commands.
+The application uses Wails v3. Run commands from the repository root. Run `bun install` before frontend commands.
 
 ## Development
 
@@ -26,7 +26,15 @@ The smoke checks native service binding and event delivery. It also checks that 
 
 ## E2E
 
-Run `PLAYWRIGHT_CHROMIUM_EXECUTABLE=<path-to-chromium> bun run test:e2e`. Playwright starts Vite and tests the frontend. The task-center test uses the Wails in-memory mock. It does not test native IPC, backend synchronization, native window behavior, or persisted settings.
+Run `PLAYWRIGHT_CHROMIUM_EXECUTABLE=<chromium-executable> bun run test:e2e`. Playwright starts Vite and tests the frontend. The task-center test uses the Wails in-memory mock. It does not test native IPC, backend synchronization, native window behavior, or persisted settings.
+
+## What works end to end
+
+The Go `TestAppSurfaceEndToEnd` test (`backend/app_integration_test.go`) exercises library
+creation, settings persistence, ZIP installation without changing the source archive, bulk
+enable/disable, sync into the game tree with a `sync_completed` event, and cache rebuild.
+The native smoke separately proves settings IPC round-trip and event delivery through the
+native Wails runtime.
 
 ## Wails bindings
 
