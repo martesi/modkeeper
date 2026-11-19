@@ -163,6 +163,44 @@ type Service struct {
 	tasks         sync.WaitGroup
 }
 
+// DeriveLibraryRoot returns the default library location for a game install.
+func DeriveLibraryRoot(gameRoot string) string {
+	return filepath.Join(gameRoot, ".mod_keeper")
+}
+
+// DeriveLibraryRootForSPT returns an isolated library location for an SPT version.
+func DeriveLibraryRootForSPT(gameRoot, version string) string {
+	return filepath.Join(gameRoot, ".mod_keeper-spt-"+version)
+}
+
+// ValidateLibraryStructure checks the on-disk files required by a library.
+func ValidateLibraryStructure(root string) error {
+	if _, err := os.Stat(filepath.Join(root, "manifest.toml")); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("InvalidLibrary: %s: manifest.toml is missing", root)
+		}
+		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
+	}
+	var m manifest
+	if _, err := toml.DecodeFile(filepath.Join(root, "manifest.toml"), &m); err != nil {
+		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
+	}
+	for _, dir := range []string{"mods", "backups", "staging"} {
+		path := filepath.Join(root, dir)
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return fmt.Errorf("InvalidLibrary: %s: missing required directory: %s", root, dir)
+		}
+		if err != nil {
+			return fmt.Errorf("InvalidLibrary: %s: %w", root, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("InvalidLibrary: %s: expected directory but found file: %s", root, dir)
+		}
+	}
+	return nil
+}
+
 func New(path string) (*Service, error) {
 	c, e := store.LoadFrom(path)
 	if e != nil {
