@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +40,34 @@ func TestConfigStoreRoundTripAndLegacyDefaults(t *testing.T) {
 	}
 	if got.Settings.Language != "en-US" || !got.Settings.EnableModsOnInstall {
 		t.Fatalf("legacy migration: %+v", got.Settings)
+	}
+}
+
+func TestTaskRegistryGuardsAndStartupWait(t *testing.T) {
+	r := NewTaskRegistry()
+	if err := r.AssertActiveLibrary("lib"); err == nil {
+		t.Fatal("expected no active library error")
+	}
+	r.SetActive("lib", true)
+	if err := r.AssertActiveLibrary("lib"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AssertActiveLibrary("other"); err == nil {
+		t.Fatal("expected active library mismatch")
+	}
+	if err := r.AcquireTaskID("task"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AcquireTaskID("task"); err == nil {
+		t.Fatal("expected duplicate task ID error")
+	}
+	r.FinishTaskID("task")
+	if err := r.AcquireTaskID("task"); err != nil {
+		t.Fatal(err)
+	}
+	r.FinishStartupLoad(nil)
+	if err := r.WaitForStartupLoad(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 
