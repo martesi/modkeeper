@@ -310,14 +310,3 @@ func ensureNoOrphanQuarantine(root string) error {
 	}
 	return nil
 }
-
-// VerifyDeploymentOwnership is the deletion-side guard for recorded deployment
-// entries. An unverified copy or a replaced entry must never be removed.
-func VerifyDeploymentOwnership(verified bool) error {
-	if !verified {
-		return errors.New("deployment ownership cannot be verified")
-	}
-	return nil
-}
-
-func verifyDeploymentOwnership(verified bool) error { return VerifyDeploymentOwnership(verified) }

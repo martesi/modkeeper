@@ -20,32 +20,48 @@ func TestStartupLibraryWaitsForBackgroundLoadCompletion(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 	r.FinishStartupLoad(nil)
-	if err := <-done; err != nil { t.Fatalf("wait: %v", err) }
+	if err := <-done; err != nil {
+		t.Fatalf("wait: %v", err)
+	}
 	r = NewTaskRegistry()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := r.WaitForStartupLoad(ctx); !errors.Is(err, context.Canceled) { t.Fatalf("cancellation: %v", err) }
+	if err := r.WaitForStartupLoad(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation: %v", err)
+	}
 	want := errors.New("startup failed")
 	r.FinishStartupLoad(want)
-	if err := r.WaitForStartupLoad(context.Background()); !errors.Is(err, want) { t.Fatalf("startup error: %v", err) }
+	if err := r.WaitForStartupLoad(context.Background()); !errors.Is(err, want) {
+		t.Fatalf("startup error: %v", err)
+	}
 }
 func TestTestTaskIdInUseRejectedUntilFinished(t *testing.T) {
 	r := NewTaskRegistry()
-	if err := r.AcquireTaskID("task"); err != nil { t.Fatal(err) }
+	if err := r.AcquireTaskID("task"); err != nil {
+		t.Fatal(err)
+	}
 	err := r.AcquireTaskID("task")
 	var coded *models.Error
-	if !errors.As(err, &coded) || coded.Code != models.TaskIdInUse { t.Fatalf("duplicate error: %v", err) }
+	if !errors.As(err, &coded) || coded.Code != models.TaskIdInUse {
+		t.Fatalf("duplicate error: %v", err)
+	}
 	r.FinishTaskID("task")
-	if err := r.AcquireTaskID("task"); err != nil { t.Fatalf("reuse: %v", err) }
+	if err := r.AcquireTaskID("task"); err != nil {
+		t.Fatalf("reuse: %v", err)
+	}
 }
 func TestTestAssertActiveLibraryRejectsNonActive(t *testing.T) {
 	r := NewTaskRegistry()
 	err := r.AssertActiveLibrary("lib")
 	var coded *models.Error
-	if !errors.As(err, &coded) || coded.Code != models.NoActiveLibrary { t.Fatalf("inactive error: %v", err) }
+	if !errors.As(err, &coded) || coded.Code != models.NoActiveLibrary {
+		t.Fatalf("inactive error: %v", err)
+	}
 	r.SetActive("lib", true)
 	err = r.AssertActiveLibrary("other")
-	if !errors.As(err, &coded) || coded.Code != models.InvalidLibrary { t.Fatalf("wrong-library error: %v", err) }
+	if !errors.As(err, &coded) || coded.Code != models.InvalidLibrary {
+		t.Fatalf("wrong-library error: %v", err)
+	}
 }
 
 type processInspector func() (bool, error)

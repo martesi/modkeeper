@@ -84,7 +84,3 @@ func TestLegacyFolderTimeIsExposedReadOnlyAndPreservedOnUpdate(t *testing.T) {
 		t.Fatalf("legacy timestamp changed: %+v", m)
 	}
 }
-
-func TestTestCacheRebuildRenamesMismatchedFolder(t *testing.T) {
-	t.Skip("blocked on wails/wd-library-ops")
-}

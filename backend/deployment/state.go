@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/linker"
+	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/spt"
 	"github.com/zeebo/blake3"
 	"io"
@@ -307,3 +308,41 @@ func writeTOML(path string, value any) error {
 	}
 	return ioError(e)
 }
+
+// VerifyOwnership checks that every recorded artifact still matches the state
+// the library owns. A replaced or missing artifact blocks destructive deletes.
+func VerifyOwnership(l Layout) error {
+	state, err := LoadState(l)
+	if err != nil {
+		return err
+	}
+	for _, artifact := range state.Artifacts {
+		info, statErr := os.Lstat(artifact.Target)
+		if statErr != nil {
+			return models.Fail("FileOrDirectoryNotFound", artifact.Target)
+		}
+		switch artifact.Kind {
+		case linker.Symlink:
+			if info.Mode()&os.ModeSymlink == 0 {
+				return models.Fail("InvalidLibrary", artifact.Target, "recorded symlink was replaced")
+			}
+			target, linkErr := os.Readlink(artifact.Target)
+			if linkErr != nil || filepath.Clean(target) != filepath.Clean(artifact.Source) {
+				return models.Fail("InvalidLibrary", artifact.Target, "symlink target changed")
+			}
+		case linker.Copy:
+			if artifact.Fingerprint == nil {
+				return models.Fail("InvalidLibrary", artifact.Target, "unverifiable copy")
+			}
+			current, hashErr := fingerprint(artifact.Target)
+			if hashErr != nil || current != *artifact.Fingerprint {
+				return models.Fail("InvalidLibrary", artifact.Target, "deployed file changed")
+			}
+		}
+	}
+	return nil
+}
+
+// SnapshotFingerprint exposes the content fingerprint for callers that need to
+// verify ownership outside this package (deletion guards, tests).
+func SnapshotFingerprint(path string) (string, error) { return fingerprint(path) }

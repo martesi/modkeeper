@@ -8,6 +8,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/deployment"
+	"github.com/martes/modkeeper/backend/linker"
+	"github.com/martes/modkeeper/backend/spt"
 )
 
 func fixture(t *testing.T) (string, string, string) {
@@ -215,19 +218,64 @@ func TestRetiringReconciledRecordsPreventsOldLibraryReplay(t *testing.T) {
 }
 
 func TestDeletingACrossMajorLibraryBlocksOnAnUnverifiableCopy(t *testing.T) {
-	root := t.TempDir()
-	if err := verifyDeploymentOwnership(false); err == nil {
-		t.Fatal("unverifiable deployment accepted")
+	layout := deploymentLayout(t)
+	target := filepath.Join(layout.GameRoot, "SPT", "user", "mods", "A", "file")
+	writeFile(t, target, "deployed")
+	// A copy artifact without a fingerprint cannot be proven owned.
+	must(t, deployment.SaveState(layout, deployment.DeploymentState{Artifacts: []deployment.DeploymentArtifact{{
+		Target: target, Source: filepath.Join(layout.LibraryRoot, "mods", "a"), Kind: linker.Copy,
+	}}, CreatedDirs: []string{}}))
+	if err := deployment.VerifyOwnership(layout); err == nil {
+		t.Fatal("unverifiable copy accepted")
 	}
-	_ = root
-	t.Skip("cross-package half requires backend/deployment ownership fingerprints, which is not present on wails/integrate")
 }
 
 func TestDeletingACrossMajorLibraryRefusesAReplacedDeployment(t *testing.T) {
-	root := t.TempDir()
-	if err := verifyDeploymentOwnership(false); err == nil {
+	layout := deploymentLayout(t)
+	target := filepath.Join(layout.GameRoot, "SPT", "user", "mods", "A", "file")
+	writeFile(t, target, "user-replaced")
+	source := filepath.Join(layout.LibraryRoot, "mods", "a", "SPT", "user", "mods", "A", "file")
+	writeFile(t, source, "owned")
+	must(t, deployment.SaveState(layout, deployment.DeploymentState{Artifacts: []deployment.DeploymentArtifact{{
+		Target: target, Source: source, Kind: linker.Copy,
+		Fingerprint: strPtr(testFingerprint(t, source)),
+	}}, CreatedDirs: []string{}}))
+	if err := deployment.VerifyOwnership(layout); err == nil {
 		t.Fatal("replaced deployment accepted")
 	}
-	_ = root
-	t.Skip("cross-package half requires backend/deployment ownership fingerprints, which is not present on wails/integrate")
+}
+
+func deploymentLayout(t *testing.T) deployment.Layout {
+	t.Helper()
+	game := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(game, "SPT", "user", "mods"), 0755))
+	writeFile(t, filepath.Join(game, "SPT", "SPT.Server.exe"), "exe")
+	writeFile(t, filepath.Join(game, "EscapeFromTarkov.exe"), "exe")
+	rules, err := spt.Discover(game)
+	must(t, err)
+	root := filepath.Join(game, ".mod_keeper")
+	must(t, os.MkdirAll(root, 0755))
+	return deployment.Layout{LibraryRoot: root, GameRoot: game, Rules: rules}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	must(t, os.MkdirAll(filepath.Dir(path), 0755))
+	must(t, os.WriteFile(path, []byte(content), 0644))
+}
+
+func testFingerprint(t *testing.T, path string) string {
+	t.Helper()
+	state, err := deployment.SnapshotFingerprint(path)
+	must(t, err)
+	return state
+}
+
+func strPtr(value string) *string { return &value }
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
 }

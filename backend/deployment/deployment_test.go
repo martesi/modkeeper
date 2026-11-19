@@ -190,7 +190,6 @@ func TestTestUpgradeSuccessLeavesNoSnapshot(t *testing.T) {
 	syncMods(t, l, m)
 	content(t, filepath.Join(l.GameRoot, "SPT/user/mods/A/file"), "v2")
 	absent(t, filepath.Join(l.Paths().Backups, "a"))
-	t.Skip("backend/library archive overwrite and mod_snapshot lifecycle are owned by WI/WD")
 }
 func TestUpdatingADeployedModRefreshesAndRemovalUnlinksStaleCopies(t *testing.T) {
 	l := fixture(t)

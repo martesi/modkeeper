@@ -13,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/registry"
 	"github.com/martes/modkeeper/backend/spt"
@@ -292,6 +293,25 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	if k == nil {
 		return fmt.Errorf("InvalidLibrary: Library not registered")
 	}
+	// Validate the purge and every recorded deployment artifact BEFORE touching
+	// config or disk, matching the Rust delete ordering.
+	var depLayout deployment.Layout
+	var mods []models.Mod
+	if deleteFiles {
+		m, _, _, _, _, err := layout(k.LibraryRoot)
+		if err == nil {
+			gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
+			rules, discoverErr := spt.Discover(gameRoot)
+			if discoverErr != nil {
+				return discoverErr
+			}
+			depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
+			if err := deployment.VerifyOwnership(depLayout); err != nil {
+				return err
+			}
+			mods = sortedMods(m.Mods)
+		}
+	}
 	prev := s.Store.Config
 	s.Store.Config.RemoveLibrary(k.ID)
 	if e := s.Store.Save(); e != nil {
@@ -303,6 +323,11 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		s.Registry.SetActive("", false)
 	}
 	if deleteFiles {
+		if depLayout.LibraryRoot != "" {
+			if err := deployment.Purge(depLayout, mods); err != nil {
+				return err
+			}
+		}
 		entries, e := os.ReadDir(k.LibraryRoot)
 		if e == nil && len(entries) == 0 {
 			return os.Remove(k.LibraryRoot)
@@ -322,15 +347,17 @@ func (s *Service) SaveSettings(v config.AppSettings) (config.AppSettings, error)
 }
 
 // modList returns manifest mods in deterministic order for deployment planning.
-func (l *Library) modList() []models.Mod {
-	ids := make([]string, 0, len(l.manifest.Mods))
-	for id := range l.manifest.Mods {
+func (l *Library) modList() []models.Mod { return sortedMods(l.manifest.Mods) }
+
+func sortedMods(source map[string]models.Mod) []models.Mod {
+	ids := make([]string, 0, len(source))
+	for id := range source {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	mods := make([]models.Mod, 0, len(ids))
 	for _, id := range ids {
-		mods = append(mods, l.manifest.Mods[id])
+		mods = append(mods, source[id])
 	}
 	return mods
 }

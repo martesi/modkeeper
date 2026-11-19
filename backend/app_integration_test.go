@@ -155,6 +155,10 @@ func TestAppSurfaceEndToEnd(t *testing.T) {
 }
 
 func writeModArchive(t *testing.T, dll string) string {
+	return writeModArchiveContent(t, dll, "binary")
+}
+
+func writeModArchiveContent(t *testing.T, dll, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "mod.zip")
 	file, err := os.Create(path)
@@ -166,7 +170,7 @@ func writeModArchive(t *testing.T, dll string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := entry.Write([]byte("binary")); err != nil {
+	if _, err := entry.Write([]byte(content)); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Close(); err != nil {
@@ -183,4 +187,51 @@ func trimExt(name string) string {
 		return name[:len(name)-len(ext)]
 	}
 	return name
+}
+
+// TestInstallUpgradeLeavesNoSnapshot ports the Rust upgrade-path contract at the
+// library layer: a second install replaces the mod content and never creates a
+// backup snapshot.
+func TestInstallUpgradeLeavesNoSnapshot(t *testing.T) {
+	env := testenv.New(t)
+	app := NewAppAt(filepath.Join(t.TempDir(), "config.toml"))
+	if app.InitErr != nil {
+		t.Fatalf("NewAppAt: %v", app.InitErr)
+	}
+	libraryRoot := env.LibraryRoot
+	if _, err := app.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot, LibraryRoot: &libraryRoot}); err != nil {
+		t.Fatalf("CreateLibrary: %v", err)
+	}
+	workspace, err := app.GetLibraryWorkspace()
+	if err != nil || workspace.ActiveLibraryID == nil {
+		t.Fatalf("workspace: %+v %v", workspace, err)
+	}
+	libraryID := *workspace.ActiveLibraryID
+
+	first := writeModArchiveContent(t, "Upgrade.dll", "v1")
+	if _, err := app.InstallModArchives(models.InstallModArchivesInput{TaskID: "u1", LibraryID: libraryID, ArchivePaths: []string{first}}); err != nil {
+		t.Fatal(err)
+	}
+	app.Library.Wait()
+	second := writeModArchiveContent(t, "Upgrade.dll", "v2")
+	if _, err := app.InstallModArchives(models.InstallModArchivesInput{TaskID: "u2", LibraryID: libraryID, ArchivePaths: []string{second}}); err != nil {
+		t.Fatal(err)
+	}
+	app.Library.Wait()
+
+	workspace, err = app.GetLibraryWorkspace()
+	if err != nil || len(workspace.ModsByLibraryID[libraryID]) != 1 {
+		t.Fatalf("mods after upgrade: %+v %v", workspace, err)
+	}
+	mod := workspace.ModsByLibraryID[libraryID][0]
+	if mod.InstalledPath == nil {
+		t.Fatal("mod has no installed path")
+	}
+	body, err := os.ReadFile(filepath.Join(*mod.InstalledPath, "SPT", "user", "mods", "Upgrade", "Upgrade.dll"))
+	if err != nil || string(body) != "v2" {
+		t.Fatalf("upgraded content: %q %v", body, err)
+	}
+	if _, err := os.Stat(filepath.Join(env.LibraryRoot, "backups", "Upgrade")); !os.IsNotExist(err) {
+		t.Fatalf("upgrade created a snapshot: %v", err)
+	}
 }
