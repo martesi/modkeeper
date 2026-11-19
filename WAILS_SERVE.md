@@ -1,55 +1,40 @@
-# Wails v3 development and build
+# Wails v3 development, bindings, and native build
 
-This app uses Wails **v3.1.0**. The v3 CLI reads `build/config.yml`; it does not
-use the v2 `wails.json` file. Run commands from the repository root:
+The application uses Wails v3. Run commands from the repository root. Install the frontend dependencies with `bun install` before running frontend commands.
 
-```sh
-nix develop .#e2e -c wails3 dev -config ./build/config.yml
-nix develop -c wails3 build
-```
+## Development
 
-The dev config runs the Vite server on `http://127.0.0.1:34115/`. `GET /` is
-the frontend readiness check. The web page is served by Vite, not by the native
-window, and browser mode does not validate native IPC.
+Run `bun run dev:wails` to start Vite with the Wails development flags. Run `nix develop -c wails3 dev -config ./build/config.yml` to start the native Wails development app. Browser mode is useful for UI work, but it does not test native IPC.
 
-Go services are generated under `frontend/bindings/github.com/martes/modkeeper/backend`.
-The frontend calls `App.<Method>(...)` from those generated Wails bindings. V3
-events use `@wailsio/runtime` (`Events.On`, `Events.Once`, `Events.Emit`) and
-the custom event names registered in `main.go`. Regenerate bindings after Go
-service or event changes:
+## Native build
+
+Build the native frontend and app inside the Nix development environment with:
 
 ```sh
-nix develop -c wails3 generate bindings -ts -i -dir . -d frontend/bindings ./...
+nix develop -c bun run build:native
 ```
 
-The frontend adapter keeps the Tauri transport and in-memory browser mock for
-their existing paths. The browser readiness check does not validate native IPC.
-Use the native smoke command below to test Go service calls and events.
+This script runs `bun run build:wails` and then `wails3 build`. The Wails CLI builds the existing `dist/` directory; it does not build the frontend first. `bun run build` is not the native build path: it embeds `WAILS=false` and uses the Tauri fallback. Native frontend bundles must be built with `WAILS_APP=true` (`build:wails` sets it). Runtime detection also accepts `window._wails.environment`, which Wails injects in the native webview. That runtime marker is a safety net, not the primary build switch.
 
-## Native build and linkage check
-
-Run the native build and linkage check with:
-
-```sh
-scripts/native-smoke.sh
-```
-
-The script installs frontend dependencies, builds `dist/`, builds the Wails
-application, and checks its dynamic dependencies for WebKitGTK 6.0 or 4.1 and
-libsoup3. It fails if it finds the legacy WebKitGTK 4.0 or libsoup2 dependencies.
-The default Nix dev shell includes `xvfb-run`; run the script inside Xvfb with:
+The native smoke builds the frontend with `bun run build:wails`, then builds and launches the native app. Run it under Xvfb with:
 
 ```sh
 nix develop -c xvfb-run -a scripts/native-smoke.sh
 ```
 
-With `MODKEEPER_NATIVE_SMOKE=1`, the app binds a smoke-only service and opens the
-frontend smoke module. The module calls the generated `GetSettings()` binding and
-checks the defaults (`system`, `default`, `en-US`, `true`) before reporting the
-returned value to Go. It then subscribes with `@wailsio/runtime` `Events.On`.
-Go uses Wails v3.1.0 `WebviewWindow.ExecJS` to set a window marker and
-`WebviewWindow.EmitEvent` to send the registered event. The frontend event
-listener checks the marker, records the payload, and reports both to Go. Go
-checks the exact payload and marker. Each step has a bounded deadline. The
-script passes only when process startup, the settings round trip, and event
-delivery all pass.
+The smoke checks native service binding and event delivery. It also checks that the binary links WebKitGTK 6.0 or 4.1 and libsoup3, not WebKitGTK 4.0 or libsoup2.
+
+## E2E
+
+Run `PLAYWRIGHT_CHROMIUM_EXECUTABLE=<path-to-chromium> bun run test:e2e`. Playwright starts Vite and tests the frontend. The task-center test uses the Wails in-memory mock. It does not test native IPC, backend synchronization, native window behavior, or persisted settings.
+
+## Wails bindings
+
+Wails service bindings live under `frontend/bindings`. Regenerate them after Go service changes:
+
+```sh
+nix develop -c wails3 generate bindings -ts -i -dir . -d frontend/bindings ./...
+bun scripts/prune-wails-bindings.ts
+```
+
+The prune script removes generated files that are not part of the supported frontend binding surface. This keeps generated output deterministic and avoids unrelated generated API leaking into the frontend. Check the pruned output with `bun scripts/prune-wails-bindings.ts --check`.

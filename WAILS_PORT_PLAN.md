@@ -1,6 +1,6 @@
 # Wails backend port — execution plan
 
-Baseline: `wails/integrate` @ `de4362f` (Wails v3.1.0, go module `github.com/martes/modkeeper`).
+Baseline: `wails/integrate` (Wails v3.1.0, go module `github.com/martes/modkeeper`).
 Source of truth for behavior: `src-tauri/` (Rust, 13.2k LOC). Do not delete `src-tauri/` yet.
 
 ## Definition of done
@@ -42,7 +42,7 @@ match the TS names exactly. `ApplyWindowEffect` stays as-is.
 
 ## Wire contract (`backend/models`)
 
-Rust serde is the authority. Go structs use camelCase JSON tags, lowercase enum values, and
+Rust serde is the authority. Go structs use camelCase JSON tags, lowercase wire enum values, and
 `omitempty` only where Rust uses `skip_serializing_if = "Option::is_none"`.
 
 - `models.Error{Code string, Data any}` = `SError`. Codes are the Rust variant names verbatim:
@@ -53,9 +53,8 @@ Rust serde is the authority. Go structs use camelCase JSON tags, lowercase enum 
   (string for single, array for `FileCollision`, 2-array for `InvalidLibrary`/`ModIdConflict`).
 - `LibraryWorkspace` keys: `activeLibraryId?`, `libraries`, `modsByLibraryId`, `toolsByLibraryId`,
   `settings`, `configWarning?`.
-- `LibraryEntry` is **untagged**: either a summary object or a stub object `{"path": "..."}`.
-  Implement `MarshalJSON`/`UnmarshalJSON` on `LibraryEntry`; never emit a wrapper key.
-- `WorkspaceEvent` is internally tagged `type` with snake_case values
+- `LibraryEntry` is **untagged**: either a summary object or a stub object `{"path": "..."}`. The landed model implements custom `MarshalJSON`/`UnmarshalJSON`; never emit a wrapper key.
+- `WorkspaceEvent` is internally tagged `type` with custom `MarshalJSON`/`UnmarshalJSON`, snake_case values
   (`cache_rebuild_completed`, `mod_install_completed`, `sync_completed`) and camelCase fields
   (`taskId`, `libraryId`, `failures`, `workspace`, `cacheStatus`).
 - `TaskProgressEvent` keeps explicit `null` for `percent`/`log` (already implemented).
@@ -93,9 +92,9 @@ by `_test.go` files.
 type LibraryEntry struct{ /* Summary *LibrarySummary; Stub *LibraryStub */ }
 func SummaryEntry(LibrarySummary) LibraryEntry
 func StubEntry(path string) LibraryEntry
-type CacheState string // ready|dirty|rebuilding|failed
-type CacheStatus struct{ State CacheState; Message *string; LastRebuiltAt *string }
-type ModSummary struct{ ID, LibraryID, Name string; Type ModType; IsEnabled bool; SourcePath, InstalledPath, InstalledAt, UpdatedAt *string /* UpdatedAt non-pointer */ ... }
+type CacheState string // constants CacheStateReady, CacheStateDirty, CacheStateRebuilding, CacheStateFailed
+type CacheStatus struct{ State CacheState; // enum constants are prefixed, e.g. CacheStateReady Message *string; LastRebuiltAt *string }
+type ModSummary struct{ ID, LibraryID, Name string; Type ModType; // enum constants are prefixed, e.g. ModTypeServer IsEnabled bool; SourcePath, InstalledPath, InstalledAt, UpdatedAt *string /* UpdatedAt non-pointer */ ... }
 type LibrarySummary struct{ ID, Name, GameRoot, LibraryRoot string; SPTVersion *string; CacheStatus CacheStatus; DeployStale bool; UpdatedAt string }
 type LibraryWorkspace struct{ ActiveLibraryID *string; Libraries []LibraryEntry; ModsByLibraryID map[string][]ModSummary; ToolsByLibraryID map[string][]ToolSummary; Settings config.AppSettings; ConfigWarning *string }
 type OperationAccepted struct{ Accepted bool }
@@ -182,7 +181,7 @@ Extend the existing client; add a `Service` with the five command methods above 
 
 | Rust suite | Go package | Owner |
 |---|---|---|
-| `tests/store.rs`, `tests/install_preference.rs`, `tests/installation_time.rs` | store/install | WI |
+| `tests/store.rs`, `tests/install_preference.rs`, `tests/installation_time.rs` | store/models | WI |
 | `tests/linker.rs`, `tests/mod_fs.rs` | linker/modfs | WI |
 | `tests/registry.rs` | registry | WI |
 | `tests/security.rs` | security | WA |
@@ -195,6 +194,28 @@ Extend the existing client; add a `Service` with the five command methods above 
 Every ported test keeps the Rust test name in Go form (`test_x` → `TestX`) so the matrix can be
 ticked mechanically. Mark Windows-only process tests with `if runtime.GOOS != "windows" { t.Skip }`
 and keep their assertions in an injectable inspector.
+
+## Worktree and branch status
+
+Branches are the current work-package branches; their status here reflects the
+integrated code, not whether a branch has been deleted.
+
+| Work | Branch | Status |
+|---|---|---|
+| Foundation/models | `wails/wa-foundation` | integrated |
+| Forge | `wails/wb-forge` | integrated |
+| Library CRUD | `wails/wc-library-crud` | integrated |
+| Library operations | `wails/wd-library-ops` | integrated |
+| Deployment | `wails/we-deployment` | integrated |
+| SPT | `wails/wf-spt` | integrated |
+| Frontend | `wails/wg-frontend` | integrated |
+| Native build | `wails/wh-native` | integrated |
+| Parity | `wails/wi-parity` | integrated; some Rust suites still have no Go equivalent |
+| Recovery | `wails/wk-recovery` | integrated |
+| Staging | `wails/wl-staging` | integrated |
+| Process checks | `wails/wq-process` | integrated |
+| Platform | `wails/wx-platform` | integrated |
+| Documentation | `wails/wp-docs` | current |
 
 ## Work protocol
 
