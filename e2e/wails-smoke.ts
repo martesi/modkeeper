@@ -3,7 +3,8 @@
  * Frontend smoke check for the Wails Vite development server.
  *
  * This does not launch a native Wails window or test Wails runtime bindings.
- * Run `wails dev` in one terminal, then run `bun e2e/wails-smoke.ts` in another.
+ * Run `nix develop .#e2e -c wails3 dev -config ./build/config.yml` in one
+ * terminal, then run `bun e2e/wails-smoke.ts` in another.
  */
 const url = process.env.WAILS_DEV_SERVER_URL ?? 'http://127.0.0.1:34115/'
 
@@ -16,13 +17,13 @@ try {
   console.log(`Wails dev frontend is serving the app shell at ${url}`)
   console.log(
     'Manual native check still required: open the Wails window and exercise IPC/events. ' +
-      'Tauri uses @tauri-apps/api/event listen/emit; Wails uses generated Go bindings ' +
-      'and github.com/wailsapp/wails/v2/pkg/runtime EventsOn/EventsEmit.',
+      'Tauri uses @tauri-apps/api/event. Wails v3 uses generated frontend/bindings ' +
+      'services and @wailsio/runtime Events.On/Events.Emit.',
   )
 } catch (error) {
   console.error(
     `Wails frontend smoke failed for ${url}: ${(error as Error).message}. ` +
-      'Start `wails dev` first.',
+      'Start `wails3 dev -config ./build/config.yml` first.',
   )
   process.exitCode = 1
 }

@@ -1,35 +1,40 @@
 package main
 
 import (
-	"context"
 	"embed"
-	"io/fs"
 	"log"
 
 	"github.com/martes/modkeeper/backend"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/martes/modkeeper/backend/models"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:dist
 var frontend embed.FS
 
+func init() {
+	application.RegisterEvent[models.TaskProgressEvent]("task_progress")
+	application.RegisterEvent[any]("workspace-event")
+}
+
 func main() {
-	assets, err := fs.Sub(frontend, "dist")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := wails.Run(&options.App{
+	app := application.New(application.Options{
+		Name:        "Modkeeper",
+		Description: "Game mod management and development",
+		Services: []application.Service{
+			application.NewService(backend.NewApp()),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(frontend),
+		},
+	})
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  "Modkeeper",
 		Width:  1200,
 		Height: 800,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		OnStartup: func(ctx context.Context) {},
-		Bind:      []interface{}{backend.NewApp()},
-	}); err != nil {
+		URL:    "/",
+	})
+	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
 }

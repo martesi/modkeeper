@@ -1,21 +1,27 @@
-# Wails serve mode
+# Wails v3 development and build
 
-The installed CLI is Wails **v2.16.0** (`nix develop -c wails version`).
-Its help lists `dev` and does not list a `serve` command. The supported browser
-launch is `wails dev -browser` (`nix develop -c wails dev --help`).
-
-`wails dev -browser` starts the configured Vite server and opens it in a browser.
-For E2E, use `http://127.0.0.1:34115/`; `GET /` is the readiness check. Vite
-uses port 34115 when `WAILS_DEV=true` (`vite.config.ts`). This is the frontend
-development server, not the Wails native window's webview.
-
-Run it from the repository root with:
+This app uses Wails **v3.1.0**. The v3 CLI reads `build/config.yml`; it does not
+use the v2 `wails.json` file. Run commands from the repository root:
 
 ```sh
-nix develop .#e2e -c wails dev -browser
+nix develop .#e2e -c wails3 dev -config ./build/config.yml
+nix develop -c wails3 build
 ```
 
-The Go application binds `backend.App`. Backend methods are still stubs and
-browser mode does not turn the native Wails IPC bridge into a browser IPC
-transport. Use it to drive frontend routing and rendering; it does not validate
-native IPC.
+The dev config runs the Vite server on `http://127.0.0.1:34115/`. `GET /` is
+the frontend readiness check. The web page is served by Vite, not by the native
+window, and browser mode does not validate native IPC.
+
+Go services are generated under `frontend/bindings/github.com/martes/modkeeper/backend`.
+The frontend calls `App.<Method>(...)` from those generated Wails bindings. V3
+events use `@wailsio/runtime` (`Events.On`, `Events.Once`, `Events.Emit`) and
+the custom event names registered in `main.go`. Regenerate bindings after Go
+service or event changes:
+
+```sh
+nix develop -c wails3 generate bindings -ts -i -dir . -d frontend/bindings ./...
+```
+
+The frontend adapter keeps the Tauri transport and in-memory browser mock for
+their existing paths. This smoke mode checks the page shell only. Use a native
+Wails window to test Go service calls and events.

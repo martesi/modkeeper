@@ -9,9 +9,13 @@ import { lingui } from '@lingui/vite-plugin'
 
 const host = process.env.TAURI_DEV_HOST
 const wails = process.env.WAILS_DEV === 'true'
+const wailsApp = process.env.WAILS_APP === 'true'
 
 export default defineConfig(() => ({
   envDir: '.config',
+  define: {
+    'import.meta.env.WAILS': JSON.stringify(String(wailsApp)),
+  },
   plugins: [
     lingui({ macroTransform: true }),
     react(),
