@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
-	"modkeeper/backend/config"
-	"modkeeper/backend/store"
+	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/store"
 )
 
 type Service struct{ Store *store.AppConfigStore }

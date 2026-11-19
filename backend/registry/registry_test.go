@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"modkeeper/backend/config"
-	"modkeeper/backend/store"
+	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/store"
 )
 
 func TestConfigStoreRoundTripAndLegacyDefaults(t *testing.T) {
