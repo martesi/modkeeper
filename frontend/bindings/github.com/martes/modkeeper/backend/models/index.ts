@@ -3,9 +3,9 @@
 
 export {
   TaskOperation,
+  TaskProgressEvent,
   TaskProgressKind,
   TaskProgressLevel,
+  TaskProgressLog,
   TaskProgressStage,
 } from './models.js'
-
-export type { TaskProgressEvent, TaskProgressLog } from './models.js'
