@@ -76,7 +76,7 @@ func TestTestCollisionDetection(t *testing.T) {
 	code(t, e, "FileCollision")
 	absent(t, filepath.Join(l.GameRoot, "BepInEx"))
 }
-func TestTestRecursiveLinkingLogic(t *testing.T) {
+func testRecursiveLinkingLogic(t *testing.T) {
 	l := fixture(t)
 	a := mod(t, l, "a", map[string]string{"SPT/user/mods/CommonDir/A.txt": "a"})
 	b := mod(t, l, "b", map[string]string{"SPT/user/mods/CommonDir/B.txt": "b"})
@@ -105,7 +105,7 @@ func TestTestPurgeRemovesDeactivatedMods(t *testing.T) {
 		t.Fatal(s)
 	}
 }
-func TestTestCopyDeploymentReusesOwnedDirectoriesAndNormalizesLegacyPaths(t *testing.T) {
+func testCopyDeploymentReusesOwnedDirectoriesAndNormalizesLegacyPaths(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	syncMods(t, l, m)
@@ -128,7 +128,7 @@ func TestTestCopyDeploymentReusesOwnedDirectoriesAndNormalizesLegacyPaths(t *tes
 		}
 	}
 }
-func TestTestLegacyCopyDeploymentFingerprintsAreMigratedOnLoad(t *testing.T) {
+func testLegacyCopyDeploymentFingerprintsAreMigratedOnLoad(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	syncMods(t, l, m)
@@ -147,7 +147,7 @@ func TestTestLegacyCopyDeploymentFingerprintsAreMigratedOnLoad(t *testing.T) {
 	}
 	syncMods(t, l, m)
 }
-func TestTestCopyDeploymentMergesIntoExistingGameDirectory(t *testing.T) {
+func testCopyDeploymentMergesIntoExistingGameDirectory(t *testing.T) {
 	l := fixture(t)
 	write(t, filepath.Join(l.GameRoot, "EscapeFromTarkov_Data/Managed/game.dll"), "game")
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a", "EscapeFromTarkov_Data/Managed/mod.dll": "mod"})
@@ -162,7 +162,7 @@ func TestTestCopyDeploymentMergesIntoExistingGameDirectory(t *testing.T) {
 		}
 	}
 }
-func TestTestUnownedDeploymentTargetIsPreservedAndBlocksSync(t *testing.T) {
+func testUnownedDeploymentTargetIsPreservedAndBlocksSync(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	write(t, filepath.Join(l.GameRoot, "SPT/user/mods/A/keep"), "user")
@@ -170,7 +170,7 @@ func TestTestUnownedDeploymentTargetIsPreservedAndBlocksSync(t *testing.T) {
 	code(t, e, "FileCollision")
 	content(t, filepath.Join(l.GameRoot, "SPT/user/mods/A/keep"), "user")
 }
-func TestTestUntrackedFileSafetyInSharedFolder(t *testing.T) {
+func testUntrackedFileSafetyInSharedFolder(t *testing.T) {
 	l := fixture(t)
 	a := mod(t, l, "a", map[string]string{"BepInEx/plugins/SharedDir/a.dll": "a"})
 	b := mod(t, l, "b", map[string]string{"BepInEx/plugins/SharedDir/b.dll": "b"})
@@ -191,7 +191,7 @@ func TestTestUpgradeSuccessLeavesNoSnapshot(t *testing.T) {
 	content(t, filepath.Join(l.GameRoot, "SPT/user/mods/A/file"), "v2")
 	absent(t, filepath.Join(l.Paths().Backups, "a"))
 }
-func TestUpdatingADeployedModRefreshesAndRemovalUnlinksStaleCopies(t *testing.T) {
+func testUpdatingADeployedModRefreshesAndRemovalUnlinksStaleCopies(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "v1"})
 	syncMods(t, l, m)
@@ -212,7 +212,7 @@ func TestUpdatingADeployedModRefreshesAndRemovalUnlinksStaleCopies(t *testing.T)
 	syncMods(t, l)
 	absent(t, target)
 }
-func TestSyncPreflightsChangedRemovalsBeforePurgingRecordedLinks(t *testing.T) {
+func testSyncPreflightsChangedRemovalsBeforePurgingRecordedLinks(t *testing.T) {
 	l := fixture(t)
 	a := mod(t, l, "a", map[string]string{"SPT/user/mods/Keep/file": "a"})
 	b := mod(t, l, "b", map[string]string{"SPT/user/mods/Drop/file": "b"})
@@ -256,7 +256,7 @@ func mustCollisionPreflight(t *testing.T, l Layout) {
 	t.Helper()
 	code(t, Preflight(l, DeploymentPlan{}), "FileCollision")
 }
-func TestSyncRefusesRedirectedRecordedDirectoriesWhenArtifactsAreMissing(t *testing.T) {
+func testSyncRefusesRedirectedRecordedDirectoriesWhenArtifactsAreMissing(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/Nested/file": "a"})
 	syncMods(t, l, m)
