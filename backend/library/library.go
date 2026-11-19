@@ -128,7 +128,9 @@ func (l *Library) Persist() error {
 		m.GameRoot = strings.Repeat("../", depth)
 		m.GameRoot = strings.TrimSuffix(m.GameRoot, "/")
 	}
-	for file, v := range map[string]any{"manifest.toml": m, "cache.toml": cache{Mods: map[string]any{}}, "deployment.toml": map[string]any{}} {
+	// deployment.toml is owned by the deployment package; rewriting it here
+	// erased the recorded artifacts and made delete/ownership checks vacuous.
+	for file, v := range map[string]any{"manifest.toml": m, "cache.toml": l.cacheTOML()} {
 		f, e := os.CreateTemp(base, ".tmp-*")
 		if e != nil {
 			return e
@@ -161,6 +163,9 @@ type Service struct {
 	sendProgress  func(models.TaskProgressEvent) error
 	sendWorkspace func(models.WorkspaceEvent) error
 	tasks         sync.WaitGroup
+	// copyMod is copyTree in production; tests inject failures to exercise the
+	// upgrade snapshot restore path.
+	copyMod func(src, dst string) error
 }
 
 // DeriveLibraryRoot returns the default library location for a game install.
@@ -347,6 +352,9 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 			if err := deployment.VerifyOwnership(depLayout); err != nil {
 				return err
 			}
+			if err := deployment.ValidatePurge(depLayout); err != nil {
+				return err
+			}
 			mods = sortedMods(m.Mods)
 		}
 	}
@@ -398,4 +406,51 @@ func sortedMods(source map[string]models.Mod) []models.Mod {
 		mods = append(mods, source[id])
 	}
 	return mods
+}
+
+// cacheTOML preserves the on-disk cache instead of clobbering it on every save.
+func (l *Library) cacheTOML() any {
+	var existing cache
+	if _, err := toml.DecodeFile(filepath.Join(l.Root, "cache.toml"), &existing); err == nil {
+		return existing
+	}
+	return cache{Mods: map[string]any{}}
+}
+
+func (s *Service) copyModTree(src, dst string) error {
+	if s.copyMod != nil {
+		return s.copyMod(src, dst)
+	}
+	return copyTree(src, dst)
+}
+
+// snapshotMod copies an installed mod to a bounded backup path before an
+// upgrade. A successful upgrade removes it; a failed one restores it.
+func (s *Service) snapshotMod(id string) (string, error) {
+	source := filepath.Join(s.active.ModsDir, id)
+	if _, err := os.Stat(source); err != nil {
+		return "", nil
+	}
+	snapshot := filepath.Join(s.active.BackupsDir, id+".snapshot")
+	if err := os.RemoveAll(snapshot); err != nil {
+		return "", err
+	}
+	if err := copyTree(source, snapshot); err != nil {
+		return "", err
+	}
+	return snapshot, nil
+}
+
+func (s *Service) restoreMod(id, snapshot string) error {
+	if snapshot == "" {
+		return nil
+	}
+	destination := filepath.Join(s.active.ModsDir, id)
+	if err := os.RemoveAll(destination); err != nil {
+		return err
+	}
+	if err := copyTree(snapshot, destination); err != nil {
+		return err
+	}
+	return os.RemoveAll(snapshot)
 }

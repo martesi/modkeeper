@@ -317,26 +317,28 @@ func VerifyOwnership(l Layout) error {
 		return err
 	}
 	for _, artifact := range state.Artifacts {
-		info, statErr := os.Lstat(artifact.Target)
+		target := resolveRecorded(l.GameRoot, artifact.Target)
+		source := resolveRecorded(l.LibraryRoot, artifact.Source)
+		info, statErr := os.Lstat(target)
 		if statErr != nil {
-			return models.Fail("FileOrDirectoryNotFound", artifact.Target)
+			return models.Fail("FileOrDirectoryNotFound", target)
 		}
 		switch artifact.Kind {
 		case linker.Symlink:
 			if info.Mode()&os.ModeSymlink == 0 {
-				return models.Fail("InvalidLibrary", artifact.Target, "recorded symlink was replaced")
+				return models.Fail("InvalidLibrary", target, "recorded symlink was replaced")
 			}
-			target, linkErr := os.Readlink(artifact.Target)
-			if linkErr != nil || filepath.Clean(target) != filepath.Clean(artifact.Source) {
-				return models.Fail("InvalidLibrary", artifact.Target, "symlink target changed")
+			linkTarget, linkErr := os.Readlink(target)
+			if linkErr != nil || filepath.Clean(linkTarget) != filepath.Clean(source) {
+				return models.Fail("InvalidLibrary", target, "symlink target changed")
 			}
 		case linker.Copy:
 			if artifact.Fingerprint == nil {
-				return models.Fail("InvalidLibrary", artifact.Target, "unverifiable copy")
+				return models.Fail("InvalidLibrary", target, "unverifiable copy")
 			}
-			current, hashErr := fingerprint(artifact.Target)
+			current, hashErr := fingerprint(target)
 			if hashErr != nil || current != *artifact.Fingerprint {
-				return models.Fail("InvalidLibrary", artifact.Target, "deployed file changed")
+				return models.Fail("InvalidLibrary", target, "deployed file changed")
 			}
 		}
 	}
@@ -346,3 +348,11 @@ func VerifyOwnership(l Layout) error {
 // SnapshotFingerprint exposes the content fingerprint for callers that need to
 // verify ownership outside this package (deletion guards, tests).
 func SnapshotFingerprint(path string) (string, error) { return fingerprint(path) }
+
+// resolveRecorded makes a recorded relative path absolute against its root.
+func resolveRecorded(root, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(root, path)
+}
