@@ -2,11 +2,14 @@ package library
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modmanager"
+	"github.com/martes/modkeeper/backend/stager"
 	"github.com/martes/modkeeper/backend/task_progress"
 )
 
@@ -78,7 +81,7 @@ func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progre
 		return nil, err
 	}
 	defer s.Registry.FinishTaskID(in.TaskID)
-	if _, err = modmanager.NormalizeModFolders(s.active.ModsDir, "", "", s.active.manifest.Mods); err != nil {
+	if _, err = modmanager.NormalizeModFolders(s.active.ModsDir, "SPT/user/mods", "BepInEx/plugins", s.active.manifest.Mods); err != nil {
 		e.Completed(task_progress.Failure)
 		return nil, err
 	}
@@ -89,8 +92,10 @@ func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progre
 	}
 	e.Progress(models.TaskStageCachePersist, nil)
 	e.Completed(task_progress.Success)
+	rebuilt := time.Now().UTC().Format(time.RFC3339)
+	status := &models.CacheStatus{State: models.CacheStateReady, LastRebuiltAt: &rebuilt}
 	if s.sendWorkspace != nil {
-		_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Workspace: *s.Workspace(), CacheStatus: &models.CacheStatus{State: models.CacheStateReady}})
+		_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Workspace: *s.Workspace(), CacheStatus: status})
 	}
 	return &models.OperationAccepted{Accepted: true}, nil
 }
@@ -108,15 +113,34 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 	}
 	defer s.Registry.FinishTaskID(in.TaskID)
 	failures := make([]models.ArchiveFailure, 0, len(in.ArchivePaths))
+	l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
+	enable := s.Store.Config.Settings.EnableModsOnInstall
 	for i, path := range in.ArchivePaths {
-		// Staging/install needs SPT path discovery and manifest parsing. Keep
-		// individual failures in the completion event, as the Rust contract does.
-		if _, statErr := os.Stat(path); statErr != nil {
-			failures = append(failures, models.ArchiveFailure{ArchivePath: path, Error: models.Error{Code: "IOError", Data: statErr.Error()}})
-		} else {
-			failures = append(failures, models.ArchiveFailure{ArchivePath: path, Error: models.Error{Code: "Unexpected", Data: "archive installation pipeline unavailable"}})
+		e.Progress(models.TaskStageInstallArchives, task_progress.ArchiveCountPercent(i, len(in.ArchivePaths)))
+		staged, stageErr := stager.Resolve([]string{path}, s.active.StagingDir, "SPT/user/mods", "BepInEx/plugins", nil)
+		if stageErr != nil {
+			failures = append(failures, models.ArchiveFailure{ArchivePath: path, Error: archiveError(stageErr)})
+			continue
+		}
+		e.Progress(models.TaskStageInstallArchiveStage, nil)
+		for _, item := range staged {
+			kind := item.FS.ModType
+			if err = modmanager.AddModWithMetadata(&l, item.FS.ID, item.Name, kind, path, enable, nil); err == nil {
+				err = copyTree(item.Root, filepath.Join(l.Root, item.FS.ID))
+			}
+			_ = stager.CleanUp(item.IsStaging, item.Root)
+			if err != nil {
+				failures = append(failures, models.ArchiveFailure{ArchivePath: path, Error: archiveError(err)})
+				continue
+			}
 		}
 		e.Progress(models.TaskStageInstallArchives, task_progress.ArchiveCountPercent(i+1, len(in.ArchivePaths)))
+	}
+	e.Progress(models.TaskStageInstallCommit, nil)
+	s.active.manifest.Mods = l.Mods
+	if err = s.active.Persist(); err != nil {
+		e.Completed(task_progress.Failure)
+		return nil, err
 	}
 	outcome := task_progress.ArchiveOutcome(len(failures), len(in.ArchivePaths))
 	e.Completed(outcome)
@@ -124,6 +148,47 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
 	}
 	return &models.OperationAccepted{Accepted: true}, nil
+}
+
+func archiveError(err error) models.Error {
+	if e, ok := err.(*models.Error); ok {
+		return *e
+	}
+	return models.Error{Code: "Unexpected", Data: err.Error()}
+}
+
+func copyTree(src, dst string) error {
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(out, in)
+		closeErr := out.Close()
+		if err != nil {
+			return err
+		}
+		return closeErr
+	})
 }
 
 func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskProgressEvent) error) (*models.OperationAccepted, error) {
