@@ -1,0 +1,14 @@
+version: '3'
+
+tasks:
+  build:
+    cmds:
+      - bun run build:wails
+      - mkdir -p build/bin
+      - go build -o build/bin/modkeeper .
+  run:
+    cmds:
+      - go run .
+  dev:
+    cmds:
+      - wails3 dev -config ./build/config.yml

@@ -82,12 +82,12 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 
 The Wails frontend uses the same Vite sources and keeps the Tauri default unchanged:
 
-- Run `wails dev` to start the Wails development flow.
-- Run `wails build` to build the Wails application.
+- Run `nix develop .#e2e -c wails3 dev -config ./build/config.yml` to start Wails v3.
+- Run `nix develop -c wails3 build` to build the Wails application.
 - Run `bun run build` for the existing Tauri-compatible frontend build.
-- After `wails dev` starts, `bun run e2e:wails` checks that its Vite server serves the app shell. This is not a native-window or IPC test.
+- After `wails3 dev` starts, `bun run e2e:wails` checks that its Vite server serves the app shell. This is not a native-window or IPC test.
 
-The frontend event APIs are not interchangeable. Tauri uses `@tauri-apps/api/event` listeners and emitters. Wails exposes generated Go bindings and runtime events such as `EventsOn` and `EventsEmit`. A native Wails smoke test must wait for the Wails backend and bindings to be ported.
+The frontend event APIs are not interchangeable. Tauri uses `@tauri-apps/api/event` listeners and emitters. Wails v3 uses generated Go service bindings and `@wailsio/runtime` events.
 
 ### Initial Setup
 

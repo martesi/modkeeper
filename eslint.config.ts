@@ -7,7 +7,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 
 export default defineConfig([
   {
-    ignores: ['src/gen/**'],
+    ignores: ['src/gen/**', 'frontend/bindings/**'],
   },
   {
     files: ['**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],

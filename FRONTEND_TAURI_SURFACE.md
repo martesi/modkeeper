@@ -42,19 +42,12 @@ contracts, but they do not make runtime calls.
 - Tauri terminology and `isTauri` boolean in `redesign/data/runtime-boundary.ts`
   and tests are application branching, not API invocations.
 
-## Wails bridge contract / remaining integration
+## Wails bridge
 
 `src/wails/{runtime,bridge,events}.ts` provides an opt-in compatibility layer.
-Generated methods are mapped by their Specta camelCase names to
-`window.go.<package>.App.<method>(...args)`. Their argument order matches the
-generated TypeScript methods. The Go binding package can be any package key;
-the `App` receiver is expected. Without a matching method, the exact generated
-Tauri function is called.
-
-Wails events use `window.runtime.EventsOn/EventsOnce/EventsEmit`, with event
-names from the generated binding. Call sites still import `@gen/bindings` and
-Tauri plugins directly. The owning integration must route command/event imports
-through this shim and replace Tauri-only runtime/plugin/window APIs before a
-Wails UI build. W4 currently has no Go bindings, so methods, argument adaptation,
-error wire shape, window methods, dialogs, and opener behavior need W4/W2
-confirmation. No backend logic is implemented here.
+The v3 CLI generates service methods under `frontend/bindings/`; the adapter
+calls those methods through `@wailsio/runtime`. Tauri remains the fallback when
+the Tauri runtime is present. The in-memory Wails mock supports browser E2E.
+Wails custom events use `@wailsio/runtime` `Events.On`, `Events.Once`, and
+`Events.Emit`. Tauri-only plugins and window APIs still require separate
+adapters before the full frontend can run under Wails.

@@ -34,7 +34,7 @@
             pango
             webkitgtk_4_1
           ];
-          goPackages = [ pkgs.go pkgs.wails ];
+          goPackages = [ pkgs.go pkgs.wails3 ];
           basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then

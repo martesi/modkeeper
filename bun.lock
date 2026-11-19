@@ -12,6 +12,7 @@
         "@tauri-apps/plugin-dialog": "^2.8.4",
         "@tauri-apps/plugin-log": "~2.10.1",
         "@tauri-apps/plugin-opener": "~2.7.2",
+        "@wailsio/runtime": "3.1.0",
         "ahooks": "^3.11.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -732,6 +733,8 @@
     "@vitest/spy": ["@vitest/spy@3.2.4", "https://registry.npmmirror.com/@vitest/spy/-/spy-3.2.4.tgz", { "dependencies": { "tinyspy": "^4.0.3" } }, "sha512-vAfasCOe6AIK70iP5UD11Ac4siNUNJ9i/9PZ3NKx07sG6sUxeag1LWdNrMWeKKYBLlzuK+Gn65Yd5nyL6ds+nw=="],
 
     "@vitest/utils": ["@vitest/utils@3.2.4", "https://registry.npmmirror.com/@vitest/utils/-/utils-3.2.4.tgz", { "dependencies": { "@vitest/pretty-format": "3.2.4", "loupe": "^3.1.4", "tinyrainbow": "^2.0.0" } }, "sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA=="],
+
+    "@wailsio/runtime": ["@wailsio/runtime@3.1.0", "", {}, "sha512-noEAedvRyO8TLCrqhGwzrp+mbMxAIDa2rYmdJQOzvJV9MxgaZeXAJGNBiMiKMTSSy4ESOtQi4VH/5heSzi6ZmA=="],
 
     "@webcontainer/env": ["@webcontainer/env@1.1.1", "", {}, "sha512-6aN99yL695Hi9SuIk1oC88l9o0gmxL1nGWWQ/kNy81HigJ0FoaoTXpytCj6ItzgyCEwA9kF1wixsTuv5cjsgng=="],
 

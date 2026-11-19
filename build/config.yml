@@ -1,0 +1,35 @@
+version: '3'
+
+info:
+  productName: Modkeeper
+  productIdentifier: com.martes.modkeeper
+  description: Game mod management and development
+  version: 0.3.2
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - src-tauri
+    file:
+      - .DS_Store
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.ts"
+      - "*.tsx"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: bun run dev:wails
+      type: background
+      readiness:
+        http: "http://127.0.0.1:34115/"
+    - cmd: wails3 task run
+      type: primary
+      exit_policy: shutdown
