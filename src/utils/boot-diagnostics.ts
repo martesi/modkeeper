@@ -1,4 +1,4 @@
-import { isTauri } from '@tauri-apps/api/core'
+import { log, platformKind } from '@/platform'
 import { z } from 'zod'
 
 export const BOOT_ERROR_STORAGE_KEY = 'modkeeper.boot-error'
@@ -57,15 +57,13 @@ export function clearBootError(storage?: BootErrorStorage): void {
 }
 
 export function logBootError(message: string, error: unknown): void {
-  if (!isTauri()) return
+  if (platformKind() === 'browser') return
 
   const detail =
     error instanceof Error ? (error.stack ?? error.message) : String(error)
-  void import('@tauri-apps/plugin-log')
-    .then(({ error: logError }) => logError(`[startup] ${message}: ${detail}`))
-    .catch((loggingError: unknown) => {
-      console.error('[startup] backend boot-error logging failed', loggingError)
-    })
+  void log(`[startup] ${message}: ${detail}`).catch((loggingError: unknown) => {
+    console.error('[startup] backend boot-error logging failed', loggingError)
+  })
 }
 
 export function reportBootError(message: string, error: unknown): void {

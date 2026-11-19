@@ -1,7 +1,8 @@
 import { translateError } from './error'
 import type { LibraryCreationRequirement, SError } from '@gen/bindings'
-import { tSelectGameRootDirectory, tUnknownModName } from '@/utils/translation'
+import { tSelectGameRootDirectory } from '@/utils/translation'
 import { msg, t } from '@lingui/core/macro'
+import { pickDirectory } from '@/platform'
 
 /**
  * Adds a library by prompting the user to select a game root directory, or uses the provided game root.
@@ -18,20 +19,12 @@ export function addLibraryFromDialog(
 ): Promise<void> {
   const getGameRoot = gameRoot
     ? Promise.resolve(gameRoot)
-    : import('@tauri-apps/plugin-dialog')
-        .then(({ open }) =>
-          open({
-            directory: true,
-            multiple: false,
-            title: tSelectGameRootDirectory(),
-          }),
-        )
-        .then((selected) => {
-          if (!selected || typeof selected !== 'string') {
-            return Promise.reject(new Error('User cancelled'))
-          }
-          return selected
-        })
+    : pickDirectory({ title: tSelectGameRootDirectory() }).then((selected) => {
+        if (!selected || typeof selected !== 'string') {
+          return Promise.reject(new Error('User cancelled'))
+        }
+        return selected
+      })
 
   return getGameRoot
     .then((selectedGameRoot) => {

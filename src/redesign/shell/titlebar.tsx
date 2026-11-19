@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAtom } from 'jotai'
-import { isTauri } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import {
+  closeWindow,
+  isWindowMaximized,
+  minimizeWindow,
+  onWindowResize,
+  platformKind,
+  setWindowChrome,
+  toggleMaximizeWindow,
+} from '@/platform'
 import { useRouterState } from '@tanstack/react-router'
 import { Maximize, Copy, Minus, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -68,7 +75,7 @@ export function TitleBar() {
   const isMacOS =
     navigator.userAgent.includes('Macintosh') ||
     navigator.userAgent.includes('Mac OS X')
-  const showCaptionButtons = isTauri() && !isMacOS
+  const showCaptionButtons = platformKind() !== 'browser' && !isMacOS
 
   // The titlebar entry opens the same centered palette at every width. Ctrl+F
   // remains available for the former wide-field and narrow collapsed-field paths.
@@ -91,18 +98,17 @@ export function TitleBar() {
   }, [pathname, searchEnabled])
 
   useEffect(() => {
-    if (!isTauri()) return
-    const appWindow = getCurrentWindow()
+    if (platformKind() === 'browser') return
     if (isMacOS) {
-      handleWindowOperation(appWindow.setTitleBarStyle('overlay'))
+      handleWindowOperation(setWindowChrome('overlay'))
       return
     }
-    handleWindowOperation(appWindow.setDecorations(false))
+    handleWindowOperation(setWindowChrome('frameless'))
 
     let disposed = false
     let unlistenResize: (() => void) | undefined
     const syncMaximizedState = () => {
-      void appWindow.isMaximized().then(
+      void isWindowMaximized().then(
         (maximized) => {
           if (!disposed) setIsMaximized(maximized)
         },
@@ -112,7 +118,7 @@ export function TitleBar() {
     }
 
     syncMaximizedState()
-    void appWindow.onResized(syncMaximizedState).then(
+    void onWindowResize(syncMaximizedState).then(
       (unlisten) => {
         if (disposed) {
           unlisten()
@@ -185,9 +191,7 @@ export function TitleBar() {
               aria-label={commonText.minimizeWindow()}
               title={commonText.minimizeWindow()}
               className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() =>
-                handleWindowOperation(getCurrentWindow().minimize())
-              }
+              onClick={() => handleWindowOperation(minimizeWindow())}
             >
               <Minus className="size-4" aria-hidden />
             </button>
@@ -196,9 +200,7 @@ export function TitleBar() {
               aria-label={commonText.maximizeWindow()}
               title={commonText.maximizeWindow()}
               className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() =>
-                handleWindowOperation(getCurrentWindow().toggleMaximize())
-              }
+              onClick={() => handleWindowOperation(toggleMaximizeWindow())}
             >
               {isMaximized ? (
                 <Copy className="size-4" aria-hidden />
@@ -211,7 +213,7 @@ export function TitleBar() {
               aria-label={commonText.close()}
               title={commonText.close()}
               className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => handleWindowOperation(getCurrentWindow().close())}
+              onClick={() => handleWindowOperation(closeWindow())}
             >
               <X className="size-4" aria-hidden />
             </button>
