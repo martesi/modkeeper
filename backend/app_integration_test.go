@@ -40,7 +40,7 @@ func TestAppSurfaceEndToEnd(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	libraryRoot := env.LibraryRoot
+	libraryRoot := filepath.Join(env.Root, "library")
 	name := "Demo"
 	workspace, err := app.CreateLibrary(models.CreateLibraryInput{
 		GameRoot:    env.GameRoot,
@@ -198,7 +198,7 @@ func TestInstallUpgradeLeavesNoSnapshot(t *testing.T) {
 	if app.InitErr != nil {
 		t.Fatalf("NewAppAt: %v", app.InitErr)
 	}
-	libraryRoot := env.LibraryRoot
+	libraryRoot := filepath.Join(env.Root, "library")
 	if _, err := app.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot, LibraryRoot: &libraryRoot}); err != nil {
 		t.Fatalf("CreateLibrary: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestInstallUpgradeLeavesNoSnapshot(t *testing.T) {
 	if err != nil || string(body) != "v2" {
 		t.Fatalf("upgraded content: %q %v", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(env.LibraryRoot, "backups", "Upgrade")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(libraryRoot, "backups", "Upgrade")); !os.IsNotExist(err) {
 		t.Fatalf("upgrade created a snapshot: %v", err)
 	}
 }

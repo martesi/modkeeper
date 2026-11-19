@@ -23,7 +23,8 @@ func deleteFixture(t *testing.T) (*testenv.Env, *Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot}); err != nil {
+	libRoot := filepath.Join(env.Root, "library")
+	if err := svc.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot, LibraryRoot: &libRoot}); err != nil {
 		t.Fatal(err)
 	}
 	return env, svc
@@ -34,7 +35,8 @@ func deleteFixture(t *testing.T) (*testenv.Env, *Service) {
 func deployedFixture(t *testing.T) (*testenv.Env, *Service, deployment.Layout, models.Mod) {
 	t.Helper()
 	env, svc := deleteFixture(t)
-	modDir := filepath.Join(env.LibraryRoot, "mods", "mod-1")
+	root := svc.active.Root
+	modDir := filepath.Join(root, "mods", "mod-1")
 	file := filepath.Join(modDir, "SPT", "user", "mods", "Example", "content.txt")
 	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 		t.Fatal(err)
@@ -46,7 +48,7 @@ func deployedFixture(t *testing.T) (*testenv.Env, *Service, deployment.Layout, m
 	if err != nil {
 		t.Fatal(err)
 	}
-	finalDir := filepath.Join(env.LibraryRoot, "mods", fs.ID)
+	finalDir := filepath.Join(root, "mods", fs.ID)
 	if err := os.Rename(modDir, finalDir); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +57,7 @@ func deployedFixture(t *testing.T) (*testenv.Env, *Service, deployment.Layout, m
 	if err != nil {
 		t.Fatal(err)
 	}
-	depLayout := deployment.Layout{LibraryRoot: env.LibraryRoot, GameRoot: env.GameRoot, Rules: rules}
+	depLayout := deployment.Layout{LibraryRoot: root, GameRoot: env.GameRoot, Rules: rules}
 	plan, err := deployment.PlanWithKinds([]models.Mod{m}, depLayout, linker.Symlink, linker.Symlink)
 	if err != nil {
 		t.Fatal(err)
@@ -160,9 +162,9 @@ func TestRemovingAModPreflightsSharedDirectoriesBeforeUnlinkingArtifacts(t *test
 }
 
 func TestDeletingALibraryValidatesPurgeBeforeRemovingDeployment(t *testing.T) {
-	env, svc, _, _ := deployedFixture(t)
+	_, svc, _, _ := deployedFixture(t)
 	// An orphaned quarantine artifact makes the purge retry unsafe.
-	orphan := filepath.Join(env.LibraryRoot, ".mkp-orphan")
+	orphan := filepath.Join(svc.active.Root, ".mkp-orphan")
 	if err := os.WriteFile(orphan, []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -208,10 +210,10 @@ func TestCreatingANewMajorLibraryAllowsAnAlreadyRemovedOldTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot}); err != nil {
+	oldRoot := filepath.Join(env.Root, "library-4")
+	if err := svc.CreateLibrary(models.CreateLibraryInput{GameRoot: env.GameRoot, LibraryRoot: &oldRoot}); err != nil {
 		t.Fatal(err)
 	}
-	oldRoot := svc.active.Root
 	if err := os.RemoveAll(oldRoot); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +249,7 @@ func TestCrossMajorMigrationPurgesLegacyLinksFromTheOldServerRoot(t *testing.T) 
 }
 
 func TestTestUpgradeSnapshotRestoresPriorContents(t *testing.T) {
-	env, svc, _, mod := deployedFixture(t)
+	_, svc, _, mod := deployedFixture(t)
 	archive := writeUpgradeZip(t)
 	failed := false
 	svc.copyMod = func(src, dst string) error {
@@ -267,7 +269,7 @@ func TestTestUpgradeSnapshotRestoresPriorContents(t *testing.T) {
 	if got, err := os.ReadFile(content); err != nil || string(got) != "v1" {
 		t.Fatalf("snapshot did not restore v1: %q %v", got, err)
 	}
-	entries, err := os.ReadDir(filepath.Join(env.LibraryRoot, "backups"))
+	entries, err := os.ReadDir(svc.active.BackupsDir)
 	if err == nil {
 		for _, entry := range entries {
 			if strings.Contains(entry.Name(), "snapshot") {
