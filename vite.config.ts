@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import path from 'node:path'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import router from '@tanstack/router-plugin/vite'
@@ -48,6 +49,12 @@ export default defineConfig(() => ({
   clearScreen: false,
   resolve: {
     tsconfigPaths: true,
+    alias: {
+      '@': path.resolve(import.meta.dirname, 'src'),
+      '@gen': path.resolve(import.meta.dirname, 'src/gen'),
+      '@utils': path.resolve(import.meta.dirname, 'src/utils'),
+      '@mod': path.resolve(import.meta.dirname, 'src/modules'),
+    },
   },
   server: {
     port: 1420,

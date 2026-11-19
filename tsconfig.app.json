@@ -26,9 +26,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "*": [
-        "./*"
-      ],
       "@gen/*": [
         "./src/gen/*"
       ],
@@ -44,6 +41,9 @@
       ],
       "@mod/*": [
         "./src/modules/*"
+      ],
+      "*": [
+        "./*"
       ]
     }
   },

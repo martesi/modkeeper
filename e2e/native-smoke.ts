@@ -666,6 +666,36 @@ async function main(): Promise<number> {
           `fixture task ${fixtureTaskId} registered after the production listener connected`,
         )
 
+        // The task panel lives inside the Tasks popover (unmounted when
+        // closed), so open it before emitting progress assertions. The nav
+        // button label gains an active count once tasks exist.
+        const tasksButton = await waitFor(
+          'Tasks nav button',
+          async () => {
+            try {
+              return await client.findElement(
+                'xpath',
+                `//nav//button[starts-with(@aria-label, 'Tasks')]`,
+              )
+            } catch {
+              return null
+            }
+          },
+          { timeoutMs: 10_000, intervalMs: 100 },
+        )
+        await activateElement(client, tasksButton)
+        await waitFor(
+          'task center popover to open',
+          async () =>
+            (await client.execute<boolean>(
+              `return !!document.querySelector('[aria-labelledby="task-center-title"]')`,
+            ))
+              ? true
+              : null,
+          { timeoutMs: 10_000 },
+        )
+        info('task center popover opened for progress assertions')
+
         const fixtureEvent = {
           taskId: fixtureTaskId,
           libraryId: state.library.id,
@@ -750,11 +780,13 @@ async function main(): Promise<number> {
           'fixture event rendered Deploying files at 42% via the registered listener',
         )
 
+        // WebKitGTK coordinate clicks mis-target in this Xvfb setup (see
+        // header note), so dispatch a DOM click on the resolved element.
         const logSummary = await client.findElement(
           'css selector',
           '[aria-label="Active tasks"] details > summary',
         )
-        await client.click(logSummary)
+        await activateElement(client, logSummary)
         const openLog = await waitFor(
           'task log disclosure to open from a browser click',
           async () =>
@@ -775,9 +807,7 @@ async function main(): Promise<number> {
             openLog.text,
           )
         }
-        info(
-          'browser click opened the task log and displayed the fixture entry',
-        )
+        info('task log disclosure opened and displayed the fixture entry')
 
         await client.execute(
           `window.__MK_TASK_PROGRESS_E2E__.clearTask(arguments[0])`,
@@ -819,6 +849,19 @@ async function main(): Promise<number> {
           )
         }
         info('real sync completed through the authoritative workspace event')
+        // Close the task center popover so later nav/screenshot steps run
+        // against the plain library screen.
+        await client.pressKey('\uE00C')
+        await waitFor(
+          'task center popover to close after the real sync',
+          async () =>
+            (await client.execute<boolean>(
+              `return !!document.querySelector('[aria-labelledby="task-center-title"]')`,
+            ))
+              ? null
+              : true,
+          { timeoutMs: 10_000 },
+        )
       },
     )
 
