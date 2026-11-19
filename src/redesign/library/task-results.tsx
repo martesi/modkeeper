@@ -32,7 +32,7 @@ import {
   pendingTasksAtom,
 } from '../state/library-state'
 
-export function TaskResults() {
+export function TaskCenterPanel() {
   const outcome = useAtomValue(taskResultAtom)
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const busy = useAtomValue(libraryBusyAtom)
@@ -74,12 +74,6 @@ export function TaskResults() {
         aria-label={libraryText.taskResultLabel()}
         aria-live="polite"
         className="mb-3 flex max-h-64 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 text-[13px] text-foreground"
-        onKeyDown={(event) => {
-          if (event.key !== 'Escape') return
-          event.preventDefault()
-          event.stopPropagation()
-          clearTaskResult()
-        }}
         role="status"
       >
         <div className="flex items-start justify-between gap-3">

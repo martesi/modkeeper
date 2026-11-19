@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,42 +26,6 @@ export function LibraryScreen() {
   const activeLibrary = useAtomValue(activeLibraryAtom)
   const mods = useAtomValue(modListAtom)
   const [manageOpen, setManageOpen] = useState(false)
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        !(event.ctrlKey || event.metaKey) ||
-        event.key.toLowerCase() !== 'f'
-      ) {
-        return
-      }
-      if (document.querySelector('[role="dialog"][data-state="open"]')) return
-
-      const searchInput = document.querySelector<HTMLInputElement>(
-        '[data-library-search]:not(:disabled)',
-      )
-      if (!searchInput) return
-
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        target !== searchInput &&
-        (target.isContentEditable ||
-          target.closest('input, textarea, select, [contenteditable="true"]'))
-      ) {
-        return
-      }
-
-      event.preventDefault()
-      searchInput.focus()
-      searchInput.select()
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
   return (
     <div className="flex flex-col gap-3">

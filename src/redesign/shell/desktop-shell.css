@@ -21,7 +21,7 @@
   }
 }
 
-.mk-titlebar-search {
+.mk-titlebar-search-trigger {
   width: min(320px, max(0px, calc(100% - 276px)));
 }
 
@@ -44,41 +44,19 @@
   }
 }
 
-/* Narrow windows collapse the titlebar search behind an icon button; opening
-   it expands the field as an overlay between the window controls. */
-.mk-titlebar-search-toggle,
-.mk-titlebar-search-close {
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
+/* Narrow windows keep the palette entry as a compact icon button. */
 @media (max-width: 360px) {
-  .mk-titlebar-search:not([data-search-open='true']) {
+  .mk-titlebar-search-trigger {
+    width: 32px;
+    justify-content: center;
+    padding-inline: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .mk-titlebar-search-placeholder,
+  .mk-titlebar-search-shortcut {
     display: none;
-  }
-
-  .mk-titlebar-search[data-search-open='true'] {
-    top: 4px;
-    bottom: 4px;
-    left: 44px;
-    right: 8px;
-    width: auto;
-    translate: none;
-  }
-
-  .mk-titlebar[data-macos='true'] .mk-titlebar-search[data-search-open='true'] {
-    left: 108px;
-  }
-
-  .mk-titlebar[data-caption='true']
-    .mk-titlebar-search[data-search-open='true'] {
-    right: 146px;
-  }
-
-  .mk-titlebar-search-toggle,
-  .mk-titlebar-search[data-search-open='true'] .mk-titlebar-search-close {
-    display: flex;
   }
 }
 

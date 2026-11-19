@@ -26,6 +26,11 @@ export const commonText = {
     t({ id: 'common.window.maximize', message: 'Maximize or restore window' }),
   searchUnavailable: () =>
     t({ id: 'common.search.unavailable', message: 'Search unavailable here' }),
+  searchPaletteDescription: () =>
+    t({
+      id: 'common.search.paletteDescription',
+      message: 'Type to search. Press Escape to close.',
+    }),
   libraryBusy: () =>
     t({ id: 'common.status.libraryBusy', message: 'Library busy' }),
   somethingWentWrong: () =>

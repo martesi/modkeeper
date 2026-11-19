@@ -6,9 +6,18 @@ import { useRouterState } from '@tanstack/react-router'
 import { Maximize, Copy, Minus, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { FidelityInput } from '../shared/components/fidelity-input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { commonText } from '../i18n/common-text'
 import { libraryText } from '../i18n/library-text'
+import { registryText } from '../i18n/registry-text'
 import { librarySearchAtom } from '../state/library-state'
+import { registrySearchAtom } from '../state/registry-state'
 import { NavigationToggle } from './navigation-toggle'
 import {
   navigationExpandedAtom,
@@ -16,54 +25,70 @@ import {
   useEffectiveNavigationExpanded,
   useMediaQueryMatches,
 } from './shell-state'
+import {
+  closeTitlebarPaletteOnEscape,
+  focusTitlebarPaletteInput,
+  getTitlebarSearchKind,
+  getTitlebarSearchShortcut,
+  openTitlebarPaletteForShortcut,
+  setTitlebarSearchQuery,
+} from './titlebar-search'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
-  const [query, setQuery] = useAtom(librarySearchAtom)
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const searchKind = getTitlebarSearchKind(pathname)
+  const [libraryQuery, setLibraryQuery] = useAtom(librarySearchAtom)
+  const [registryQuery, setRegistryQuery] = useAtom(registrySearchAtom)
+  const query = searchKind === 'registry' ? registryQuery : libraryQuery
   const [, setNavigationExpanded] = useAtom(navigationExpandedAtom)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const searchContainerRef = useRef<HTMLDivElement | null>(null)
+  const [paletteOpenPath, setPaletteOpenPath] = useState<string | null>(null)
+  const paletteInputRef = useRef<HTMLInputElement | null>(null)
+  const selectPaletteQueryOnOpen = useRef(false)
   const narrow = useMediaQueryMatches(narrowShellQuery)
   // Forced-compact widths keep the stored preference but render the compact
   // rail, so the toggle reflects what is actually displayed.
   const effectiveNavigationExpanded = useEffectiveNavigationExpanded()
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  })
-  const searchEnabled = pathname.startsWith('/library')
-  // The collapsed-field overlay only applies where search is available; it
-  // closes by derivation when the route leaves /library.
-  const searchOverlayOpen = searchOpen && narrow && searchEnabled
+  const searchEnabled = searchKind !== null
+  const paletteOpen = searchEnabled && paletteOpenPath === pathname
+  const searchLabel =
+    searchKind === 'registry'
+      ? registryText.searchLabel()
+      : searchKind === 'library'
+        ? libraryText.searchLabel()
+        : commonText.searchUnavailable()
+  const searchPlaceholder =
+    searchKind === 'registry'
+      ? registryText.searchPlaceholder()
+      : searchKind === 'library'
+        ? libraryText.searchPlaceholder()
+        : commonText.searchUnavailable()
   const isMacOS =
     navigator.userAgent.includes('Macintosh') ||
     navigator.userAgent.includes('Mac OS X')
   const showCaptionButtons = isTauri() && !isMacOS
 
-  // Narrow windows collapse the search field behind an icon button; Ctrl+F
-  // opens the collapsed field so the keyboard path keeps working.
+  // The titlebar entry opens the same centered palette at every width. Ctrl+F
+  // remains available for the former wide-field and narrow collapsed-field paths.
   useEffect(() => {
-    if (!narrow || !searchEnabled) return
+    if (!searchEnabled) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !(event.ctrlKey || event.metaKey) ||
-        event.key.toLowerCase() !== 'f'
-      ) {
-        return
+      const shortcut = getTitlebarSearchShortcut(event)
+      const opened = openTitlebarPaletteForShortcut(
+        event,
+        searchEnabled,
+        Boolean(document.querySelector('[role="dialog"][data-state="open"]')),
+        () => setPaletteOpenPath(pathname),
+      )
+      if (opened) {
+        selectPaletteQueryOnOpen.current = shortcut === 'find'
       }
-      if (document.querySelector('[role="dialog"][data-state="open"]')) return
-      setSearchOpen(true)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [narrow, searchEnabled])
-
-  useEffect(() => {
-    if (!searchOverlayOpen) return
-    const input =
-      searchContainerRef.current?.querySelector<HTMLInputElement>('input')
-    input?.focus()
-    input?.select()
-  }, [searchOverlayOpen])
+  }, [pathname, searchEnabled])
 
   useEffect(() => {
     if (!isTauri()) return
@@ -106,133 +131,142 @@ export function TitleBar() {
   }, [isMacOS])
 
   return (
-    <header
-      data-macos={isMacOS ? 'true' : undefined}
-      data-caption={showCaptionButtons ? 'true' : undefined}
-      className="mk-titlebar relative z-20 flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/25"
+    <Dialog
+      open={paletteOpen}
+      onOpenChange={(open) => setPaletteOpenPath(open ? pathname : null)}
     >
-      <div aria-hidden data-tauri-drag-region className="absolute inset-0" />
-
-      <div
-        className={`relative z-10 flex h-11 items-center gap-2 pointer-events-none ${isMacOS ? 'pl-[76px]' : 'pl-2'}`}
+      <header
+        data-macos={isMacOS ? 'true' : undefined}
+        data-caption={showCaptionButtons ? 'true' : undefined}
+        className="mk-titlebar relative z-20 flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/25"
       >
-        <NavigationToggle
-          expanded={effectiveNavigationExpanded}
-          label={
-            effectiveNavigationExpanded
-              ? commonText.collapseNavigation()
-              : commonText.expandNavigation()
-          }
-          narrow={narrow}
-          setExpanded={setNavigationExpanded}
-        />
-        <span className="mk-titlebar-app-title pointer-events-none text-[13px] font-semibold text-foreground">
-          {commonText.appName()}
-        </span>
-      </div>
+        <div aria-hidden data-tauri-drag-region className="absolute inset-0" />
 
-      <button
-        type="button"
-        aria-label={
-          searchEnabled
-            ? libraryText.searchLabel()
-            : commonText.searchUnavailable()
-        }
-        title={
-          searchEnabled
-            ? libraryText.searchLabel()
-            : commonText.searchUnavailable()
-        }
-        disabled={!searchEnabled}
-        aria-hidden={searchOverlayOpen || undefined}
-        tabIndex={searchOverlayOpen ? -1 : undefined}
-        className="mk-titlebar-search-toggle pointer-events-auto absolute left-1/2 top-1/2 z-10 size-8 -translate-x-1/2 -translate-y-1/2 rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-        onClick={() => setSearchOpen(true)}
-      >
-        <Search className="size-4" aria-hidden />
-      </button>
-
-      <div
-        ref={searchContainerRef}
-        data-search-open={searchOverlayOpen ? 'true' : undefined}
-        className="mk-titlebar-search absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1"
-      >
-        <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <FidelityInput
-          type="search"
-          value={searchEnabled ? query : ''}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (!searchOverlayOpen || event.key !== 'Escape') return
-            setSearchOpen(false)
-            event.currentTarget.blur()
-          }}
-          placeholder={
-            searchEnabled
-              ? libraryText.searchPlaceholder()
-              : commonText.searchUnavailable()
-          }
-          aria-label={
-            searchEnabled
-              ? libraryText.searchLabel()
-              : commonText.searchUnavailable()
-          }
-          data-library-search=""
-          disabled={!searchEnabled}
-          className={`h-8 rounded-[4px] pl-8 text-[13px] ${searchOverlayOpen ? 'pr-9' : ''}`}
-        />
-        <button
-          type="button"
-          aria-label={commonText.close()}
-          title={commonText.close()}
-          className="mk-titlebar-search-close pointer-events-auto absolute right-1 top-1/2 z-10 size-6 -translate-y-1/2 rounded-[4px] text-muted-foreground outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setSearchOpen(false)}
+        <div
+          className={`relative z-10 flex h-11 items-center gap-2 pointer-events-none ${isMacOS ? 'pl-[76px]' : 'pl-2'}`}
         >
-          <X className="size-4" aria-hidden />
-        </button>
-      </div>
-
-      {showCaptionButtons && (
-        <div className="relative z-10 flex h-11 shrink-0 items-stretch">
-          <button
-            type="button"
-            aria-label={commonText.minimizeWindow()}
-            title={commonText.minimizeWindow()}
-            className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => handleWindowOperation(getCurrentWindow().minimize())}
-          >
-            <Minus className="size-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-label={commonText.maximizeWindow()}
-            title={commonText.maximizeWindow()}
-            className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() =>
-              handleWindowOperation(getCurrentWindow().toggleMaximize())
+          <NavigationToggle
+            expanded={effectiveNavigationExpanded}
+            label={
+              effectiveNavigationExpanded
+                ? commonText.collapseNavigation()
+                : commonText.expandNavigation()
             }
-          >
-            {isMaximized ? (
-              <Copy className="size-4" aria-hidden />
-            ) : (
-              <Maximize className="size-4" aria-hidden />
-            )}
-          </button>
+            narrow={narrow}
+            setExpanded={setNavigationExpanded}
+          />
+          <span className="mk-titlebar-app-title pointer-events-none text-[13px] font-semibold text-foreground">
+            {commonText.appName()}
+          </span>
+        </div>
+
+        <DialogTrigger asChild>
           <button
             type="button"
-            aria-label={commonText.close()}
-            title={commonText.close()}
-            className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => handleWindowOperation(getCurrentWindow().close())}
+            aria-label={searchLabel}
+            title={searchLabel}
+            disabled={!searchEnabled}
+            className="mk-titlebar-search-trigger pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-8 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-[4px] border border-border bg-secondary px-2.5 text-left text-[13px] text-muted-foreground outline-none transition-colors hover:border-ring/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
           >
-            <X className="size-4" aria-hidden />
+            <Search className="size-4 shrink-0" aria-hidden />
+            <span className="mk-titlebar-search-placeholder min-w-0 flex-1 truncate">
+              {searchPlaceholder}
+            </span>
+            <kbd className="mk-titlebar-search-shortcut rounded-sm border border-border px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
+              {isMacOS ? '⌘ K' : 'Ctrl K'}
+            </kbd>
           </button>
+        </DialogTrigger>
+
+        {showCaptionButtons && (
+          <div className="relative z-10 flex h-11 shrink-0 items-stretch">
+            <button
+              type="button"
+              aria-label={commonText.minimizeWindow()}
+              title={commonText.minimizeWindow()}
+              className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() =>
+                handleWindowOperation(getCurrentWindow().minimize())
+              }
+            >
+              <Minus className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label={commonText.maximizeWindow()}
+              title={commonText.maximizeWindow()}
+              className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() =>
+                handleWindowOperation(getCurrentWindow().toggleMaximize())
+              }
+            >
+              {isMaximized ? (
+                <Copy className="size-4" aria-hidden />
+              ) : (
+                <Maximize className="size-4" aria-hidden />
+              )}
+            </button>
+            <button
+              type="button"
+              aria-label={commonText.close()}
+              title={commonText.close()}
+              className="flex h-11 w-[46px] items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => handleWindowOperation(getCurrentWindow().close())}
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        )}
+      </header>
+      <DialogContent
+        className="w-[min(40rem,calc(100vw-2rem))] gap-0 overflow-hidden rounded-lg bg-popover p-0 sm:max-w-none"
+        onOpenAutoFocus={(event) => {
+          focusTitlebarPaletteInput(
+            paletteInputRef.current,
+            event,
+            selectPaletteQueryOnOpen.current,
+          )
+          selectPaletteQueryOnOpen.current = false
+        }}
+        onEscapeKeyDown={(event) =>
+          closeTitlebarPaletteOnEscape(event, () => setPaletteOpenPath(null))
+        }
+      >
+        <DialogTitle className="sr-only">{searchLabel}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {commonText.searchPaletteDescription()}
+        </DialogDescription>
+        <div className="flex items-center gap-3 border-b border-border px-4">
+          <Search
+            className="size-5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <FidelityInput
+            ref={paletteInputRef}
+            type="search"
+            value={searchEnabled ? query : ''}
+            onChange={(event) =>
+              setTitlebarSearchQuery(
+                searchKind,
+                event.target.value,
+                setLibraryQuery,
+                setRegistryQuery,
+              )
+            }
+            placeholder={searchPlaceholder}
+            aria-label={searchLabel}
+            data-command-palette-search=""
+            className="h-14 border-0 bg-transparent px-0 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0"
+          />
+          <kbd className="shrink-0 rounded-sm border border-border px-1.5 py-1 text-[11px] text-muted-foreground">
+            Esc
+          </kbd>
         </div>
-      )}
-    </header>
+        <p className="px-4 py-3 text-[12px] text-muted-foreground">
+          {searchPlaceholder}
+        </p>
+      </DialogContent>
+    </Dialog>
   )
 }
 

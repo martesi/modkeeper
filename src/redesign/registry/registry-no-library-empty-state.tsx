@@ -13,9 +13,7 @@ export function RegistryNoLibraryEmptyState({
       aria-label={registryText.emptyNoLibraryTitle()}
       className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
     >
-      <div className="flex size-14 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
-        <Compass className="size-8" aria-hidden />
-      </div>
+      <Compass className="size-8 text-muted-foreground" aria-hidden />
       <div className="max-w-md space-y-1">
         <h2 className="text-base font-semibold text-foreground">
           {registryText.emptyNoLibraryTitle()}

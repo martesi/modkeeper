@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { useAtom } from 'jotai'
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
-import { TaskResults } from '../library/task-results'
 import { AppBackground } from './app-background'
 import { LeftNavigation } from './left-navigation'
 import { scrollTopByPathAtom } from './shell-state'
@@ -258,7 +257,6 @@ export function DesktopShell({ children }: { children: ReactNode }) {
             pendingScrollRestore.current = null
           }}
         >
-          <TaskResults />
           {children}
         </main>
       </div>

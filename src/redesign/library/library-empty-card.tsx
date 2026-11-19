@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * The shared dashed empty-state surface with caller-supplied prompt/action content. When `onClick` is given the whole card is one big
+ * The shared flat empty-state surface with caller-supplied prompt/action content. When `onClick` is given the whole surface is one big
  * button (the drop state) — callers that render their own button inside must NOT pass `onClick`.
  */
 export function LibraryEmptyCard({
@@ -21,10 +21,10 @@ export function LibraryEmptyCard({
       onClick={onClick}
       className={cn(
         'relative flex w-full max-w-[60rem] flex-col items-center gap-2',
-        'rounded-lg border border-dashed border-border bg-card px-4 py-4',
+        'rounded-lg px-4 py-4',
         'text-center text-foreground',
         onClick &&
-          'cursor-pointer outline-none transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          'cursor-pointer outline-none transition-colors hover:bg-primary/5 focus-visible:ring-[3px] focus-visible:ring-ring/50',
       )}
     >
       {children}

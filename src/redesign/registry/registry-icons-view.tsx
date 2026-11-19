@@ -62,16 +62,24 @@ export function RegistryIconsView({
           >
             <div className="absolute right-2 top-2 flex items-center gap-1">
               <span
-                className="size-2 rounded-full bg-primary"
+                className={`size-2 rounded-full ${item.kind === 'mod' ? 'bg-primary' : 'bg-muted-foreground'}`}
                 title={
-                  activeLibrary?.sptVersion
-                    ? registryText.statusSptCompatible(activeLibrary.sptVersion)
-                    : registryText.statusSptUnknown()
+                  item.kind === 'addon'
+                    ? registryText.statusSptUntested()
+                    : activeLibrary?.sptVersion
+                      ? registryText.statusSptCompatible(
+                          activeLibrary.sptVersion,
+                        )
+                      : registryText.statusSptUnknown()
                 }
                 aria-label={
-                  activeLibrary?.sptVersion
-                    ? registryText.statusSptCompatible(activeLibrary.sptVersion)
-                    : registryText.statusSptUnknown()
+                  item.kind === 'addon'
+                    ? registryText.statusSptUntested()
+                    : activeLibrary?.sptVersion
+                      ? registryText.statusSptCompatible(
+                          activeLibrary.sptVersion,
+                        )
+                      : registryText.statusSptUnknown()
                 }
               />
               {hasParentBlock && (

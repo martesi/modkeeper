@@ -492,17 +492,7 @@ fn search_page(
     } else {
         "addons"
     };
-    let mut params = vec![
-        ("page", page.max(1).to_string()),
-        ("per_page", per_page.clamp(1, MAX_PER_PAGE).to_string()),
-        ("filter[spt_version]", spt_version.to_string()),
-    ];
-    if !query.trim().is_empty() {
-        params.push(("query", query.trim().to_string()));
-    }
-    if kind == ForgeKind::Addon {
-        params.push(("include", "mod".to_string()));
-    }
+    let params = search_params(&kind, query, page, per_page, spt_version);
     let (body, stale) = cached_json(&api_url(endpoint, &params)?)?;
     let (records, pagination) = record_page::<ApiRecord>(body)?;
     Ok(ForgeSearchPage {
@@ -513,6 +503,29 @@ fn search_page(
         pagination,
         stale,
     })
+}
+
+fn search_params(
+    kind: &ForgeKind,
+    query: &str,
+    page: u64,
+    per_page: u64,
+    spt_version: &str,
+) -> Vec<(&'static str, String)> {
+    let mut params = vec![
+        ("page", page.max(1).to_string()),
+        ("per_page", per_page.clamp(1, MAX_PER_PAGE).to_string()),
+    ];
+    if kind == &ForgeKind::Mod {
+        params.push(("filter[spt_version]", spt_version.to_string()));
+    }
+    if !query.trim().is_empty() {
+        params.push(("query", query.trim().to_string()));
+    }
+    if kind == &ForgeKind::Addon {
+        params.push(("include", "mod".to_string()));
+    }
+    params
 }
 
 fn detail(kind: ForgeKind, id: u64) -> Result<ForgeDetail, SError> {
@@ -1074,6 +1087,38 @@ mod tests {
         }))
         .unwrap();
         assert!(missing_guid.into_search_item(ForgeKind::Mod).is_err());
+    }
+
+    #[test]
+    fn addon_search_omits_unsupported_spt_filter() {
+        let mod_params = search_params(&ForgeKind::Mod, "  query  ", 0, 100, "4.0.11");
+        assert!(
+            mod_params
+                .iter()
+                .any(|(key, value)| { *key == "filter[spt_version]" && value == "4.0.11" })
+        );
+
+        let addon_params = search_params(&ForgeKind::Addon, "  query  ", 0, 100, "4.0.11");
+        assert!(
+            !addon_params
+                .iter()
+                .any(|(key, _)| *key == "filter[spt_version]")
+        );
+        assert!(
+            addon_params
+                .iter()
+                .any(|(key, value)| *key == "include" && value == "mod")
+        );
+        assert!(
+            addon_params
+                .iter()
+                .any(|(key, value)| *key == "query" && value == "query")
+        );
+        assert!(
+            addon_params
+                .iter()
+                .any(|(key, value)| *key == "per_page" && value == "50")
+        );
     }
 
     #[test]

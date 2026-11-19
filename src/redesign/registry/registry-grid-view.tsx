@@ -107,7 +107,7 @@ export function RegistryGridView({
                   </div>
                   <SptCompatIndicator
                     compact
-                    isCompatible={true}
+                    isCompatible={item.kind === 'mod'}
                     sptVersion={activeLibrary?.sptVersion ?? undefined}
                   />
                 </div>

@@ -36,6 +36,12 @@ export const libraryText = {
     }),
   taskResultLabel: () =>
     t({ id: 'library.taskResult.label', message: 'Latest task result' }),
+  tasksLabel: () => t({ id: 'library.tasks.label', message: 'Tasks' }),
+  tasksActiveCount: (count: number) =>
+    t({
+      id: 'library.tasks.activeCount',
+      message: `Tasks, ${count} active`,
+    }),
   activeTasksLabel: () =>
     t({ id: 'library.task.activeLabel', message: 'Active tasks' }),
   unknownTaskOperation: () => unknownTaskLabel(),

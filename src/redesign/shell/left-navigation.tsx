@@ -4,13 +4,13 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { commonText } from '../i18n/common-text'
 import { libraryText } from '../i18n/library-text'
 import { registryText } from '../i18n/registry-text'
+import { TaskCenterPanel } from '../library/task-results'
 import { useEffectiveNavigationExpanded } from './shell-state'
+import { TaskCenterPopover } from './task-center-popover'
 
 const itemClass =
   'mk-navigation-item relative flex h-9 w-full items-center gap-3 rounded-[4px] px-3 text-left text-[13px] font-semibold text-muted-foreground outline-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50'
 const activeItemClass = 'bg-muted/60 text-foreground'
-const groupHeadingClass =
-  'flex h-9 items-center px-3 text-[14px] font-semibold text-foreground'
 
 const primaryItems = [
   {
@@ -82,32 +82,23 @@ export function LeftNavigation() {
         aria-label={commonText.primaryNavigation()}
         className="relative flex min-h-0 flex-1 flex-col gap-1 p-1"
       >
-        <div
-          role="group"
-          aria-label={commonText.workspace()}
-          className="flex flex-col gap-1"
-        >
-          {expanded && (
-            <h2 className={groupHeadingClass}>{commonText.workspace()}</h2>
-          )}
-          {primaryItems.map(({ to, label, icon: Icon, matches }) => {
-            const isCurrent = matches(pathname)
-            return (
-              <Link
-                key={to}
-                to={to}
-                activeOptions={{ exact: false }}
-                aria-current={isCurrent ? 'page' : undefined}
-                aria-label={label()}
-                title={!expanded ? label() : undefined}
-                className={`${itemClass} ${expanded ? '' : 'justify-center px-0'} ${isCurrent ? activeItemClass : ''}`}
-              >
-                <Icon className="size-5 shrink-0" aria-hidden />
-                {expanded && <span className="truncate">{label()}</span>}
-              </Link>
-            )
-          })}
-        </div>
+        {primaryItems.map(({ to, label, icon: Icon, matches }) => {
+          const isCurrent = matches(pathname)
+          return (
+            <Link
+              key={to}
+              to={to}
+              activeOptions={{ exact: false }}
+              aria-current={isCurrent ? 'page' : undefined}
+              aria-label={label()}
+              title={!expanded ? label() : undefined}
+              className={`${itemClass} ${expanded ? '' : 'justify-center px-0'} ${isCurrent ? activeItemClass : ''}`}
+            >
+              <Icon className="size-5 shrink-0" aria-hidden />
+              {expanded && <span className="truncate">{label()}</span>}
+            </Link>
+          )
+        })}
 
         <div
           role="separator"
@@ -115,27 +106,22 @@ export function LeftNavigation() {
           className="flex-1"
         />
 
-        <div
-          role="group"
-          aria-label={commonText.preferences()}
-          className="flex flex-col gap-1"
+        <TaskCenterPopover expanded={expanded}>
+          <TaskCenterPanel />
+        </TaskCenterPopover>
+
+        <Link
+          to="/settings"
+          aria-current={onSettings ? 'page' : undefined}
+          aria-label={commonText.settings()}
+          title={!expanded ? commonText.settings() : undefined}
+          className={`${itemClass} ${expanded ? '' : 'justify-center px-0'} ${onSettings ? activeItemClass : ''}`}
         >
+          <Settings className="size-5 shrink-0" aria-hidden />
           {expanded && (
-            <h2 className={groupHeadingClass}>{commonText.preferences()}</h2>
+            <span className="truncate">{commonText.settings()}</span>
           )}
-          <Link
-            to="/settings"
-            aria-current={onSettings ? 'page' : undefined}
-            aria-label={commonText.settings()}
-            title={!expanded ? commonText.settings() : undefined}
-            className={`${itemClass} ${expanded ? '' : 'justify-center px-0'} ${onSettings ? activeItemClass : ''}`}
-          >
-            <Settings className="size-5 shrink-0" aria-hidden />
-            {expanded && (
-              <span className="truncate">{commonText.settings()}</span>
-            )}
-          </Link>
-        </div>
+        </Link>
 
         <span
           aria-hidden

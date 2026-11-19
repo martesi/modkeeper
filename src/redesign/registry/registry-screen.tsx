@@ -292,7 +292,7 @@ export function RegistryScreen() {
         >
           {isRateLimited && !searchResponse ? (
             <div
-              className="flex h-64 items-center justify-center rounded-lg border border-border text-sm text-muted-foreground"
+              className="flex h-64 items-center justify-center text-sm text-muted-foreground"
               role="status"
             >
               {registryText.rateLimitedNotice(rateLimitSecondsRemaining)}
@@ -300,7 +300,7 @@ export function RegistryScreen() {
           ) : isRequestError && !searchResponse ? (
             <div
               role="alert"
-              className="flex h-64 flex-col items-center justify-center gap-2 rounded-lg border border-border p-6 text-center"
+              className="flex h-64 flex-col items-center justify-center gap-2 p-6 text-center"
             >
               <AlertCircle
                 className="size-8 text-muted-foreground"
@@ -323,13 +323,13 @@ export function RegistryScreen() {
             </div>
           ) : isLoading && !searchResponse ? (
             <div
-              className="flex h-64 items-center justify-center rounded-lg border border-border text-sm text-muted-foreground"
+              className="flex h-64 items-center justify-center text-sm text-muted-foreground"
               role="status"
             >
               {registryText.searching()}
             </div>
           ) : displayedItems.length === 0 ? (
-            <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
+            <div className="flex h-64 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <SearchX className="size-8 opacity-60" aria-hidden />
               <p className="text-sm font-medium text-foreground">
                 {noResultsCopy?.kind === 'known-spt'

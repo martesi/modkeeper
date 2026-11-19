@@ -17,6 +17,14 @@ const inspectorSource = readFileSync(
   new URL('../registry/registry-detail-inspector.tsx', import.meta.url),
   'utf8',
 )
+const libraryEmptyCardSource = readFileSync(
+  new URL('../library/library-empty-card.tsx', import.meta.url),
+  'utf8',
+)
+const registryNoLibraryEmptySource = readFileSync(
+  new URL('../registry/registry-no-library-empty-state.tsx', import.meta.url),
+  'utf8',
+)
 
 function cssBlockContent(source: string, marker: string): string {
   const markerIndex = source.indexOf(marker)
@@ -74,5 +82,19 @@ describe('shell and registry motion', () => {
       'aria-label={detail?.name ?? registryText.title()}',
     )
     expect(inspectorSource).toContain('aria-label={registryText.closeDetail()}')
+  })
+
+  it('renders rail nav items without category headers and flat empty states without card backgrounds', () => {
+    expect(navigationSource).not.toContain('commonText.workspace')
+    expect(navigationSource).not.toContain('commonText.preferences')
+    expect(navigationSource).not.toContain('<h2')
+    expect(navigationSource).toContain('className="flex-1"')
+    expect(navigationSource).toContain('mk-navigation-indicator')
+
+    expect(libraryEmptyCardSource).not.toContain('bg-card')
+    expect(libraryEmptyCardSource).not.toContain('border-dashed')
+    expect(registryNoLibraryEmptySource).not.toContain('bg-muted')
+    expect(registryNoLibraryEmptySource).not.toContain('bg-card')
+    expect(registryNoLibraryEmptySource).not.toContain('border')
   })
 })

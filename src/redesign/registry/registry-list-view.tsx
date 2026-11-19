@@ -113,7 +113,7 @@ export function RegistryListView({
                     <span className="min-w-0 truncate">{item.teaser}</span>
                   ) : null}
                   <SptCompatIndicator
-                    isCompatible={true}
+                    isCompatible={item.kind === 'mod'}
                     sptVersion={activeLibrary?.sptVersion ?? undefined}
                   />
                   {item.kind === 'addon' && (
