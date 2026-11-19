@@ -7,7 +7,7 @@
  * across app restarts in Tauri. The shapes below mirror the frozen `ToolSummary` so swapping the
  * body for real `commands.*` calls is a local change.
  */
-import { isTauri } from '@tauri-apps/api/core'
+import { openPath, platformKind } from '@/platform'
 import { toast } from 'sonner'
 import { getDefaultStore } from 'jotai'
 import type {
@@ -34,7 +34,7 @@ function mutateWorkspace(
     getDefaultStore().get(libraryWorkspaceAtom) ?? getMockWorkspace()
   const workspace = structuredClone(current)
   mutate(workspace)
-  if (!isTauri()) setMockWorkspace(workspace)
+  if (platformKind() === 'browser') setMockWorkspace(workspace)
   setWorkspace(workspace)
   return workspace
 }
@@ -87,13 +87,12 @@ export function deleteTool(input: {
  */
 export async function launchTool(tool: ToolSummary): Promise<void> {
   toast.info(libraryText.launchingTool(tool.name))
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     // MOCK-FALLBACK: nothing to execute in the browser prototype.
     console.info('[redesign] would launch tool:', tool.executablePath)
     return
   }
   try {
-    const { openPath } = await import('@tauri-apps/plugin-opener')
     await openPath(tool.executablePath)
   } catch (error) {
     console.error('[redesign] tool launch failed', error)

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { isTauri } from '@tauri-apps/api/core'
+import { openUrl, platformKind } from '@/platform'
 import semver from 'semver'
 import type { ForgeDetail, ForgeVersionsPage } from '@gen/bindings'
 import {
@@ -252,12 +252,11 @@ export function RegistryDetailInspector({
 
   async function handleOpenExternal(url: string | null | undefined) {
     if (!url) return
-    if (!isTauri()) {
+    if (platformKind() === 'browser') {
       window.open(url, '_blank')
       return
     }
     try {
-      const { openUrl } = await import('@tauri-apps/plugin-opener')
       await openUrl(url)
     } catch {
       window.open(url, '_blank')
