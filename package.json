@@ -24,6 +24,8 @@
     "rust:fmt:check": "sh scripts/with-rust.sh cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "bindings:check": "sh scripts/check-bindings.sh",
     "bindings:write": "sh scripts/check-bindings.sh --write",
+    "bindings:wails:prune": "bun scripts/prune-wails-bindings.ts",
+    "bindings:wails:check": "bun scripts/prune-wails-bindings.ts --check",
     "test:all": "bun run test && bun run test:rust",
     "preview": "vite preview",
     "tauri": "tauri",
