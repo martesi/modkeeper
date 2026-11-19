@@ -67,7 +67,7 @@ func TestOldManifestModsDefaultToLocalWithoutRegistryIdentity(t *testing.T) {
 	if mod.Source != ModSourceLocal || mod.Type != ModTypeServer || !mod.Enabled || mod.ForgeID != nil || mod.Version != nil {
 		t.Fatalf("wrong defaults: %+v", mod)
 	}
-	assertJSON(t, mod, `{"id":"old-install","name":"Existing Mod","isActive":true,"type":"server","installedAt":"2026-01-02T03:04:05Z","source":"local"}`)
+	assertJSON(t, mod, `{"id":"old-install","isActive":true,"type":"server","name":"Existing Mod","installedAt":"2026-01-02T03:04:05Z","source":"local"}`)
 }
 func TestErrorWireShape(t *testing.T) {
 	assertJSON(t, Fail(NoActiveLibrary), `{"code":"NoActiveLibrary","data":null}`)

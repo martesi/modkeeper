@@ -40,19 +40,19 @@ type ForgeIdentity struct {
 }
 
 type Mod struct {
-	ID                string         `json:"id"`
-	Name              string         `json:"name"`
-	Enabled           bool           `json:"isActive"`
-	Type              ModType        `json:"type"`
-	InstalledAt       *string        `json:"installedAt,omitempty"`
-	Source            ModSource      `json:"source"`
-	Version           *string        `json:"version,omitempty"`
-	ForgeID           *uint64        `json:"forgeId,omitempty"`
-	ForgeGUID         *string        `json:"forgeGuid,omitempty"`
-	ForgeKind         *ForgeKind     `json:"forgeKind,omitempty"`
-	ForgeVersionID    *uint64        `json:"forgeVersionId,omitempty"`
-	ForgeMetaCachedAt *string        `json:"forgeMetaCachedAt,omitempty"`
-	Forge             *ForgeIdentity `json:"-"`
+	ID                string         `json:"id" toml:"id"`
+	Enabled           bool           `json:"isActive" toml:"isActive"`
+	Type              ModType        `json:"type" toml:"type"`
+	Name              string         `json:"name" toml:"name"`
+	InstalledAt       *string        `json:"installedAt,omitempty" toml:"installedAt,omitempty"`
+	Version           *string        `json:"version,omitempty" toml:"version,omitempty"`
+	ForgeID           *uint64        `json:"forgeId,omitempty" toml:"forgeId,omitempty"`
+	ForgeGUID         *string        `json:"forgeGuid,omitempty" toml:"forgeGuid,omitempty"`
+	Source            ModSource      `json:"source" toml:"source"`
+	ForgeKind         *ForgeKind     `json:"forgeKind,omitempty" toml:"forgeKind,omitempty"`
+	ForgeVersionID    *uint64        `json:"forgeVersionId,omitempty" toml:"forgeVersionId,omitempty"`
+	ForgeMetaCachedAt *string        `json:"forgeMetaCachedAt,omitempty" toml:"forgeMetaCachedAt,omitempty"`
+	Forge             *ForgeIdentity `json:"-" toml:"-"`
 }
 
 func (m *Mod) UnmarshalJSON(data []byte) error {
