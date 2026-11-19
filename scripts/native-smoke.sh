@@ -32,15 +32,20 @@ if ! command -v xvfb-run >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "native-smoke: launching $binary under Xvfb (15 second startup window)"
+echo "native-smoke: launching $binary under Xvfb (45 second smoke deadline)"
 set +e
-timeout --signal=TERM 15s "$binary"
-status=$?
+MODKEEPER_NATIVE_SMOKE=1 timeout --signal=TERM 45s "$binary" 2>&1 | tee /tmp/modkeeper-native-smoke.log
+status=${PIPESTATUS[0]}
 set -e
-if [[ "$status" -ne 124 && "$status" -ne 143 ]]; then
-  echo "native-smoke: app exited before the startup window (status $status)" >&2
+if [[ "$status" -ne 0 ]]; then
+  echo "native-smoke: app exited with status $status" >&2
   exit 1
 fi
-echo "native-smoke: process remained alive for 15 seconds; window startup did not crash"
-echo "native-smoke: BLOCKED: Wails-bound service IPC and frontend event observation are not instrumented"
-exit 1
+for link in "PASS settings JS→Go→JS value" "PASS frontend event listener ready" \
+  "PASS Go emitted registered event" "PASS event payload observed by frontend and reported to Go"; do
+  if ! grep -Fq "$link" /tmp/modkeeper-native-smoke.log; then
+    echo "native-smoke: FAIL missing evidence: $link" >&2
+    exit 1
+  fi
+done
+echo "native-smoke: PASS all native links"
