@@ -67,6 +67,8 @@ func (s *Service) runTask(taskID string, run func() error) *models.OperationAcce
 }
 
 func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
+	s.modWrites.Lock()
+	defer s.modWrites.Unlock()
 	if s.active == nil || s.active.manifest.ID != in.LibraryID {
 		return fmt.Errorf("InvalidLibrary: not the active library")
 	}

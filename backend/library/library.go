@@ -161,6 +161,7 @@ type Service struct {
 	sendProgress  func(models.TaskProgressEvent) error
 	sendWorkspace func(models.WorkspaceEvent) error
 	tasks         sync.WaitGroup
+	modWrites     sync.Mutex
 }
 
 // DeriveLibraryRoot returns the default library location for a game install.
@@ -260,6 +261,78 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	if in.Name != nil {
 		name = *in.Name
 	}
+	if root == "" {
+		root = DeriveLibraryRoot(in.GameRoot)
+	}
+	if _, statErr := os.Stat(root); statErr == nil {
+		existing, loadErr := Load(root)
+		if loadErr != nil && in.LibraryRoot == nil && strings.Contains(loadErr.Error(), "SPT major version changed") {
+			version, versionErr := versionOf(in.GameRoot)
+			if versionErr != nil {
+				return versionErr
+			}
+			root = DeriveLibraryRootForSPT(in.GameRoot, version)
+			if _, versionedErr := os.Stat(root); versionedErr == nil {
+				existing, loadErr = Load(root)
+				if loadErr == nil {
+					l := existing
+					prev := s.Store.Config
+					s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
+					s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
+					if err := s.Store.Save(); err != nil {
+						s.Store.Config = prev
+						return err
+					}
+					s.active = l
+					s.Registry.SetActive(l.manifest.ID, true)
+					return nil
+				}
+				return fmt.Errorf("InvalidLibrary: %s: %w", root, loadErr)
+			} else if !os.IsNotExist(versionedErr) {
+				return versionedErr
+			}
+			statErr = os.ErrNotExist
+		}
+		if loadErr != nil && in.LibraryRoot != nil {
+			// The Wails setup flow may pass a pre-created empty destination
+			// tree. Accept that explicit scaffold, but do not adopt a malformed
+			// default-root library.
+			empty := true
+			for _, dir := range []string{"mods", "backups", "staging"} {
+				entries, readErr := os.ReadDir(filepath.Join(root, dir))
+				if readErr != nil || len(entries) != 0 {
+					empty = false
+					break
+				}
+			}
+			if empty {
+				for _, dir := range []string{"mods", "backups", "staging"} {
+					_ = os.Remove(filepath.Join(root, dir))
+				}
+				_ = os.Remove(root)
+				statErr = os.ErrNotExist
+			}
+		}
+		if statErr == nil {
+			if loadErr != nil {
+				return fmt.Errorf("InvalidLibrary: %s: %w", root, loadErr)
+			}
+			l := existing
+			prev := s.Store.Config
+			s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
+			s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
+			if err := s.Store.Save(); err != nil {
+				s.Store.Config = prev
+				return err
+			}
+			s.active = l
+			s.Registry.SetActive(l.manifest.ID, true)
+			return nil
+		}
+	}
+	if _, statErr := os.Stat(root); statErr != nil && !os.IsNotExist(statErr) {
+		return statErr
+	}
 	l, e := Create(in.GameRoot, root, name)
 	if e != nil {
 		return e
@@ -304,7 +377,7 @@ func (s *Service) RenameLibrary(id, name string) error {
 		return e
 	}
 	m.Name = name
-	b := filepath.Join(k.LibraryRoot, ".mod_keeper", "manifest.toml")
+	b := filepath.Join(k.LibraryRoot, "manifest.toml")
 	f, e := os.CreateTemp(filepath.Dir(b), ".tmp-*")
 	if e != nil {
 		return e
@@ -366,8 +439,15 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 				return err
 			}
 		}
-		entries, e := os.ReadDir(k.LibraryRoot)
-		if e == nil && len(entries) == 0 {
+		// Remove only the known library payload. Any unrecorded content keeps
+		// its parent directory in place.
+		for _, dir := range []string{"mods", "staging", "backups"} {
+			_ = os.Remove(filepath.Join(k.LibraryRoot, dir))
+		}
+		for _, file := range []string{"manifest.toml", "cache.toml", "deployment.toml"} {
+			_ = os.Remove(filepath.Join(k.LibraryRoot, file))
+		}
+		if entries, e := os.ReadDir(k.LibraryRoot); e == nil && len(entries) == 0 {
 			return os.Remove(k.LibraryRoot)
 		}
 	}
