@@ -12,11 +12,19 @@
 import {
   Call as $Call,
   CancellablePromise as $CancellablePromise,
+  Create as $Create,
 } from '@wailsio/runtime'
 
-export function ActivateLibrary(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as json$0 from '../../../../encoding/json/models.js'
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as forge$0 from './forge/models.js'
+
+export function ActivateLibrary(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(2762475955, input)
 }
 
@@ -26,22 +34,55 @@ export function ApplyWindowEffect(
   return $Call.ByID(79803326, isDark)
 }
 
-export function BulkUpdateMods(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function BulkUpdateMods(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(1890286689, input)
 }
 
-export function CreateLibrary(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function CreateLibrary(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(4100041344, input)
 }
 
-export function DeleteLibrary(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function DeleteLibrary(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(3687250549, input)
+}
+
+export function ForgeAddonVersions(
+  addonID: number,
+): $CancellablePromise<[json$0.RawMessage, boolean]> {
+  return $Call.ByID(1423140075, addonID)
+}
+
+export function ForgeDownloadVersion(
+  input: forge$0.ForgeDownloadVersionInput,
+): $CancellablePromise<json$0.RawMessage> {
+  return $Call.ByID(2889594628, input)
+}
+
+export function ForgeModDetail(
+  modID: number,
+): $CancellablePromise<[json$0.RawMessage, boolean]> {
+  return $Call.ByID(1050554349, modID)
+}
+
+export function ForgeModVersions(
+  modID: number,
+): $CancellablePromise<[json$0.RawMessage, boolean]> {
+  return $Call.ByID(1957956409, modID)
+}
+
+export function ForgeSearch(
+  query: string,
+  modPage: number,
+  addonPage: number,
+  perPage: number,
+): $CancellablePromise<[json$0.RawMessage, boolean]> {
+  return $Call.ByID(3029807572, query, modPage, addonPage, perPage)
 }
 
 export function GetLibraryWorkspace(): $CancellablePromise<any> {
@@ -52,32 +93,32 @@ export function GetSettings(): $CancellablePromise<any> {
   return $Call.ByID(2994169970)
 }
 
-export function InstallModArchives(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function InstallModArchives(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(1475805379, input)
 }
 
-export function RebuildLibraryCache(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function RebuildLibraryCache(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(538776327, input)
 }
 
-export function RenameLibrary(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function RenameLibrary(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(866127486, input)
 }
 
-export function SaveSettings(
-  settings: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function SaveSettings(settings: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(2442549933, settings)
 }
 
-export function SyncMods(
-  input: { [_ in string]?: any } | null,
-): $CancellablePromise<any> {
+export function SyncMods(input: {
+  [_ in string]?: any
+}): $CancellablePromise<any> {
   return $Call.ByID(3644304143, input)
 }

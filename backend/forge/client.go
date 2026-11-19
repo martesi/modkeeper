@@ -31,7 +31,8 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{HTTP: &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 || (req.URL.Scheme != "http" && req.URL.Scheme != "https") {
+		if len(via) >= 10 || (req.URL.Scheme != "http" && req.URL.Scheme != "https") ||
+			(len(via) > 0 && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https") {
 			return http.ErrUseLastResponse
 		}
 		return nil
@@ -69,52 +70,82 @@ func (c *Client) Get(rawURL string) (json.RawMessage, error) {
 	req.Header.Set("User-Agent", "Modkeeper")
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Forge request failed: %w", err)
+		return nil, fail("IOError", "Forge request failed: "+err.Error())
 	}
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusTooManyRequests {
-		delay := 30 * time.Second
-		if n, e := strconv.Atoi(res.Header.Get("Retry-After")); e == nil && n >= 0 {
-			delay = time.Duration(n) * time.Second
-		}
+		delay := retryAfter(res.Header.Get("Retry-After"), time.Now())
 		c.mu.Lock()
 		c.blockedUntil = time.Now().Add(delay)
 		c.mu.Unlock()
-		return nil, fmt.Errorf("Forge rate limit reached; retry after %d seconds", max(1, int(delay.Seconds())))
+		return nil, fail("IOError", fmt.Sprintf("Forge rate limit reached; retry after %d seconds", max(1, int(delay.Seconds()))))
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("Forge returned HTTP %d", res.StatusCode)
+		return nil, fail("IOError", fmt.Sprintf("Forge returned HTTP %d", res.StatusCode))
 	}
 	b, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
 	if !json.Valid(b) {
-		return nil, fmt.Errorf("Forge returned invalid JSON")
+		return nil, fail("ParseError", "Forge returned invalid JSON")
 	}
 	return b, nil
 }
 
 func (c *Client) acquire() error {
-	now := time.Now()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.blockedUntil.After(now) {
-		return fmt.Errorf("Forge asked this client to retry in %d seconds", max(1, int(time.Until(c.blockedUntil).Seconds())))
-	}
-	cutoff := now.Add(-time.Minute)
-	kept := c.requests[:0]
-	for _, t := range c.requests {
-		if t.After(cutoff) {
-			kept = append(kept, t)
+	for {
+		now := time.Now()
+		c.mu.Lock()
+		if c.blockedUntil.After(now) {
+			delay := c.blockedUntil.Sub(now)
+			c.mu.Unlock()
+			return fail("IOError", fmt.Sprintf("Forge asked this client to retry in %d seconds", max(1, int(delay.Seconds()))))
 		}
+		cutoff := now.Add(-time.Minute)
+		kept := c.requests[:0]
+		for _, t := range c.requests {
+			if t.After(cutoff) {
+				kept = append(kept, t)
+			}
+		}
+		c.requests = kept
+		short := 0
+		for _, stamp := range kept {
+			if now.Sub(stamp) < 10*time.Second {
+				short++
+			}
+		}
+		if len(kept) >= 200 || short >= 40 {
+			window := time.Minute
+			if short >= 40 {
+				window = 10 * time.Second
+			}
+			delay := time.Second
+			for _, stamp := range kept {
+				if now.Sub(stamp) < window {
+					delay = window - now.Sub(stamp)
+					break
+				}
+			}
+			c.mu.Unlock()
+			time.Sleep(delay)
+			continue
+		}
+		c.requests = append(c.requests, now)
+		c.mu.Unlock()
+		return nil
 	}
-	c.requests = kept
-	if len(kept) >= 200 {
-		return fmt.Errorf("Forge request quota reached")
+}
+
+func retryAfter(value string, now time.Time) time.Duration {
+	if n, err := strconv.ParseUint(value, 10, 64); err == nil {
+		return time.Duration(n) * time.Second
 	}
-	c.requests = append(c.requests, now)
-	return nil
+	if when, err := http.ParseTime(value); err == nil && !when.Before(now) {
+		return when.Sub(now)
+	}
+	return 30 * time.Second
 }
 
 func URL(path string, query map[string]string) (string, error) {
