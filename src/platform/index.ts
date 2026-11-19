@@ -90,7 +90,7 @@ export async function openUrl(url: string): Promise<void> {
 
 export async function openPath(path: string): Promise<void> {
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).System.OpenDirectory(path)
+    return Promise.reject(new Error(`Wails has no path opener API: ${path}`))
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-opener')).openPath(path)
 }
@@ -100,8 +100,7 @@ export async function startWindowDrag(): Promise<void> {
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
       .startDragging()
-  if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Window.Drag()
+  if (platformKind() === 'wails') return
 }
 
 export async function minimizeWindow(): Promise<void> {
@@ -151,8 +150,7 @@ export async function onFileDrop(
   return () => {}
 }
 export async function log(message: string): Promise<void> {
-  if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).System.Log(message)
+  if (platformKind() === 'wails') return console.info(message)
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-log')).info(message)
   console.info(message)

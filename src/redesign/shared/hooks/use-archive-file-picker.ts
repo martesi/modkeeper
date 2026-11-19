@@ -3,7 +3,7 @@
  * fire-and-track install. The picker and drop zone use the shared archive-format authority.
  */
 import { useCallback } from 'react'
-import { isTauri } from '@tauri-apps/api/core'
+import { pickFiles, platformKind } from '@/platform'
 import { useAtomValue } from 'jotai'
 import {
   activeLibraryIdAtom,
@@ -14,14 +14,13 @@ import { SUPPORTED_ARCHIVE_EXTENSIONS } from '../utils/file-filters'
 import { libraryText } from '../../i18n/library-text'
 
 async function pickModArchives(): Promise<string[]> {
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     // MOCK-FALLBACK: no native picker in the browser prototype — pretend one archive was chosen so
     // the install flow stays exercisable end-to-end.
     console.info('[redesign] no native file picker, simulating a selection')
     return ['C:/downloads/Example Mod.zip']
   }
-  const { open } = await import('@tauri-apps/plugin-dialog')
-  const selection = await open({
+  return pickFiles({
     multiple: true,
     filters: [
       {
@@ -31,8 +30,6 @@ async function pickModArchives(): Promise<string[]> {
     ],
     title: libraryText.selectModArchives(),
   })
-  if (!selection) return []
-  return Array.isArray(selection) ? selection : [selection]
 }
 
 /** Returns a callback that picks archives and tracks them under its initiating control. */

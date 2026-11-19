@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { isTauri } from '@tauri-apps/api/core'
+import { pickFiles, platformKind } from '@/platform'
 import {
   Dialog,
   DialogContent,
@@ -198,18 +198,16 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 async function pickExecutable(): Promise<string | null> {
-  if (!isTauri()) {
+  if (platformKind() === 'browser') {
     // MOCK-FALLBACK: no native file picker in the browser prototype.
     console.info('[redesign] no native file picker, simulating a selection')
     return 'C:/SPT/Aki.Server.exe'
   }
-  const { open } = await import('@tauri-apps/plugin-dialog')
-  const selection = await open({
-    multiple: false,
+  const [selection] = await pickFiles({
     title: libraryText.selectExecutable(),
     filters: [
       { name: libraryText.executable(), extensions: ['exe', 'bat', 'cmd'] },
     ],
   })
-  return typeof selection === 'string' ? selection : null
+  return selection ?? null
 }
