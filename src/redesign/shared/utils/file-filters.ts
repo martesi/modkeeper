@@ -10,7 +10,14 @@ export type SupportedArchiveExtension =
 export function getSupportedArchiveExtension(
   path: string,
 ): SupportedArchiveExtension | undefined {
-  const extension = path.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase()
+  const filename = path.split(/[\\/]/).pop()
+  if (
+    !filename ||
+    (filename.startsWith('.') && !filename.slice(1).includes('.'))
+  ) {
+    return undefined
+  }
+  const extension = filename.split('.').pop()?.toLowerCase()
   return SUPPORTED_ARCHIVE_EXTENSIONS.find(
     (candidate) => candidate === extension,
   )

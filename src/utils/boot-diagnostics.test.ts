@@ -43,4 +43,17 @@ describe('boot error storage', () => {
       '[startup] persisted boot error was invalid',
     )
   })
+
+  test('returns null when no boot error has been stored', () => {
+    expect(readBootError(createStorage())).toBeNull()
+  })
+
+  test('replaces the stored message when a later boot error is recorded', () => {
+    const storage = createStorage()
+
+    storeBootError('First failure', storage)
+    storeBootError('Latest failure', storage)
+
+    expect(readBootError(storage)).toBe('Latest failure')
+  })
 })

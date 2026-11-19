@@ -52,4 +52,15 @@ describe('supported archive paths', () => {
       rejected: ['notes.txt', 'third.tar'],
     })
   })
+
+  test('rejects empty names, dotfiles, and paths ending in a separator', () => {
+    for (const path of ['', '.zip', '/mods/', 'C:\\mods\\']) {
+      expect(isSupportedArchivePath(path)).toBe(false)
+      expect(stripSupportedArchiveExtension(path)).toBe(path)
+    }
+  })
+
+  test('splits an empty selection into empty result lists', () => {
+    expect(splitArchivePaths([])).toEqual({ archives: [], rejected: [] })
+  })
 })
