@@ -48,6 +48,7 @@
             export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules/"
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
           '';
+          commonHook = cargoCacheHook + tauriHook;
           winCrossToolchain = pkgs.rust-bin.stable.latest.default.override {
             extensions = [ "rust-src" ];
             targets = [ "x86_64-pc-windows-gnu" ];
@@ -57,7 +58,7 @@
         {
           default = pkgs.mkShell {
             packages = basePackages;
-            shellHook = cargoCacheHook + tauriHook;
+            shellHook = commonHook;
           };
 
           e2e = pkgs.mkShell {
@@ -67,7 +68,8 @@
               xdotool
               xvfb
             ]);
-            shellHook = cargoCacheHook + tauriHook + ''
+            shellHook = commonHook + ''
+              export PLAYWRIGHT_FIREFOX_EXECUTABLE="''${PLAYWRIGHT_FIREFOX_EXECUTABLE:-${pkgs.firefox}/bin/firefox}"
               export DISPLAY="''${DISPLAY:-:99}"
               export FONTCONFIG_FILE="''${FONTCONFIG_FILE:-${
                 pkgs.makeFontsConf {

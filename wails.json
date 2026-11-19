@@ -2,6 +2,7 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "modkeeper",
   "outputfilename": "modkeeper",
+  "frontend:dir": ".",
   "frontend:install": "bun install --frozen-lockfile",
   "frontend:build": "bun run build:wails",
   "frontend:dev": "bun run dev:wails",
