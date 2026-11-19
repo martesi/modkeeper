@@ -12,6 +12,7 @@ import type * as models$0 from '../../../../martes/modkeeper/backend/models/mode
 declare module '@wailsio/runtime' {
   namespace Events {
     interface CustomEvents {
+      'native-smoke-event': string
       task_progress: models$0.TaskProgressEvent
       'workspace-event': any
     }

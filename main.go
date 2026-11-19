@@ -21,8 +21,9 @@ func init() {
 func main() {
 	smoke := os.Getenv("MODKEEPER_NATIVE_SMOKE") == "1"
 	smokeService := newNativeSmokeService()
+	appBackend := backend.NewApp()
 	services := []application.Service{
-		application.NewService(backend.NewApp()),
+		application.NewService(appBackend),
 	}
 	if smoke {
 		application.RegisterEvent[string]("native-smoke-event")
@@ -42,10 +43,31 @@ func main() {
 		Height: 800,
 		URL:    nativeSmokeURL(smoke),
 	})
+	if appBackend.InitErr != nil {
+		log.Printf("modkeeper: config/library initialization failed: %v", appBackend.InitErr)
+	} else {
+		appBackend.Sink = wailsEventSink{app: app}
+		if err := appBackend.Start(); err != nil {
+			log.Printf("modkeeper: startup load failed: %v", err)
+		}
+	}
 	if smoke {
 		go runNativeSmoke(app, window, smokeService)
 	}
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// wailsEventSink forwards service events to the Wails event bus.
+type wailsEventSink struct{ app *application.App }
+
+func (s wailsEventSink) Progress(event models.TaskProgressEvent) error {
+	s.app.Event.Emit("task_progress", event)
+	return nil
+}
+
+func (s wailsEventSink) Workspace(event models.WorkspaceEvent) error {
+	s.app.Event.Emit("workspace-event", event)
+	return nil
 }

@@ -9,6 +9,11 @@ import type {} from '../github.com/wailsapp/wails/v3/internal/eventdata.js'
 import '../github.com/wailsapp/wails/v3/internal/eventcreate.js'
 
 /**
+ * Name of the custom event "native-smoke-event".
+ */
+export const NativeSmokeEvent = 'native-smoke-event'
+
+/**
  * Name of the custom event "task_progress".
  */
 export const TaskProgress = 'task_progress'
