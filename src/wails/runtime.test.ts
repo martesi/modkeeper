@@ -23,6 +23,13 @@ describe('Wails runtime detection', () => {
     expect(hasNativeRuntime()).toBe(true)
   })
 
+  test('detects the injected native Wails environment', () => {
+    // @ts-expect-error Test supplies a minimal window stub.
+    globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+    expect(isWails()).toBe(true)
+    expect(hasNativeRuntime()).toBe(true)
+  })
+
   test('returns the window only when available', () => {
     expect(wailsWindow()).toBe(originalWindow)
   })

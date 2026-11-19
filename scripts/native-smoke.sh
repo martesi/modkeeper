@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 bun install
-bun run build
+bun run build:wails
 nix develop -c wails3 build
 
 binary=build/bin/modkeeper
