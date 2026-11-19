@@ -1,21 +1,51 @@
 package registry
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/process"
 )
 
 func TestStartupLibraryWaitsForBackgroundLoadCompletion(t *testing.T) {
-	t.Skip("blocked on wails/wc-library-crud: startup load coordination is not implemented")
+	r := NewTaskRegistry()
+	done := make(chan error, 1)
+	go func() { done <- r.WaitForStartupLoad(context.Background()) }()
+	select {
+	case err := <-done:
+		t.Fatalf("returned before startup completed: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	r.FinishStartupLoad(nil)
+	if err := <-done; err != nil { t.Fatalf("wait: %v", err) }
+	r = NewTaskRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := r.WaitForStartupLoad(ctx); !errors.Is(err, context.Canceled) { t.Fatalf("cancellation: %v", err) }
+	want := errors.New("startup failed")
+	r.FinishStartupLoad(want)
+	if err := r.WaitForStartupLoad(context.Background()); !errors.Is(err, want) { t.Fatalf("startup error: %v", err) }
 }
 func TestTestTaskIdInUseRejectedUntilFinished(t *testing.T) {
-	t.Skip("blocked on wails/wc-library-crud: in-flight task ID guard is not implemented")
+	r := NewTaskRegistry()
+	if err := r.AcquireTaskID("task"); err != nil { t.Fatal(err) }
+	err := r.AcquireTaskID("task")
+	var coded *models.Error
+	if !errors.As(err, &coded) || coded.Code != models.TaskIdInUse { t.Fatalf("duplicate error: %v", err) }
+	r.FinishTaskID("task")
+	if err := r.AcquireTaskID("task"); err != nil { t.Fatalf("reuse: %v", err) }
 }
 func TestTestAssertActiveLibraryRejectsNonActive(t *testing.T) {
-	t.Skip("blocked on wails/wc-library-crud: active-library validation is not implemented")
+	r := NewTaskRegistry()
+	err := r.AssertActiveLibrary("lib")
+	var coded *models.Error
+	if !errors.As(err, &coded) || coded.Code != models.NoActiveLibrary { t.Fatalf("inactive error: %v", err) }
+	r.SetActive("lib", true)
+	err = r.AssertActiveLibrary("other")
+	if !errors.As(err, &coded) || coded.Code != models.InvalidLibrary { t.Fatalf("wrong-library error: %v", err) }
 }
 
 type processInspector func() (bool, error)

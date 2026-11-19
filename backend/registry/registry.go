@@ -44,10 +44,10 @@ func (r *TaskRegistry) AssertActiveLibrary(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.active {
-		return fmt.Errorf("NoActiveLibrary")
+		return models.Fail(models.NoActiveLibrary)
 	}
 	if r.activeID != id {
-		return fmt.Errorf("InvalidLibrary: %s is not the active library", id)
+		return models.Fail(models.InvalidLibrary, id)
 	}
 	return nil
 }
@@ -56,7 +56,7 @@ func (r *TaskRegistry) AcquireTaskID(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.tasks[id]; exists {
-		return fmt.Errorf("TaskIdInUse: %s", id)
+		return models.Fail(models.TaskIdInUse, id)
 	}
 	r.tasks[id] = struct{}{}
 	return nil
