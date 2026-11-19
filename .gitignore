@@ -40,3 +40,6 @@ cookies.json
 cookies*.txt
 test-results/
 playwright-report/
+
+# APM dependencies
+apm_modules/
