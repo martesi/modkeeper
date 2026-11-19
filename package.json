@@ -18,7 +18,7 @@
     "lint": "eslint src/redesign src/routes src/main.tsx src/components/ui/dialog.tsx e2e --max-warnings 0",
     "format:check": "prettier --check \"src/redesign/**/*.{ts,tsx,css}\" \"src/routes/**/*.{ts,tsx}\" src/main.tsx \"src/components/ui/**/*.{ts,tsx}\" \"e2e/**/*.ts\"",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run scripts/check-tokens.ts",
-    "test": "bun test --path-ignore-patterns 'e2e/playwright/**'",
+    "test": "bun test src e2e --path-ignore-patterns 'e2e/playwright/**'",
     "test:e2e": "playwright test",
     "test:agent": "bun \"$ARCA_E2E_HARNESS\" browser --config .config/arca.toml --",
     "test:rust": "sh scripts/with-rust.sh cargo test --manifest-path src-tauri/Cargo.toml",
