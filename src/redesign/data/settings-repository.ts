@@ -7,10 +7,10 @@
  * lives with next-themes in the initializers; accent/language live here) turn the saved value into
  * visible effect.
  */
-import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
 import { i18n } from '@lingui/core'
-import { commands } from '@gen/bindings'
+import { commands } from '@/wails'
+import { hasNativeRuntime } from '@/wails/runtime'
 import { getDefaultStore } from 'jotai'
 import { changeLocale } from '@/utils/i18n'
 import type { AppSettings } from './redesign-types'
@@ -32,7 +32,7 @@ export async function saveSettings(
   settings: AppSettings,
 ): Promise<AppSettings> {
   return runPlainCommand({
-    isTauri: isTauri(),
+    isTauri: hasNativeRuntime(),
     invoke: () => commands.saveSettings(settings),
     mock: () => {
       const workspace = structuredClone(getMockWorkspace())

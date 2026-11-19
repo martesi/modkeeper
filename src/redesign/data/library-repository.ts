@@ -16,9 +16,9 @@
  *     as a WorkspaceEvent matched by taskId.
  * Both feed one single persistent event bus; the bus dispatches by taskId and clears library-busy.
  */
-import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
-import { commands, events } from '@gen/bindings'
+import { commands, events } from '@/wails'
+import { hasNativeRuntime } from '@/wails/runtime'
 import type {
   LibraryWorkspace,
   LibrarySummary,
@@ -121,11 +121,11 @@ export function listenWorkspaceEvent(
  * browser prototype there is no source — the mock emitter feeds `dispatchWorkspaceEvent` directly.
  */
 export function ensureWorkspaceEventBus(): Promise<boolean> {
-  if (!isTauri()) return Promise.resolve(true)
+  if (!hasNativeRuntime()) return Promise.resolve(true)
   return Promise.all([
     connectWorkspaceEvents(() =>
       events.workspaceEvent.listen((event) =>
-        dispatchWorkspaceEvent(event.payload),
+        dispatchWorkspaceEvent(event.payload as WorkspaceEvent),
       ),
     ),
     connectTaskProgressEvents(() =>
@@ -199,7 +199,7 @@ async function plainCommand(
 ): Promise<CommandOutcome<LibraryWorkspace>> {
   let failed = false
   const workspace = await runPlainCommand({
-    isTauri: isTauri(),
+    isTauri: hasNativeRuntime(),
     invoke: real,
     mock: () => {
       const workspace = structuredClone(getMockWorkspace())
@@ -238,7 +238,7 @@ async function fireAndTrack(
   mockComplete: (taskId: string) => void,
   onTaskRegistered?: (taskId: string) => void,
 ): Promise<OperationAccepted> {
-  const tauri = isTauri()
+  const tauri = hasNativeRuntime()
   return runTrackedCommand({
     isTauri: tauri,
     ensureReady: ensureWorkspaceEventBus,
@@ -290,7 +290,7 @@ export async function loadLibraryWorkspace(): Promise<LibraryWorkspace | null> {
   setWorkspaceStatus('loading')
   let failed = false
   const workspace = await runPlainCommand({
-    isTauri: isTauri(),
+    isTauri: hasNativeRuntime(),
     invoke: () => commands.getLibraryWorkspace(),
     mock: () => applyWorkspace(getMockWorkspace()),
     apply: applyWorkspace,
