@@ -121,3 +121,13 @@ func TestPurgeNeverFollowsExternalDirectoryLinks(t *testing.T) {
 	must(t, Purge(l, nil))
 	content(t, inside, "library")
 }
+func TestPurgeKeepsARecoveryManifestWhenItsQuarantineIsMissing(t *testing.T) {
+	l, root, _ := purgeFixture(t)
+	original := filepath.Join(root, "original-link")
+	quarantine := filepath.Join(root, ".mkp-missing")
+	write(t, journal(l), "version = 2\ntoken = 'test'\nentries = []\n")
+	code(t, Purge(l, nil), "InvalidLibrary")
+	content(t, journal(l), "version = 2\ntoken = 'test'\nentries = []\n")
+	absent(t, original)
+	absent(t, quarantine)
+}
