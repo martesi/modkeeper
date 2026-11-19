@@ -23,10 +23,10 @@ type AppState struct {
 }
 
 type AppSettings struct {
-	Theme               ThemeMode `toml:"theme"`
-	AccentColor         string    `toml:"accentColor"`
-	Language            string    `toml:"language"`
-	EnableModsOnInstall bool      `toml:"enableModsOnInstall"`
+	Theme               ThemeMode `toml:"theme" json:"theme"`
+	AccentColor         string    `toml:"accentColor" json:"accentColor"`
+	Language            string    `toml:"language" json:"language"`
+	EnableModsOnInstall bool      `toml:"enableModsOnInstall" json:"enableModsOnInstall"`
 }
 
 type ThemeMode string
