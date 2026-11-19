@@ -34,6 +34,12 @@ func NewApp() *App {
 	if err != nil {
 		return &App{InitErr: err}
 	}
+	return NewAppAt(path)
+}
+
+// NewAppAt builds the app against an explicit config path. Tests use it to avoid
+// the user's real config directory.
+func NewAppAt(path string) *App {
 	service, err := library.New(path)
 	if err != nil {
 		return &App{ConfigPath: path, InitErr: err}

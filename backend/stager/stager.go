@@ -25,10 +25,10 @@ type StagedMod struct {
 func Resolve(inputs []string, stagingRoot, serverMods, clientPlugins string, inspector ProcessInspector) ([]StagedMod, error) {
 	var out []StagedMod
 	for _, input := range inputs {
+		// The extractor atomically renames into an absent destination; creating
+		// the root first makes every install fail with "destination exists".
 		root := filepath.Join(stagingRoot, filepath.Base(input)+"-stage")
-		if err := os.MkdirAll(root, 0755); err != nil {
-			return nil, err
-		}
+		_ = os.RemoveAll(root)
 		if err := archive.Extract(input, root); err != nil {
 			_ = os.RemoveAll(root)
 			return nil, err

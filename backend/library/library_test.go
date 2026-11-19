@@ -10,8 +10,8 @@ import (
 
 func TestLibraryStructureAndStoredRelativeRoot(t *testing.T) {
 	game := t.TempDir()
-	os.MkdirAll(filepath.Join(game, "SPT", "SPT_Data", "Server", "configs"), 0700)
-	os.WriteFile(filepath.Join(game, "SPT", "SPT_Data", "Server", "configs", "registry.json"), []byte(`{"SPT_Version":"SPT 4.2.1"}`), 0600)
+	os.MkdirAll(filepath.Join(game, "SPT", "user", "sptRegistry"), 0700)
+	os.WriteFile(filepath.Join(game, "SPT", "user", "sptRegistry", "registry.json"), []byte(`{"SPT_Version":"SPT 4.2.1"}`), 0600)
 	root := filepath.Join(game, ".mod_keeper")
 	l, err := Create(game, root, "Example")
 	if err != nil {
@@ -28,7 +28,7 @@ func TestLibraryStructureAndStoredRelativeRoot(t *testing.T) {
 		t.Fatalf("loaded: %+v", got)
 	}
 	var stored manifest
-	if _, err = toml.DecodeFile(filepath.Join(root, ".mod_keeper", "manifest.toml"), &stored); err != nil {
+	if _, err = toml.DecodeFile(filepath.Join(root, "manifest.toml"), &stored); err != nil {
 		t.Fatal(err)
 	}
 	if stored.GameRoot != ".." {
@@ -45,8 +45,8 @@ func TestWindowsAbsoluteGameRootResolvesOnLinux(t *testing.T) {
 
 func TestSPTMajorMismatchRejected(t *testing.T) {
 	game := t.TempDir()
-	os.MkdirAll(filepath.Join(game, "SPT", "SPT_Data", "Server", "configs"), 0700)
-	registryPath := filepath.Join(game, "SPT", "SPT_Data", "Server", "configs", "registry.json")
+	os.MkdirAll(filepath.Join(game, "SPT", "user", "sptRegistry"), 0700)
+	registryPath := filepath.Join(game, "SPT", "user", "sptRegistry", "registry.json")
 	os.WriteFile(registryPath, []byte(`{"SPT_Version":"4.2.1"}`), 0600)
 	root := filepath.Join(game, ".mod_keeper")
 	l, err := Create(game, root, "test")

@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/registry"
+	"github.com/martes/modkeeper/backend/spt"
 	"github.com/martes/modkeeper/backend/store"
 )
 
@@ -36,7 +38,9 @@ type Library struct {
 func layout(root string) (manifest, cache, string, string, string, error) {
 	var m manifest
 	var c cache
-	base := filepath.Join(root, ".mod_keeper")
+	// repo_root *is* the library root (`game/.mod_keeper`), matching Rust's
+	// LibPathRules::new(repo_root).
+	base := root
 	if _, err := toml.DecodeFile(filepath.Join(base, "manifest.toml"), &m); err != nil {
 		return m, c, "", "", "", err
 	}
@@ -60,32 +64,18 @@ func resolveGameRoot(root, stored string) string {
 }
 
 func versionOf(game string) (string, error) {
-	paths := []string{filepath.Join(game, "SPT", "SPT_Data", "Server", "configs", "registry.json"), filepath.Join(game, "SPT", "SPT_Data", "Server", "configs", "registry.json")}
-	for _, p := range paths {
-		b, e := os.ReadFile(p)
-		if e != nil {
-			continue
-		}
-		s := string(b)
-		for _, key := range []string{"SPT_Version", "sptVersion", "version"} {
-			i := strings.Index(s, key)
-			if i >= 0 {
-				tail := s[i+len(key):]
-				q := strings.IndexAny(tail, "0123456789")
-				if q >= 0 {
-					tail = tail[q:]
-					end := 0
-					for end < len(tail) && (tail[end] >= '0' && tail[end] <= '9' || tail[end] == '.') {
-						end++
-					}
-					if end > 0 {
-						return tail[:end], nil
-					}
-				}
-			}
-		}
+	rules, err := spt.Discover(game)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("Unable to determine SPT version")
+	version, err := spt.ReadVersion(game)
+	if err != nil {
+		return "", err
+	}
+	if err := spt.ValidateVersion(rules, version); err != nil {
+		return "", err
+	}
+	return version, nil
 }
 
 func Create(game, root, name string) (*Library, error) {
@@ -99,7 +89,7 @@ func Create(game, root, name string) (*Library, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(root, ".mod_keeper")
+	base := root
 	for _, d := range []string{"mods", "staging", "backups"} {
 		if err = os.MkdirAll(filepath.Join(base, d), 0700); err != nil {
 			return nil, err
@@ -128,7 +118,7 @@ func Load(root string) (*Library, error) {
 	return &Library{manifest: m, Root: root, GameRoot: game, ModsDir: mods, StagingDir: staging, BackupsDir: backups}, nil
 }
 func (l *Library) Persist() error {
-	base := filepath.Join(l.Root, ".mod_keeper")
+	base := l.Root
 	m := l.manifest
 	rel, err := filepath.Rel(l.GameRoot, l.Root)
 	if err == nil && !strings.HasPrefix(rel, "..") {
@@ -168,6 +158,7 @@ type Service struct {
 	warning       *string
 	sendProgress  func(models.TaskProgressEvent) error
 	sendWorkspace func(models.WorkspaceEvent) error
+	tasks         sync.WaitGroup
 }
 
 func New(path string) (*Service, error) {
