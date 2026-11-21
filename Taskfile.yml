@@ -1,11 +1,7 @@
 version: '3'
 
 includes:
-  # build/windows/Taskfile.yml is untracked (see .gitignore), so a fresh
-  # checkout or worktree has no Windows packaging tasks and must still load.
-  windows:
-    taskfile: ./build/windows/Taskfile.yml
-    optional: true
+  windows: ./build/windows/Taskfile.yml
 
 tasks:
   build:

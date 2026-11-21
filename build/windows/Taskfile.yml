@@ -1,0 +1,104 @@
+version: '3'
+
+vars:
+  APP_NAME: modkeeper
+  BIN_DIR: build/bin
+  NSIS_DIR: build/windows/nsis
+
+tasks:
+  build:
+    summary: Builds production Windows executables for amd64 and arm64
+    cmds:
+      - task: build:amd64
+      - task: build:arm64
+
+  build:amd64:
+    summary: Builds the production Windows amd64 executable
+    cmds:
+      - task: build:arch
+        vars:
+          ARCH: amd64
+
+  build:arm64:
+    summary: Builds the production Windows arm64 executable
+    cmds:
+      - task: build:arch
+        vars:
+          ARCH: arm64
+
+  build:arch:
+    internal: true
+    deps:
+      - task: generate:syso
+        vars:
+          ARCH: '{{.ARCH}}'
+    cmds:
+      - |
+        set -eu
+        syso="wails_windows_{{.ARCH}}.syso"
+        trap 'rm -f "$syso"' EXIT
+        mkdir -p "{{.BIN_DIR}}"
+        go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}.exe" .
+    env:
+      GOOS: windows
+      GOARCH: '{{.ARCH}}'
+      CGO_ENABLED: '0'
+
+  generate:info:
+    summary: Generates Wails and NSIS version metadata from package.json
+    run: once
+    cmds:
+      - bun scripts/generate-windows-info.ts
+
+  generate:syso:
+    summary: Generates the architecture-specific Windows resource object
+    dir: build
+    deps:
+      - task: generate:info
+    cmds:
+      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
+    preconditions:
+      - sh: test -f windows/icon.ico
+        msg: build/windows/icon.ico is missing
+      - sh: test -f windows/wails.exe.manifest
+        msg: build/windows/wails.exe.manifest is missing
+
+  package:
+    summary: Builds both Windows executables and machine/user NSIS installers
+    deps:
+      - task: build
+      - task: generate:webview2bootstrapper
+    cmds:
+      - task: package:amd64
+      - task: package:arm64
+
+  package:amd64:
+    internal: true
+    cmds:
+      - task: package:arch
+        vars:
+          ARCH: amd64
+
+  package:arm64:
+    internal: true
+    cmds:
+      - task: package:arch
+        vars:
+          ARCH: arm64
+
+  package:arch:
+    internal: true
+    dir: '{{.NSIS_DIR}}'
+    cmds:
+      - makensis -D{{.ARG_DEFINE}}="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}.exe" -DWAILS_INSTALL_SCOPE=machine project.nsi
+      - makensis -D{{.ARG_DEFINE}}="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}.exe" -DWAILS_INSTALL_SCOPE=user project.nsi
+    vars:
+      ARG_DEFINE: '{{if eq .ARCH "amd64"}}ARG_WAILS_AMD64_BINARY{{else}}ARG_WAILS_ARM64_BINARY{{end}}'
+
+  generate:webview2bootstrapper:
+    summary: Downloads the Microsoft WebView2 online bootstrapper for NSIS
+    dir: '{{.NSIS_DIR}}'
+    status:
+      - test -s MicrosoftEdgeWebview2Setup.exe
+    cmds:
+      - wails3 generate webview2bootstrapper -dir '{{.ROOT_DIR}}/{{.NSIS_DIR}}'
