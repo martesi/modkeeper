@@ -49,27 +49,8 @@ jobs:
       - name: Check test path selection
         run: bun run paths:check
 
-      # Diagnostic: separates a Bun-on-Windows module-link failure from a
-      # test-runner failure for the generated bindings' import.
-      - name: Probe Wails runtime import
-        run: |
-          bun -e "const m = await import('@wailsio/runtime'); console.log('namespace ok', typeof m.Call)"
-          bun -e "import { Call, CancellablePromise } from '@wailsio/runtime'; console.log('named ok', typeof Call, typeof CancellablePromise)"
-          bun --version
-          ls -l node_modules/@wailsio/runtime/dist/index.js
-          sha256sum node_modules/@wailsio/runtime/dist/index.js
-          grep -c "export {" node_modules/@wailsio/runtime/dist/index.js
-
       - name: Frontend tests
         run: bun run test
-
-      # Diagnostic: isolates the generated bindings' module link from the rest
-      # of the suite.
-      - name: Probe generated bindings import
-        if: always()
-        run: |
-          bun -e "import('./frontend/bindings/github.com/martes/modkeeper/backend/app').then((m) => console.log('bindings ok', Object.keys(m).length)).catch((e) => { console.error('bindings failed', e.message); process.exit(1) })"
-          bun test src/wails/bridge.test.ts 2>&1 | tail -6
 
       - name: Rust tests
         run: bun run test:rust --locked
@@ -112,13 +93,6 @@ jobs:
 
       - name: Vet
         run: nix develop .#default -c go vet ./...
-
-      - name: Probe Wails runtime import
-        run: |
-          nix develop .#default -c bun -e "const m = await import('@wailsio/runtime'); console.log('namespace ok', typeof m.Call)"
-          nix develop .#default -c bun -e "import { Call, CancellablePromise } from '@wailsio/runtime'; console.log('named ok', typeof Call, typeof CancellablePromise)"
-          sha256sum node_modules/@wailsio/runtime/dist/index.js
-          grep -c "export {" node_modules/@wailsio/runtime/dist/index.js
 
       # Bun on Windows fails to link the named `Call` export of the ESM
       # @wailsio/runtime package at test time, while Vite's bundler resolves it.

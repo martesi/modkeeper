@@ -24,7 +24,14 @@ const tauriWindow = {
   setDecorations: async (value: boolean) => calls.push(['decorations', value]),
 }
 
-mock.module('@tauri-apps/api/core', () => ({ isTauri: () => true }))
+// Module mocks are process-global: test files that run later in the same
+// process import the real bindings, so each factory must expose every export
+// those bindings use. An incomplete mock breaks their ESM link with
+// "Export named 'Call' not found".
+mock.module('@tauri-apps/api/core', () => ({
+  isTauri: () => true,
+  invoke: async () => undefined,
+}))
 mock.module('@tauri-apps/plugin-dialog', () => ({
   open: async (options: unknown) => {
     calls.push(['dialog', options])
@@ -42,6 +49,18 @@ mock.module('@tauri-apps/plugin-log', () => ({
   info: async (message: string) => calls.push(['log', message]),
 }))
 mock.module('@wailsio/runtime', () => ({
+  // Everything the generated bindings import at module scope must exist here,
+  // because this mock also covers the files that load them later.
+  Call: {
+    ByName: async () => {
+      throw new Error('Wails Call.ByName is not mocked')
+    },
+    ByID: async () => {
+      throw new Error('Wails Call.ByID is not mocked')
+    },
+  },
+  CancellablePromise: Promise,
+  Create: { Events: {}, Array: (value: unknown) => value },
   Dialogs: {
     OpenFile: async (options: unknown) => {
       calls.push(['wails-dialog', options])
