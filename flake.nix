@@ -34,7 +34,9 @@
             webkitgtk_4_1
             webkitgtk_6_0
           ];
-          goPackages = [ pkgs.go pkgs.wails3 pkgs.xvfb-run ];
+          # wails3 bundles its own go-task, but the Taskfile entry points are
+          # also run directly from the shell, which needs the CLI.
+          goPackages = [ pkgs.go pkgs.go-task pkgs.wails3 pkgs.xvfb-run ];
           basePackages = [ rustToolchain pkgs.bun ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then

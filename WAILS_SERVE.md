@@ -6,6 +6,10 @@ The application uses Wails v3. Run commands from the repository root. Run `bun i
 
 Run `bun run dev:wails` to start Vite with the Wails development flags. Run `nix develop -c wails3 dev -config ./build/config.yml -port 34115` to start the native Wails development app (the `-port` must match Vite's Wails port in `vite.config.ts`). Browser mode is useful for UI work, but it does not test native IPC.
 
+To run the headless Wails server backend with Vite HMR, run `nix develop .#default -c task dev:server`. The Go backend listens on `127.0.0.1:8080`; Vite is served at `http://127.0.0.1:34116/`. Set `MODKEEPER_SERVER_PORT` or `WAILS_VITE_PORT` to override those ports. The bind configuration lives in Go (`serverOptions` in `main_server.go`); `MODKEEPER_SERVER_HOST` and `MODKEEPER_SERVER_PORT` override it for ad-hoc runs. The task builds the Wails frontend first so the embedded asset server can answer its root readiness check. It then builds the Go app with the `server` build tag and starts Vite with `/wails` HTTP and WebSocket traffic proxied to the backend. `WAILS_APP=true` makes the frontend take the Wails code path; the `@wailsio/runtime` package then loads `/wails/custom.js` through the proxy for the event WebSocket. This path uses the real Go-backed Wails IPC over WebSocket; it is not an in-memory frontend mock. Stop the task with Ctrl-C to stop both processes.
+
+`task build:server` builds the frontend and a server-tagged executable at `build/bin/modkeeper-server`. `task run:server` builds and runs that executable. Run these tasks inside the Nix development shell.
+
 ## Native build
 
 Build the native frontend and app inside the Nix development environment with:

@@ -10,6 +10,9 @@ import { lingui } from '@lingui/vite-plugin'
 const host = process.env.TAURI_DEV_HOST
 const wails = process.env.WAILS_DEV === 'true'
 const wailsApp = process.env.WAILS_APP === 'true'
+const serverDevelopment = process.env.MODKEEPER_SERVER_DEV === '1'
+const serverBackend =
+  process.env.MODKEEPER_SERVER_URL || 'http://127.0.0.1:8080'
 
 export default defineConfig(() => ({
   envDir: '.config',
@@ -61,7 +64,7 @@ export default defineConfig(() => ({
       '@mod': path.resolve(import.meta.dirname, 'src/modules'),
     },
   },
-    server: {
+  server: {
     port: wails ? Number(process.env.WAILS_VITE_PORT || 34115) : 1420,
     strictPort: true,
     host: host || false,
@@ -72,6 +75,16 @@ export default defineConfig(() => ({
           port: 1421,
         }
       : undefined,
+    ...(serverDevelopment
+      ? {
+          proxy: {
+            '/wails': {
+              target: serverBackend,
+              ws: true,
+            },
+          },
+        }
+      : {}),
     watch: {
       ignored: ['**/src-tauri/**'],
     },
