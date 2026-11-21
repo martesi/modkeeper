@@ -17,15 +17,19 @@ func TestFake(t *testing.T) {
 	}
 }
 
+// TestDetectCopiedRunningExecutable copies a long-running binary out of place
+// and checks that the inspector still finds it through /proc. The copied
+// program must not replace itself: a shell such as dash execs its final
+// command, so `sh -c "sleep 30"` leaves the copied shell gone.
 func TestDetectCopiedRunningExecutable(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux /proc inspector is only available on Linux")
 	}
-	source, err := exec.LookPath("sh")
+	source, err := exec.LookPath("sleep")
 	if err != nil {
-		t.Skipf("sh executable unavailable: %v", err)
+		t.Skipf("sleep executable unavailable: %v", err)
 	}
-	copyPath := filepath.Join(t.TempDir(), "copied-shell")
+	copyPath := filepath.Join(t.TempDir(), "copied-sleep")
 	b, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +37,7 @@ func TestDetectCopiedRunningExecutable(t *testing.T) {
 	if err := os.WriteFile(copyPath, b, 0755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(copyPath, "-c", "sleep 30")
+	cmd := exec.Command(copyPath, "30")
 	if err := cmd.Start(); err != nil {
 		t.Skipf("environment forbids executing copied binaries: %v", err)
 	}
