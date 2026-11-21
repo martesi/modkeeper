@@ -84,12 +84,12 @@ jobs:
           sudo tar -C /usr/local -xzf /tmp/go.tar.gz
           echo "/usr/local/go/bin" >> "$GITHUB_PATH"
 
-      # The desktop build links GTK3 and WebKitGTK through cgo, so the same
+      # Wails v3 links GTK4 and WebKitGTK 6.0 on Linux through cgo, so the same
       # libraries the flake dev shell provides must come from apt here.
       - name: Install WebKitGTK build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Install frontend dependencies
         run: bun ci --ignore-scripts
