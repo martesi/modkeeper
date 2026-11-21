@@ -68,71 +68,65 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      # The dev shell carries the pinned Go, Bun, wails3 and the GTK4 plus
+      # WebKitGTK 6.0 headers the cgo build needs, so CI uses the same
+      # toolchain the repository pins instead of the runner's packages.
+      - name: Install Nix
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32
         with:
-          bun-version: 1.4.4
-
-      # The runner's Go is older than go.mod requires. Install the version the
-      # module declares so CI and the dev shell agree on the language.
-      - name: Install Go
-        run: |
-          set -euo pipefail
-          version="$(awk '/^go /{print $2}' go.mod)"
-          curl -fsSL "https://go.dev/dl/go${version}.linux-amd64.tar.gz" -o /tmp/go.tar.gz
-          sudo rm -rf /usr/local/go
-          sudo tar -C /usr/local -xzf /tmp/go.tar.gz
-          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
-
-      # Wails v3 links GTK4 and WebKitGTK 6.0 on Linux through cgo, so the same
-      # libraries the flake dev shell provides must come from apt here.
-      - name: Install WebKitGTK build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Install frontend dependencies
-        run: bun ci --ignore-scripts
+        run: nix develop .#default -c bun ci --ignore-scripts
 
       # go:embed needs a real dist directory; CI builds it instead of relying on
       # a committed placeholder.
       - name: Build embedded frontend
-        run: bun run build:wails
+        run: nix develop .#default -c bun run build:wails
 
       - name: Check Go formatting
-        run: test -z "$(gofmt -l $(git ls-files '*.go') | tee /dev/stderr)"
+        run: |
+          nix develop .#default -c bash -c '
+            test -z "$(gofmt -l $(git ls-files "*.go"))"
+          '
 
       - name: Vet
-        run: go vet ./...
+        run: nix develop .#default -c go vet ./...
 
       - name: Go tests
-        run: go test ./...
+        run: nix develop .#default -c go test ./...
 
       # Server mode is a Wails build tag, so the headless binary is a second
       # build of the same source, not a runtime flag.
       - name: Build desktop and server artifacts
         run: |
-          mkdir -p build/ci
-          go build -trimpath -o build/ci/modkeeper .
-          go build -trimpath -tags server -o build/ci/modkeeper-server .
+          nix develop .#default -c bash -c '
+            set -euo pipefail
+            mkdir -p build/ci
+            go build -trimpath -o build/ci/modkeeper .
+            go build -trimpath -tags server -o build/ci/modkeeper-server .
+          '
 
       - name: Smoke-test server mode
         run: |
-          set -euo pipefail
-          MODKEEPER_SERVER_PORT=18080 ./build/ci/modkeeper-server > /tmp/server.log 2>&1 &
-          pid=$!
-          ready=0
-          for _ in $(seq 1 100); do
-            if curl -fsS http://127.0.0.1:18080/ > /dev/null 2>&1; then ready=1; break; fi
-            sleep 0.1
-          done
-          kill "$pid" 2>/dev/null || true
-          cat /tmp/server.log
-          test "$ready" = 1
-          grep -q "Server mode enabled" /tmp/server.log
+          nix develop .#default -c bash -c '
+            set -euo pipefail
+            MODKEEPER_SERVER_PORT=18080 ./build/ci/modkeeper-server > /tmp/server.log 2>&1 &
+            pid=$!
+            ready=0
+            for _ in $(seq 1 100); do
+              if curl -fsS http://127.0.0.1:18080/ > /dev/null 2>&1; then ready=1; break; fi
+              sleep 0.1
+            done
+            kill "$pid" 2>/dev/null || true
+            cat /tmp/server.log
+            test "$ready" = 1
+            grep -q "Server mode enabled" /tmp/server.log
+          '
 
       - name: Check Wails bindings are pruned
-        run: bun run bindings:wails:check
+        run: nix develop .#default -c bun run bindings:wails:check
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
