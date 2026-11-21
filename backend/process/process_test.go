@@ -1,10 +1,12 @@
 package process
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,7 +58,9 @@ func TestDetectCopiedRunningExecutable(t *testing.T) {
 	}
 	running, err := inspector.IsRunning([]string{copyPath})
 	if err != nil || !running {
-		t.Fatalf("running copied executable not detected: %v, %v", running, err)
+		exe, exeErr := os.Readlink(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
+		comm, commErr := os.ReadFile(fmt.Sprintf("/proc/%d/comm", cmd.Process.Pid))
+		t.Fatalf("running copied executable not detected: %v, %v (child exe %q %v, comm %q %v, copy %q)", running, err, exe, exeErr, strings.TrimSpace(string(comm)), commErr, copyPath)
 	}
 	if err := cmd.Process.Kill(); err != nil {
 		t.Fatal(err)
