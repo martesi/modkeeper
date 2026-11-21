@@ -45,3 +45,39 @@ test('task center opens and displays progress and its log', async ({
   await expect(active.locator('details')).toHaveAttribute('open', '')
   await expect(active).toContainText('Synthetic progress fixture log entry')
 })
+
+test('running install task exposes a cancel action', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(async () => {
+    await window.__MK_TASK_PROGRESS_E2E__?.registerTask(
+      'install-task',
+      'mock-library',
+    )
+    await window.__MK_TASK_PROGRESS_E2E__?.emit({
+      taskId: 'install-task',
+      libraryId: 'mock-library',
+      operation: 'install',
+      sequence: 0,
+      kind: 'progress',
+      stage: 'install_archives',
+      percent: 0,
+      log: null,
+    })
+    window.__MK_WAILS_MOCK__!.commands!.cancelTask = (taskId, libraryId) => {
+      const target = window as Window & { __MK_CANCELLED_TASK__?: unknown[] }
+      target.__MK_CANCELLED_TASK__ = [taskId, libraryId]
+    }
+  })
+  await page.getByRole('button', { name: /^Tasks/ }).click()
+  const active = page.getByLabel('Active tasks')
+  await active.getByRole('button', { name: 'Cancel import' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __MK_CANCELLED_TASK__?: unknown[] })
+            .__MK_CANCELLED_TASK__,
+      ),
+    )
+    .toEqual(['install-task', 'mock-library'])
+})

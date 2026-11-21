@@ -18,6 +18,7 @@ import {
 import { libraryText } from '../../i18n/library-text'
 import { commonText } from '../../i18n/common-text'
 import type { LibraryId, ToolSummary } from '../../data/redesign-types'
+import { usePathInputDialog } from '../../shared/hooks/use-path-input-dialog'
 
 /**
  * Configure Tool dialog (reference Modkeeper.dc.html): tool identity (name + optional icon URL),
@@ -37,26 +38,32 @@ export function ConfigureToolDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { requestPathInput, pathInputDialog } = usePathInputDialog()
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(48rem,calc(100vw-2rem))] rounded-lg bg-popover sm:max-w-none">
-        <DialogHeader>
-          <DialogTitle className="font-heading text-xl font-semibold">
-            {libraryText.configureToolTitle()}
-          </DialogTitle>
-          <DialogDescription>
-            {libraryText.configureToolDescription()}
-          </DialogDescription>
-        </DialogHeader>
-        {/* Keyed so the draft resets whenever a different tool (or "new") opens. */}
-        <ConfigureToolForm
-          key={tool?.id ?? 'new'}
-          libraryId={libraryId}
-          tool={tool}
-          onClose={() => onOpenChange(false)}
-        />
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[min(48rem,calc(100vw-2rem))] rounded-lg bg-popover sm:max-w-none">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl font-semibold">
+              {libraryText.configureToolTitle()}
+            </DialogTitle>
+            <DialogDescription>
+              {libraryText.configureToolDescription()}
+            </DialogDescription>
+          </DialogHeader>
+          {/* Keyed so the draft resets whenever a different tool (or "new") opens. */}
+          <ConfigureToolForm
+            key={tool?.id ?? 'new'}
+            libraryId={libraryId}
+            tool={tool}
+            onClose={() => onOpenChange(false)}
+            requestPathInput={requestPathInput}
+          />
+        </DialogContent>
+      </Dialog>
+      {pathInputDialog}
+    </>
   )
 }
 
@@ -64,10 +71,12 @@ function ConfigureToolForm({
   libraryId,
   tool,
   onClose,
+  requestPathInput,
 }: {
   libraryId: LibraryId
   tool: ToolSummary | null
   onClose: () => void
+  requestPathInput: ReturnType<typeof usePathInputDialog>['requestPathInput']
 }) {
   const [draft, setDraft] = useState<ToolDraft>({
     name: tool?.name ?? '',
@@ -84,7 +93,18 @@ function ConfigureToolForm({
   }
 
   async function handleBrowse() {
-    const path = await pickExecutable()
+    const path =
+      platformKind() === 'browser'
+        ? ((
+            await requestPathInput({
+              mode: 'single',
+              title: libraryText.executablePathDialogTitle(),
+              description: libraryText.executablePathDialogDescription(),
+              label: libraryText.executablePathLabel(),
+              placeholder: libraryText.executablePathPlaceholder(),
+            })
+          )?.[0] ?? null)
+        : await pickExecutable()
     if (path) setDraft((prev) => ({ ...prev, executablePath: path }))
   }
 
@@ -198,11 +218,6 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 async function pickExecutable(): Promise<string | null> {
-  if (platformKind() === 'browser') {
-    // MOCK-FALLBACK: no native file picker in the browser prototype.
-    console.info('[redesign] no native file picker, simulating a selection')
-    return 'C:/SPT/Aki.Server.exe'
-  }
   const [selection] = await pickFiles({
     title: libraryText.selectExecutable(),
     filters: [

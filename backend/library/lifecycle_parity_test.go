@@ -1,11 +1,13 @@
 package library
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/martes/modkeeper/backend/config"
 	"github.com/martes/modkeeper/backend/models"
@@ -202,6 +204,204 @@ func TestTestActivateLibraryById(t *testing.T) {
 	}
 	if s.active == nil || s.active.manifest.ID != l.manifest.ID {
 		t.Fatal("not activated")
+	}
+}
+
+func TestActivateInactiveLibraryRecoversInterruptedInstall(t *testing.T) {
+	s, env := newParityService(t)
+	active := createParityLibrary(t, s, env)
+	inactiveRoot := filepath.Join(env.Root, "inactive-recovery-library")
+	inactive, err := Create(env.GameRoot, inactiveRoot, "Inactive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: inactive.manifest.ID, LibraryRoot: inactive.Root})
+	if err := s.Store.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	oldMod := models.Mod{ID: "RecoverOnActivate", Name: "old", Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: oldMod.ID, Name: "new", Source: models.ModSourceLocal}
+	destination := filepath.Join(inactive.ModsDir, oldMod.ID)
+	snapshot := installSnapshotPath(inactive, oldMod.ID)
+	for path, content := range map[string]string{
+		filepath.Join(destination, "version"): "new",
+		filepath.Join(snapshot, "version"):    "old",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inactive.manifest.Mods[oldMod.ID] = newMod
+	if err := inactive.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeInstallTransaction(installMarkerPath(inactive, oldMod.ID), installTransaction{
+		Version: 1, ID: oldMod.ID, Phase: installPrepared, HadOld: true, OldMod: &oldMod, NewMod: newMod,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.ActivateLibrary(active.manifest.ID); err != nil {
+		t.Fatal(err)
+	}
+	if s.active.manifest.ID != active.manifest.ID {
+		t.Fatal("expected library A to remain active before switching")
+	}
+	if err := s.ActivateLibrary(inactive.manifest.ID); err != nil {
+		t.Fatal(err)
+	}
+	if s.active.manifest.ID != inactive.manifest.ID {
+		t.Fatal("inactive library was not activated")
+	}
+	if body, err := os.ReadFile(filepath.Join(destination, "version")); err != nil || string(body) != "old" {
+		t.Fatalf("activation recovery content=%q err=%v", body, err)
+	}
+	if s.active.manifest.Mods[oldMod.ID].Name != "old" {
+		t.Fatalf("activation recovery manifest=%+v", s.active.manifest.Mods[oldMod.ID])
+	}
+	for _, artifact := range []string{
+		installPreparedMarkerPath(inactive, oldMod.ID),
+		installCommittedMarkerPath(inactive, oldMod.ID),
+		snapshot,
+	} {
+		if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+			t.Fatalf("activation left recovery artifact %q: %v", artifact, err)
+		}
+	}
+}
+
+func TestActivationIsBusyWhileInstallHasPreparedMarker(t *testing.T) {
+	s, env := newParityService(t)
+	active := createParityLibrary(t, s, env)
+	inactiveRoot := filepath.Join(env.Root, "activation-busy-library")
+	inactive, err := Create(env.GameRoot, inactiveRoot, "Inactive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: inactive.manifest.ID, LibraryRoot: inactive.Root})
+	if err := s.Store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	oldMod := models.Mod{ID: "KeepExisting", Name: "keep", Source: models.ModSourceLocal}
+	inactive.manifest.Mods[oldMod.ID] = oldMod
+	if err := inactive.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(inactive.ModsDir, oldMod.ID), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inactive.ModsDir, oldMod.ID, "owned.txt"), []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	markerReady, resume := make(chan struct{}), make(chan struct{})
+	var resumeOnce sync.Once
+	resumeInstall := func() { resumeOnce.Do(func() { close(resume) }) }
+	defer resumeInstall()
+	s.installTransactionHook = func(boundary string) {
+		if boundary == "after-prepared-marker" {
+			close(markerReady)
+			<-resume
+		}
+	}
+	terminal := make(chan models.TaskProgressEvent, 32)
+	s.SetEventSenders(func(event models.TaskProgressEvent) error {
+		if event.Kind == models.TaskProgressCompleted {
+			terminal <- event
+		}
+		return nil
+	}, nil)
+	archive := writeInstallTestArchive(t, "ConcurrentInstall", "installed")
+	if _, err := s.InstallModArchives(models.InstallModArchivesInput{
+		TaskID: "activation-in-flight", LibraryID: active.manifest.ID, ArchivePaths: []string{archive},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-markerReady:
+	case <-time.After(10 * time.Second):
+		t.Fatal("install did not pause after writing its prepared marker")
+	}
+
+	for _, id := range []string{active.manifest.ID, inactive.manifest.ID} {
+		err := s.ActivateLibrary(id)
+		var wireError *models.Error
+		if !errors.As(err, &wireError) || wireError.Code != models.LibraryBusy {
+			t.Fatalf("activation of %s error=%v; want explicit LibraryBusy", id, err)
+		}
+	}
+	if s.active.manifest.ID != active.manifest.ID {
+		t.Fatal("busy activation changed the active library")
+	}
+	var pendingID string
+	for id := range active.manifest.Mods {
+		pendingID = id
+	}
+	if pendingID == "" {
+		entries, err := os.ReadDir(active.BackupsDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".install.prepared") {
+				pendingID = strings.TrimSuffix(entry.Name(), ".install.prepared")
+			}
+		}
+	}
+	if pendingID == "" {
+		t.Fatal("prepared marker was removed by activation")
+	}
+	if _, err := os.Stat(installPreparedMarkerPath(active, pendingID)); err != nil {
+		t.Fatalf("paused install marker disappeared: %v", err)
+	}
+	if body, err := os.ReadFile(filepath.Join(inactive.ModsDir, oldMod.ID, "owned.txt")); err != nil || string(body) != "keep" {
+		t.Fatalf("inactive library file changed: %q %v", body, err)
+	}
+	reloadedInactive, err := Load(inactive.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloadedInactive.manifest.Mods[oldMod.ID].Name != "keep" {
+		t.Fatalf("inactive manifest changed: %+v", reloadedInactive.manifest.Mods)
+	}
+
+	resumeInstall()
+	s.Wait()
+	select {
+	case event := <-terminal:
+		if event.Stage != models.TaskStageTaskCompleted || event.Log == nil || event.Log.Code != "task_completed" {
+			t.Fatalf("install terminal event=%+v; want successful completion", event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("install task did not report completion")
+	}
+	s.installTransactionHook = nil
+	if len(active.manifest.Mods) != 1 {
+		t.Fatalf("active library manifest mods=%+v", active.manifest.Mods)
+	}
+	var installedID string
+	for id := range active.manifest.Mods {
+		installedID = id
+	}
+	assertFileContents(t, filepath.Join(active.ModsDir, installedID, "SPT", "user", "mods", "ConcurrentInstall", "version"), "installed")
+	assertInstallArtifactsRemoved(t, active, installedID)
+	if _, err := os.Stat(archive); err != nil {
+		t.Fatalf("source archive was removed: %s: %v", archive, err)
+	}
+	reloadedInactive, err = Load(inactive.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloadedInactive.manifest.Mods[oldMod.ID] != oldMod {
+		t.Fatalf("inactive library metadata changed after install: %+v", reloadedInactive.manifest.Mods)
+	}
+	assertFileContents(t, filepath.Join(reloadedInactive.ModsDir, oldMod.ID, "owned.txt"), "keep")
+	if s.active.manifest.ID != active.manifest.ID {
+		t.Fatal("active library changed after install completion")
 	}
 }
 func TestTestActivateUnsupportedSptVersionFailsOnlyOnActivate(t *testing.T) {

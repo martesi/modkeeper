@@ -35,6 +35,7 @@ import type {
 import { openGameRoot, openLibraryRoot } from '../../shared/utils/app-opener'
 import { libraryText } from '../../i18n/library-text'
 import { DeleteLibraryConfirmDialog } from './delete-library-confirm-dialog'
+import { usePathInputDialog } from '../../shared/hooks/use-path-input-dialog'
 
 /**
  * Manage Library dialog: profile tabs across
@@ -53,6 +54,7 @@ export function ManageLibraryDialog({
   const libraries = useAtomValue(libraryListAtom)
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const { requestPathInput, pathInputDialog } = usePathInputDialog()
 
   // Selection is resolved against the CURRENT list every render, so a deleted entry or a fresh
   // workspace can never leave a dangling tab selected.
@@ -65,7 +67,18 @@ export function ManageLibraryDialog({
     null
 
   async function handleAddLibrary() {
-    const gameRoot = await pickGameRootFolder()
+    const gameRoot =
+      platformKind() === 'browser'
+        ? ((
+            await requestPathInput({
+              mode: 'single',
+              title: libraryText.gameRootPathTitle(),
+              description: libraryText.gameRootPathDescription(),
+              label: libraryText.gameRootPathLabel(),
+              placeholder: libraryText.gameRootPathPlaceholder(),
+            })
+          )?.[0] ?? null)
+        : await pickDirectory({ title: libraryText.selectGameRoot() })
     if (!gameRoot) return
     const outcome = await createLibrary({ gameRoot })
     if (outcome.status !== 'success') return
@@ -75,66 +88,69 @@ export function ManageLibraryDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mk-scrollbar flex max-h-[88vh] w-[min(67.5rem,calc(100vw-2rem))] flex-col gap-0 overflow-y-auto rounded-lg bg-popover p-0 sm:max-w-none">
-        <DialogHeader className="px-6 pb-1 pt-6">
-          <DialogTitle className="font-heading text-xl font-semibold">
-            {libraryText.manageDialogTitle()}
-          </DialogTitle>
-          <DialogDescription className="text-[13px]">
-            {libraryText.manageDialogDescription()}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="mk-scrollbar flex max-h-[88vh] w-[min(67.5rem,calc(100vw-2rem))] flex-col gap-0 overflow-y-auto rounded-lg bg-popover p-0 sm:max-w-none">
+          <DialogHeader className="px-6 pb-1 pt-6">
+            <DialogTitle className="font-heading text-xl font-semibold">
+              {libraryText.manageDialogTitle()}
+            </DialogTitle>
+            <DialogDescription className="text-[13px]">
+              {libraryText.manageDialogDescription()}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div
-          className="flex flex-wrap items-center gap-2 px-6 pb-1 pt-4"
-          role="tablist"
-        >
-          {libraries.map((entry) => {
-            const key = entryKey(entry)
-            const isSelected = selected !== null && key === entryKey(selected)
-            return (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                onClick={() => setSelectedKey(key)}
-                className={cn(
-                  'h-8 max-w-56 truncate rounded-md px-3 text-[13px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  isSelected
-                    ? 'bg-primary font-semibold text-primary-foreground'
-                    : 'border border-border bg-secondary font-semibold text-foreground hover:bg-accent',
-                )}
-              >
-                {isLibrarySummary(entry)
-                  ? entry.name
-                  : libraryText.unreadableLibrary()}
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            onClick={() => void handleAddLibrary()}
-            aria-label={libraryText.addLibraryTab()}
-            title={libraryText.addLibraryTab()}
-            className={cn(
-              'inline-flex size-8 items-center justify-center rounded-md',
-              'border border-dashed border-border text-muted-foreground outline-none transition-colors',
-              'hover:border-primary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50',
-            )}
+          <div
+            className="flex flex-wrap items-center gap-2 px-6 pb-1 pt-4"
+            role="tablist"
           >
-            <Plus className="size-4.5" aria-hidden />
-          </button>
-        </div>
+            {libraries.map((entry) => {
+              const key = entryKey(entry)
+              const isSelected = selected !== null && key === entryKey(selected)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => setSelectedKey(key)}
+                  className={cn(
+                    'h-8 max-w-56 truncate rounded-md px-3 text-[13px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                    isSelected
+                      ? 'bg-primary font-semibold text-primary-foreground'
+                      : 'border border-border bg-secondary font-semibold text-foreground hover:bg-accent',
+                  )}
+                >
+                  {isLibrarySummary(entry)
+                    ? entry.name
+                    : libraryText.unreadableLibrary()}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => void handleAddLibrary()}
+              aria-label={libraryText.addLibraryTab()}
+              title={libraryText.addLibraryTab()}
+              className={cn(
+                'inline-flex size-8 items-center justify-center rounded-md',
+                'border border-dashed border-border text-muted-foreground outline-none transition-colors',
+                'hover:border-primary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              )}
+            >
+              <Plus className="size-4.5" aria-hidden />
+            </button>
+          </div>
 
-        {selected === null ? null : isLibrarySummary(selected) ? (
-          <LibraryDetails key={selected.id} library={selected} />
-        ) : (
-          <StubDetails stub={selected} />
-        )}
-      </DialogContent>
-    </Dialog>
+          {selected === null ? null : isLibrarySummary(selected) ? (
+            <LibraryDetails key={selected.id} library={selected} />
+          ) : (
+            <StubDetails stub={selected} />
+          )}
+        </DialogContent>
+      </Dialog>
+      {pathInputDialog}
+    </>
   )
 }
 
@@ -378,14 +394,4 @@ function StubDetails({ stub }: { stub: LibraryStub }) {
 
 function entryKey(entry: LibraryEntry): string {
   return isLibrarySummary(entry) ? entry.id : entry.path
-}
-
-async function pickGameRootFolder(): Promise<string | null> {
-  if (platformKind() === 'browser') {
-    // MOCK-FALLBACK: no native folder picker in the browser prototype — simulate a selection so
-    // the create flow stays exercisable end-to-end.
-    console.info('[redesign] no native folder picker, simulating a selection')
-    return `C:/SPT-instances/instance-${Date.now() % 1000}`
-  }
-  return pickDirectory({ title: libraryText.selectGameRoot() })
 }

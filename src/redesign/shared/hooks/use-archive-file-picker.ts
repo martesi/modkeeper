@@ -12,14 +12,9 @@ import {
 import { installModArchives } from '../../data/library-repository'
 import { SUPPORTED_ARCHIVE_EXTENSIONS } from '../utils/file-filters'
 import { libraryText } from '../../i18n/library-text'
+import { usePathInputDialog } from './use-path-input-dialog'
 
 async function pickModArchives(): Promise<string[]> {
-  if (platformKind() === 'browser') {
-    // MOCK-FALLBACK: no native picker in the browser prototype — pretend one archive was chosen so
-    // the install flow stays exercisable end-to-end.
-    console.info('[redesign] no native file picker, simulating a selection')
-    return ['C:/downloads/Example Mod.zip']
-  }
   return pickFiles({
     multiple: true,
     filters: [
@@ -33,19 +28,25 @@ async function pickModArchives(): Promise<string[]> {
 }
 
 /** Returns a callback that picks archives and tracks them under its initiating control. */
-export function useArchiveFilePicker(
-  source: PendingTaskSource = 'other',
-): () => Promise<void> {
+export function useArchiveFilePicker(source: PendingTaskSource = 'other') {
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
+  const { requestPathInput, pathInputDialog } = usePathInputDialog()
 
-  return useCallback(async () => {
+  const pickAndInstall = useCallback(async () => {
     if (!activeLibraryId) return
-    const paths = await pickModArchives()
-    if (paths.length === 0) return
-    await installModArchives({
-      libraryId: activeLibraryId,
-      paths,
-      source,
-    })
-  }, [activeLibraryId, source])
+    const paths =
+      platformKind() === 'browser'
+        ? await requestPathInput({
+            mode: 'archives',
+            title: libraryText.archivePathsTitle(),
+            description: libraryText.archivePathsDescription(),
+            label: libraryText.archivePathsLabel(),
+            placeholder: libraryText.archivePathsPlaceholder(),
+          })
+        : await pickModArchives()
+    if (!paths?.length) return
+    await installModArchives({ libraryId: activeLibraryId, paths, source })
+  }, [activeLibraryId, requestPathInput, source])
+
+  return { pickAndInstall, pathInputDialog }
 }

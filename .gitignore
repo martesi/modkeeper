@@ -44,5 +44,9 @@ playwright-report/
 # APM dependencies
 apm_modules/
 
-# Native build artifacts (build/config.yml is tracked; binaries are not)
-build/bin/
+# Native build outputs (build/config.yml is tracked; everything else under build/ is not)
+/build/
+!/build/config.yml
+
+# Wails arch-specific build outputs that may escape the build/ ignore
+/wails_windows_*.syso

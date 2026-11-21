@@ -5,6 +5,37 @@ import { getWailsMock } from './mock'
 
 type Commands = typeof tauriCommands
 
+interface WireError {
+  code: string
+  data: unknown
+}
+
+function isWireError(value: unknown): value is WireError {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'code' in value &&
+    typeof value.code === 'string' &&
+    'data' in value
+  )
+}
+
+function decodeWailsDomainError(error: unknown): Promise<WireError | null> {
+  if (!error || typeof error !== 'object' || !('cause' in error))
+    return Promise.resolve(null)
+
+  const cause = error.cause
+  if (isWireError(cause)) return Promise.resolve(cause)
+  if (typeof cause !== 'string') return Promise.resolve(null)
+
+  return Promise.resolve()
+    .then((): unknown => JSON.parse(cause))
+    .then(
+      (value) => (isWireError(value) ? value : null),
+      () => null,
+    )
+}
+
 export function dispatchCommand(
   mock: (() => unknown) | undefined,
   wails: (() => unknown) | undefined,
@@ -16,7 +47,21 @@ export function dispatchCommand(
         ? value
         : { status: 'ok', data: value },
     )
-  if (wails) return Promise.resolve(wails())
+  if (wails)
+    return Promise.resolve()
+      .then(wails)
+      .then(
+        (value) =>
+          value && typeof value === 'object' && 'status' in value
+            ? value
+            : { status: 'ok', data: value },
+        (error: unknown) =>
+          decodeWailsDomainError(error).then((domainError) =>
+            domainError
+              ? { status: 'error', error: domainError }
+              : Promise.reject(error),
+          ),
+      )
   return Promise.resolve(tauri())
 }
 
@@ -44,3 +89,14 @@ export const commands: Commands = Object.fromEntries(
     },
   ]),
 ) as Commands
+
+export function cancelInstallTask(
+  taskId: string,
+  libraryId: string,
+): Promise<void> {
+  const mock = getWailsMock()?.commands?.cancelTask
+  if (mock)
+    return Promise.resolve(mock(taskId, libraryId)).then(() => undefined)
+  if (isWails()) return Promise.resolve(wailsApp.CancelTask(taskId, libraryId))
+  return Promise.reject(new Error('CancelTask is only available in Wails'))
+}

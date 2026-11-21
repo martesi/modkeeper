@@ -10,6 +10,7 @@ import {
   listenWorkspaceEvent,
   loadLibraryWorkspace,
 } from '../data/library-repository'
+import { beginWorkspaceRecoverySequence } from '../data/workspace-recovery'
 import { applyAccent, applyLanguage } from '../data/settings-repository'
 import {
   deriveArchiveOutcome,
@@ -41,14 +42,19 @@ export function RedesignInitializers() {
   useWindowDropZone()
 
   useEffect(() => {
+    const recoverySequence = beginWorkspaceRecoverySequence()
     const unsubscribe = listenWorkspaceEvent(handleWorkspaceEvent)
     void initWorkspaceEventBus().then((ready) => {
-      if (!ready) toast.warning(libraryText.taskUpdatesUnavailable())
+      if (recoverySequence.isCurrent() && !ready)
+        toast.warning(libraryText.taskUpdatesUnavailable())
     })
-    void loadLibraryWorkspace().then((workspace) => {
+    void recoverySequence.run(loadLibraryWorkspace, (workspace) => {
       if (workspace?.configWarning) toast.warning(workspace.configWarning)
     })
-    return unsubscribe
+    return () => {
+      recoverySequence.dispose()
+      unsubscribe()
+    }
   }, [])
 
   return <SettingsApplier />

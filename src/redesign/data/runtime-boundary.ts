@@ -11,24 +11,44 @@ export async function runPlainCommand<T, E>(input: {
   onDomainError: (error: E) => void
   onTransportError: (error: unknown) => void
   current: () => T
+  isCurrent?: () => boolean
+  onStale?: () => void
+  onApplied?: () => void
+  applyMock?: boolean
 }): Promise<T> {
-  if (!input.isTauri) return input.mock()
+  const isCurrent = input.isCurrent ?? (() => true)
+  const stale = () => {
+    input.onStale?.()
+    return input.current()
+  }
+  if (!isCurrent()) return stale()
+  if (!input.isTauri) {
+    const result = await input.mock()
+    if (!input.applyMock) return result
+    if (!isCurrent()) return stale()
+    input.apply(result)
+    input.onApplied?.()
+    return result
+  }
 
   let result: CommandResult<T, E>
   try {
     // Tauri IPC wraps domain errors in Result but rejects on transport failure.
     result = await input.invoke()
   } catch (error) {
+    if (!isCurrent()) return stale()
     input.onTransportError(error)
     return input.current()
   }
 
+  if (!isCurrent()) return stale()
   if (result.status === 'error') {
     input.onDomainError(result.error)
     return input.current()
   }
 
   input.apply(result.data)
+  input.onApplied?.()
   return result.data
 }
 

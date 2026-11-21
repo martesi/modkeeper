@@ -69,6 +69,12 @@ func (a *App) InstallModArchives(input models.InstallModArchivesInput) (*models.
 	}
 	return a.Library.InstallModArchives(input, nil)
 }
+func (a *App) CancelTask(taskID, libraryID string) error {
+	if a.Library == nil {
+		return a.initFailure()
+	}
+	return a.Library.CancelTask(taskID, libraryID)
+}
 func (a *App) RebuildLibraryCache(input models.RebuildLibraryCacheInput) (*models.OperationAccepted, error) {
 	if a.Library == nil {
 		return nil, a.initFailure()

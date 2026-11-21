@@ -12,13 +12,89 @@ test('create library and activate it', async ({ page }) => {
   await bootMockApp(page)
   await page.getByRole('button', { name: /manage libraries/i }).click()
   await page.getByRole('button', { name: /add library/i }).click()
+  const pathDialog = page.getByRole('dialog').filter({
+    has: page.getByLabel('Game root path'),
+  })
+  await pathDialog
+    .getByLabel('Game root path')
+    .fill('C:\\SPT-instances\\typed-instance')
+  await pathDialog.getByRole('button', { name: 'Use path' }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('tab', { name: /instance-/i })).toBeVisible()
+  await expect(
+    dialog.getByRole('tab', { name: 'typed-instance' }),
+  ).toBeVisible()
   await dialog.getByRole('tab', { name: 'Mock SPT' }).click()
   await dialog.getByRole('button', { name: /^activate$/i }).click()
   await expect(
     dialog.getByRole('button', { name: /activated/i }),
   ).toBeDisabled()
+})
+
+test('library activation shows the retry message for a busy backend', async ({
+  page,
+}) => {
+  await bootMockApp(page)
+  await page.evaluate(() => {
+    const commands = window.__MK_WAILS_MOCK__?.commands
+    if (!commands) throw new Error('Mock commands missing')
+    commands.activateLibrary = async () => ({
+      status: 'error',
+      error: { code: 'LibraryBusy', data: null },
+    })
+  })
+  await page.getByRole('button', { name: /manage libraries/i }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: /add library/i }).click()
+  const pathDialog = page.getByRole('dialog').filter({
+    has: page.getByLabel('Game root path'),
+  })
+  await pathDialog.getByLabel('Game root path').fill('C:\\busy-target')
+  await pathDialog.getByRole('button', { name: 'Use path' }).click()
+  await dialog.getByRole('tab', { name: 'Mock SPT' }).click()
+  await dialog.getByRole('button', { name: /^activate$/i }).click()
+
+  await expect(
+    page.getByText('A task is in progress. Retry when it finishes.'),
+  ).toBeVisible()
+})
+
+test('archive import accepts typed paths and starts the install flow', async ({
+  page,
+}) => {
+  await bootMockApp(page)
+  await page.evaluate(() => {
+    const mock = window.__MK_WAILS_MOCK__
+    const original = mock?.commands?.installModArchives
+    if (!mock?.commands || !original)
+      throw new Error('Mock install command missing')
+    mock.commands.installModArchives = (...args) => {
+      const target = window as Window & { __MK_INSTALL_INPUT__?: unknown }
+      target.__MK_INSTALL_INPUT__ = args[0]
+      return original(...args)
+    }
+  })
+  await page.getByRole('button', { name: /add mod/i }).click()
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByLabel('Archive paths'),
+  })
+  await dialog
+    .getByLabel('Archive paths')
+    .fill('C:\\downloads\\typed-mod.zip\nC:\\downloads\\second-mod.7z')
+  await dialog.getByRole('button', { name: 'Use path' }).click()
+
+  await expect(page.getByText('typed-mod')).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __MK_INSTALL_INPUT__?: { archivePaths: string[] }
+            }
+          ).__MK_INSTALL_INPUT__?.archivePaths,
+      ),
+    )
+    .toEqual(['C:\\downloads\\typed-mod.zip', 'C:\\downloads\\second-mod.7z'])
 })
 
 test('settings theme and accent persist after reload', async ({ page }) => {

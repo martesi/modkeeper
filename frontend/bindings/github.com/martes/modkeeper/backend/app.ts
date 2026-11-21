@@ -13,7 +13,6 @@
 import {
   Call as $Call,
   CancellablePromise as $CancellablePromise,
-  Create as $Create,
 } from '@wailsio/runtime'
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -32,9 +31,7 @@ import * as models$0 from './models/models.js'
 export function ActivateLibrary(
   input: models$0.ActivateLibraryInput,
 ): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(2762475955, input).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(2762475955, input)
 }
 
 export function ApplyWindowEffect(
@@ -46,25 +43,26 @@ export function ApplyWindowEffect(
 export function BulkUpdateMods(
   input: models$0.BulkUpdateModsInput,
 ): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(1890286689, input).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(1890286689, input)
+}
+
+export function CancelTask(
+  taskID: string,
+  libraryID: string,
+): $CancellablePromise<void> {
+  return $Call.ByID(1422284914, taskID, libraryID)
 }
 
 export function CreateLibrary(
   input: models$0.CreateLibraryInput,
 ): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(4100041344, input).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(4100041344, input)
 }
 
 export function DeleteLibrary(
   input: models$0.DeleteLibraryInput,
 ): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(3687250549, input).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(3687250549, input)
 }
 
 export function ForgeAddonVersions(
@@ -101,47 +99,35 @@ export function ForgeSearch(
 }
 
 export function GetLibraryWorkspace(): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(188297059).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(188297059)
 }
 
 export function GetSettings(): $CancellablePromise<config$0.AppSettings> {
-  return $Call.ByID(2994169970).then(($result: any) => {
-    return $$createType2($result)
-  })
+  return $Call.ByID(2994169970)
 }
 
 export function InstallModArchives(
   input: models$0.InstallModArchivesInput,
 ): $CancellablePromise<models$0.OperationAccepted | null> {
-  return $Call.ByID(1475805379, input).then(($result: any) => {
-    return $$createType4($result)
-  })
+  return $Call.ByID(1475805379, input)
 }
 
 export function RebuildLibraryCache(
   input: models$0.RebuildLibraryCacheInput,
 ): $CancellablePromise<models$0.OperationAccepted | null> {
-  return $Call.ByID(538776327, input).then(($result: any) => {
-    return $$createType4($result)
-  })
+  return $Call.ByID(538776327, input)
 }
 
 export function RenameLibrary(
   input: models$0.RenameLibraryInput,
 ): $CancellablePromise<models$0.LibraryWorkspace | null> {
-  return $Call.ByID(866127486, input).then(($result: any) => {
-    return $$createType1($result)
-  })
+  return $Call.ByID(866127486, input)
 }
 
 export function SaveSettings(
   settings: config$0.AppSettings,
 ): $CancellablePromise<config$0.AppSettings> {
-  return $Call.ByID(2442549933, settings).then(($result: any) => {
-    return $$createType2($result)
-  })
+  return $Call.ByID(2442549933, settings)
 }
 
 /**
@@ -155,14 +141,5 @@ export function Start(): $CancellablePromise<void> {
 export function SyncMods(
   input: models$0.SyncModsInput,
 ): $CancellablePromise<models$0.OperationAccepted | null> {
-  return $Call.ByID(3644304143, input).then(($result: any) => {
-    return $$createType4($result)
-  })
+  return $Call.ByID(3644304143, input)
 }
-
-// Private type creation functions
-const $$createType0 = models$0.LibraryWorkspace.createFrom
-const $$createType1 = $Create.Nullable($$createType0)
-const $$createType2 = config$0.AppSettings.createFrom
-const $$createType3 = models$0.OperationAccepted.createFrom
-const $$createType4 = $Create.Nullable($$createType3)

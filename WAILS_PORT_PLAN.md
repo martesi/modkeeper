@@ -5,7 +5,7 @@ Source of truth for behavior: `src-tauri/` (Rust, 13.2k LOC). Do not delete `src
 
 ## Definition of done
 
-1. All 21 frontend-visible commands are implemented in Go behind the Wails `App` service with
+1. All 22 frontend-visible commands are implemented in Go behind the Wails `App` service with
    Rust-equivalent semantics and the same `{code, data}` error codes.
 2. `PARITY_MATRIX.md` records exact current test coverage. Several Rust tests remain unported.
 3. `nix develop -c go test -p 2 ./backend/...`, `bun run check`, and
@@ -27,6 +27,7 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `bulkUpdateMods` | `BulkUpdateMods(models.BulkUpdateModsInput) (*models.LibraryWorkspace, error)` | WD |
 | `syncMods` | `SyncMods(models.SyncModsInput) (*models.OperationAccepted, error)` | WD |
 | `installModArchives` | `InstallModArchives(models.InstallModArchivesInput) (*models.OperationAccepted, error)` | WD |
+| `cancelTask` | `CancelTask(taskID, libraryID string) error` | WD |
 | `rebuildLibraryCache` | `RebuildLibraryCache(models.RebuildLibraryCacheInput) (*models.OperationAccepted, error)` | WD |
 | `getSettings` | `GetSettings() (config.AppSettings, error)` | WC |
 | `saveSettings` | `SaveSettings(config.AppSettings) (config.AppSettings, error)` | WC |
@@ -52,7 +53,8 @@ Rust serde is the authority. Go structs use camelCase JSON tags. Wire enum const
   `UnsupportedSPTVersion`, `ParseError`, `IOError`, `GameOrServerRunning`, `ProcessRunning`,
   `UnableToDetermineModId`, `ModNotFound`, `FileOrDirectoryNotFound`, `FileCollision`, `Unexpected`,
   `UnhandledCompression`, `AsyncRuntimeError`, `NoActiveLibrary`, `InvalidLibrary`,
-  `ModIdConflict`, `ConfigSaveFailed`, `TaskIdInUse`. Tuple variants put their fields in `Data`
+  `ModIdConflict`, `ConfigSaveFailed`, `TaskIdInUse`, `TaskNotFound`,
+  `TaskAlreadyCancelled`, `TaskNotCancellable`. Tuple variants put their fields in `Data`
   (string for single, array for `FileCollision`, 2-array for `InvalidLibrary`/`ModIdConflict`).
 - `LibraryWorkspace` keys: `activeLibraryId?`, `libraries`, `modsByLibraryId`, `toolsByLibraryId`,
   `settings`, `configWarning?`.
@@ -181,6 +183,72 @@ Extend the existing client; add a `Service` with the five command methods above 
 `MatchInstalledMod` if needed by library ops (WD may call `forge.Service.DownloadVersion` directly).
 
 ## Rust test parity groups
+
+## E2E definition and install-flow coverage
+
+E2E is tiered by the boundary under test:
+
+| Tier | Meaning |
+|---|---|
+| T1 — in-process integration | Calls the bound service against a real temporary filesystem. |
+| T2 — process/filesystem E2E | Kills a real helper process, starts a fresh service, and checks disk recovery. |
+| T3 — native UI E2E | Drives the packaged Wails application through its real window and native bindings. |
+
+| Required flow | Current evidence | Gap |
+|---|---|---|
+| 1. Create a library from a game root | `TestAppSurfaceEndToEnd` (T1); `scripts/native-t3.sh` calls the bound command (T3) | The T3 flow does not exercise the product onboarding screen or native folder picker. |
+| 2. Import one archive | `TestAppSurfaceEndToEnd` (T1); `scripts/native-t3.sh` calls the bound command and checks disk (T3) | The T3 flow does not exercise the product import screen. |
+| 3. Import many archives (25 minimum) | `TestInstallManyArchives` (T1); `scripts/native-t3.sh` imports 25 through real IPC (T3) | The T3 flow does not exercise the product import screen. |
+| 4. Cancel mid-import and verify cleanup/reuse | `TestCancelInstallBatchCommitsCompletedArchives` (T1); native T3 cancels and checks the resulting filesystem | Native cancellation is event-driven, so the number of committed members can vary; the flow asserts a partial batch. |
+| 5. Kill during import and restart | `TestInstallProcessT2Journey` (T2, real helper SIGKILL) | Native T3 does not kill/restart during import. |
+
+Cancellation commits completed archives. Each completed archive persists the
+manifest before removing its transaction marker. Cancellation discards the staged
+archive in progress. The manifest therefore matches the complete mod directories.
+It emits `task_cancelled` and the existing `mod_install_completed` workspace event.
+An unknown or finished ID returns `TaskNotFound`. A repeated cancel returns
+`TaskAlreadyCancelled`.
+Sync remains cancellable through the deployment context. Cache rebuild tasks return
+`TaskNotCancellable`; they do not accept a cancellation request that would be ignored.
+
+Install recovery uses versioned `backups/<id>.install.prepared` and
+`backups/<id>.install.committed` markers. A prepared marker records the previous and
+new manifest entries. An upgrade also retains `backups/<id>.snapshot`. Recovery treats
+a committed marker as authoritative if both marker files exist. This makes the
+prepared-to-committed transition gap-free: the committed marker is written, synced,
+and its directory synced before the prepared marker is removed.
+
+Installs copy into a temporary directory under `mods/`, then rename into place. The
+manifest is persisted before the committed marker is written. A prepared-only marker
+restores the snapshot, or removes the new directory for a first install, and restores
+the previous manifest entry. A committed marker keeps the new tree and manifest
+entry. Recovery removes markers before the snapshot. A snapshot without a marker is
+discarded while the destination and manifest remain authoritative. A committed marker
+with a missing or non-directory destination fails closed and preserves the manifest,
+markers, and snapshot for repair. Startup and library activation run recovery before
+exposing a library. The first workspace waits up to nine seconds for startup recovery.
+A service-level read/write lock excludes activation, creation, rename, and deletion
+while a task is admitted. Task admission is nonblocking while another mutation holds
+the write slot. Both paths return the typed `LibraryBusy` error, which the UI translates
+to a retry message.
+
+The recovery guarantee is for process termination, including SIGKILL, not power loss
+or storage-device failure. The marker file and marker directory are synced, but copied
+mod files and manifest temporary files are not all fsynced. Do not treat this protocol
+as a power-loss durability guarantee.
+
+Legacy or invalid markers fail closed. Recovery does not change their marker, snapshot,
+mod tree, or manifest, and the workspace surfaces an actionable warning. Preserve the
+whole library and its backups. Restore a consistent mod tree and manifest from a
+trusted backup, verify the library, and only then move the invalid marker outside the
+library backups directory. Do not delete or edit a marker to force recovery.
+
+T2 is `TestInstallProcessT2Journey`. The test binary helper creates a library from a
+game root, imports one archive, imports 25 archives, cancels another 25-archive batch,
+then blocks at a deterministic temporary-directory-created progress point. The parent
+sends SIGKILL. A fresh service loads the same library, asserts recovery and workspace/
+manifest/disk consistency, and performs a follow-up install. Synchronization uses
+progress and stdout, not sleeps.
 
 | Rust suite | Go package | Owner |
 |---|---|---|

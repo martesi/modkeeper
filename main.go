@@ -22,6 +22,16 @@ func main() {
 	smoke := os.Getenv("MODKEEPER_NATIVE_SMOKE") == "1"
 	smokeService := newNativeSmokeService()
 	appBackend := backend.NewApp()
+	if smoke && os.Getenv("MODKEEPER_NATIVE_SMOKE_CONFIG") != "" {
+		appBackend = backend.NewAppAt(os.Getenv("MODKEEPER_NATIVE_SMOKE_CONFIG"))
+	}
+	if smoke && appBackend.Library != nil {
+		appBackend.Library.SetInstallTaskHook(func(taskID string) {
+			if taskID == "native-busy" {
+				smokeService.HoldInstall()
+			}
+		})
+	}
 	services := []application.Service{
 		application.NewService(appBackend),
 	}

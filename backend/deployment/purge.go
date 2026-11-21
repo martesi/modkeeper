@@ -155,6 +155,18 @@ func ValidatePurge(l Layout) error {
 }
 
 func Purge(l Layout, _ []models.Mod) error {
+	return purge(l, nil)
+}
+
+// PurgeWithProgress exposes the quarantine boundary to process-level recovery
+// tests. The callback runs only after an owned link has been moved and while
+// the package-wide purge lock is held. A non-nil callback must not call Purge
+// or ValidatePurge; production callers should use Purge, which passes nil.
+func PurgeWithProgress(l Layout, _ []models.Mod, afterQuarantine func()) error {
+	return purge(l, afterQuarantine)
+}
+
+func purge(l Layout, afterQuarantine func()) error {
 	purgeLock.Lock()
 	defer purgeLock.Unlock()
 	links, e := planPurge(l)
@@ -261,6 +273,9 @@ func Purge(l Layout, _ []models.Mod) error {
 			return rollback(e)
 		}
 		moved++
+		if afterQuarantine != nil {
+			afterQuarantine()
+		}
 	}
 	if e = syncLinks(links); e != nil {
 		return rollback(e)

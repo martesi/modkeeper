@@ -184,9 +184,11 @@ export const libraryBusyAtom = atom((get) => {
 // --- Single-writer helpers used by the repository layer (outside React) ---
 
 const store = getDefaultStore()
+let workspaceVersion = 0
 
 export function setWorkspace(workspace: LibraryWorkspace): void {
   store.set(libraryWorkspaceAtom, workspace)
+  workspaceVersion++
   // Prune the selection to mods that still exist in the active library, so a delete or a library
   // switch can never leave phantom ids behind for the next bulk action.
   const selected = store.get(selectedModIdsAtom)
@@ -196,6 +198,10 @@ export function setWorkspace(workspace: LibraryWorkspace): void {
   const alive = new Set(mods.map((mod) => mod.id))
   const pruned = new Set([...selected].filter((id) => alive.has(id)))
   if (pruned.size !== selected.size) store.set(selectedModIdsAtom, pruned)
+}
+
+export function getWorkspaceVersion(): number {
+  return workspaceVersion
 }
 
 export function setWorkspaceStatus(status: WorkspaceStatus): void {

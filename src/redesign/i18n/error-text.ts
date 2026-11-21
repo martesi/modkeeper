@@ -79,6 +79,11 @@ export const errorText = {
       id: 'error.taskIdInUse',
       message: 'This operation is already in progress',
     }),
+  libraryBusy: () =>
+    t({
+      id: 'error.libraryBusy',
+      message: 'A task is in progress. Retry when it finishes.',
+    }),
   unknown: () =>
     t({ id: 'error.unknown', message: 'An unexpected error occurred' }),
 }

@@ -1,7 +1,9 @@
 import { useAtomValue, useSetAtom } from 'jotai'
+import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { retryFailedArchives } from '../data/library-repository'
+import { cancelInstallTask } from '../../wails/bridge'
 import {
   archiveBasename,
   canRetryFailedArchives,
@@ -128,6 +130,7 @@ function ActiveTasks({
   tasks: PendingTask[]
   libraries: LibraryEntry[]
 }) {
+  const [cancelling, setCancelling] = useState<string[]>([])
   if (tasks.length === 0) return null
 
   return (
@@ -169,6 +172,25 @@ function ActiveTasks({
                   <span className="shrink-0 tabular-nums text-muted-foreground">
                     {libraryText.taskProgressPercentage(task.percent)}
                   </span>
+                )}
+                {task.operation === 'install' && (
+                  <button
+                    aria-label={libraryText.cancelTask()}
+                    className="h-7 rounded border border-border px-2 text-xs hover:bg-muted disabled:opacity-50"
+                    disabled={cancelling.includes(task.taskId)}
+                    onClick={() => {
+                      setCancelling((current) => [...current, task.taskId])
+                      void cancelInstallTask(task.taskId, task.libraryId).catch(
+                        () =>
+                          setCancelling((current) =>
+                            current.filter((id) => id !== task.taskId),
+                          ),
+                      )
+                    }}
+                    type="button"
+                  >
+                    {libraryText.cancelTask()}
+                  </button>
                 )}
               </div>
               {task.logTail.length > 0 && (

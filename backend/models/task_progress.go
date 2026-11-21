@@ -24,6 +24,7 @@ const (
 	TaskStageTaskCompleted         TaskProgressStage = "task_completed"
 	TaskStageTaskPartialFailure    TaskProgressStage = "task_partial_failure"
 	TaskStageTaskFailed            TaskProgressStage = "task_failed"
+	TaskStageTaskCancelled         TaskProgressStage = "task_cancelled"
 	TaskStageSyncPlan              TaskProgressStage = "sync_plan"
 	TaskStageSyncPreflight         TaskProgressStage = "sync_preflight"
 	TaskStageSyncCleanup           TaskProgressStage = "sync_cleanup"

@@ -157,6 +157,7 @@ export function createInMemoryWailsMock(): WailsMock {
     syncMods: (input: any) => complete('sync_completed', input),
     installModArchives: (input: any) =>
       complete('mod_install_completed', input),
+    cancelTask: () => undefined,
     rebuildLibraryCache: (input: any) =>
       complete('cache_rebuild_completed', input),
     getSettings: () => ({ ...workspace.settings }),

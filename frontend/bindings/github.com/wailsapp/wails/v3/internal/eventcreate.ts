@@ -6,19 +6,4 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from '@wailsio/runtime'
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as models$0 from '../../../../martes/modkeeper/backend/models/models.js'
-
-function configure() {
-  Object.freeze(
-    Object.assign($Create.Events, {
-      task_progress: $$createType0,
-    }),
-  )
-}
-
-// Private type creation functions
-const $$createType0 = models$0.TaskProgressEvent.createFrom
-
-configure()
+Object.freeze($Create.Events)

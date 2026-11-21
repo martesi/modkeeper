@@ -84,8 +84,11 @@
             packages = [
               winCrossToolchain
               mingw.stdenv.cc
+              pkgs.go
+              pkgs.wails3
               pkgs.bun
               pkgs.nsis
+              pkgs.python3
             ];
             shellHook = cargoCacheHook + ''
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=${mingw.stdenv.cc.targetPrefix}cc

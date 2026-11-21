@@ -57,6 +57,11 @@ func (e *Emitter) Completed(outcome Outcome) {
 	e.emit(models.TaskProgressCompleted, stage, nil, &models.TaskProgressLog{Level: level, Code: code, Message: message})
 }
 
+func (e *Emitter) Cancelled() {
+	e.emit(models.TaskProgressCompleted, models.TaskStageTaskCancelled, nil,
+		&models.TaskProgressLog{Level: models.TaskLevelInfo, Code: "task_cancelled", Message: "Operation cancelled"})
+}
+
 func (e *Emitter) emit(kind models.TaskProgressKind, stage models.TaskProgressStage, percent *float64, log *models.TaskProgressLog) {
 	e.mu.Lock()
 	e.sequence++

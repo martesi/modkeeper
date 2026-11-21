@@ -68,6 +68,10 @@ export function translateError(error: SError): string {
     return t(msg`An internal error occurred. Please try again.`)
   }
 
+  if ('LibraryBusy' in error) {
+    return t(msg`A task is in progress. Retry when it finishes.`)
+  }
+
   if ('InvalidLibrary' in error) {
     // InvalidLibrary is serialized as a tuple [path, reason]
     const [path, reason] = error.InvalidLibrary as [string, string]

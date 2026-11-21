@@ -76,7 +76,7 @@ function LibraryHeaderToolbar({
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
   const libraryBusy = useAtomValue(libraryBusyAtom)
   const pendingTasks = useAtomValue(pendingTasksAtom)
-  const pickAndInstall = useArchiveFilePicker('add-button')
+  const { pickAndInstall, pathInputDialog } = useArchiveFilePicker('add-button')
   const [pickerPending, setPickerPending] = useState(false)
   const syncPending = pendingTasks.some(
     (task) =>
@@ -142,6 +142,7 @@ function LibraryHeaderToolbar({
           />
         </>
       )}
+      {pathInputDialog}
     </div>
   )
 }

@@ -42,4 +42,8 @@ const (
 	ModIdConflict           = "ModIdConflict"
 	ConfigSaveFailed        = "ConfigSaveFailed"
 	TaskIdInUse             = "TaskIdInUse"
+	TaskNotFound            = "TaskNotFound"
+	TaskAlreadyCancelled    = "TaskAlreadyCancelled"
+	TaskNotCancellable      = "TaskNotCancellable"
+	LibraryBusy             = "LibraryBusy"
 )

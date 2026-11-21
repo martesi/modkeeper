@@ -47,6 +47,8 @@ export function resolveCommandError(error: SError): string {
       return errorText.configSaveFailed(error.data)
     case 'TaskIdInUse':
       return errorText.taskIdInUse()
+    case 'LibraryBusy':
+      return errorText.libraryBusy()
     default:
       return errorText.unknown()
   }

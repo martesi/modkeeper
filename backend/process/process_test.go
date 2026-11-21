@@ -21,11 +21,11 @@ func TestDetectCopiedRunningExecutable(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux /proc inspector is only available on Linux")
 	}
-	source, err := exec.LookPath("sleep")
+	source, err := exec.LookPath("sh")
 	if err != nil {
-		t.Skipf("sleep executable unavailable: %v", err)
+		t.Skipf("sh executable unavailable: %v", err)
 	}
-	copyPath := filepath.Join(t.TempDir(), "copied-sleep")
+	copyPath := filepath.Join(t.TempDir(), "copied-shell")
 	b, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestDetectCopiedRunningExecutable(t *testing.T) {
 	if err := os.WriteFile(copyPath, b, 0755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(copyPath, "30")
+	cmd := exec.Command(copyPath, "-c", "sleep 30")
 	if err := cmd.Start(); err != nil {
 		t.Skipf("environment forbids executing copied binaries: %v", err)
 	}

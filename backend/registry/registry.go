@@ -22,7 +22,7 @@ type Service struct{ Store *store.AppConfigStore }
 // Library remains an interface here so registry does not depend on library.
 type TaskRegistry struct {
 	mu          sync.Mutex
-	tasks       map[string]struct{}
+	tasks       map[string]taskEntry
 	activeID    string
 	active      bool
 	startup     chan struct{}
@@ -30,8 +30,15 @@ type TaskRegistry struct {
 	startupOnce sync.Once
 }
 
+type taskEntry struct {
+	libraryID   string
+	cancel      context.CancelFunc
+	cancelled   bool
+	cancellable bool
+}
+
 func NewTaskRegistry() *TaskRegistry {
-	return &TaskRegistry{tasks: make(map[string]struct{}), startup: make(chan struct{})}
+	return &TaskRegistry{tasks: make(map[string]taskEntry), startup: make(chan struct{})}
 }
 
 func (r *TaskRegistry) SetActive(id string, active bool) {
@@ -53,12 +60,54 @@ func (r *TaskRegistry) AssertActiveLibrary(id string) error {
 }
 
 func (r *TaskRegistry) AcquireTaskID(id string) error {
+	return r.AcquireTask(id, "", func() {})
+}
+
+func (r *TaskRegistry) AcquireTask(id, libraryID string, cancel context.CancelFunc) error {
+	return r.AcquireTaskWithCancellable(id, libraryID, cancel, true)
+}
+
+func (r *TaskRegistry) AcquireTaskWithCancellable(id, libraryID string, cancel context.CancelFunc, cancellable bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if id == "" {
+		return models.Fail(models.ParseError, "taskId is required")
+	}
 	if _, exists := r.tasks[id]; exists {
 		return models.Fail(models.TaskIdInUse, id)
 	}
-	r.tasks[id] = struct{}{}
+	r.tasks[id] = taskEntry{libraryID: libraryID, cancel: cancel, cancellable: cancellable}
+	return nil
+}
+
+func (r *TaskRegistry) CancelTask(id, libraryID string) error {
+	if id == "" {
+		return models.Fail(models.ParseError, "taskId is required")
+	}
+	r.mu.Lock()
+	entry, exists := r.tasks[id]
+	if !exists {
+		r.mu.Unlock()
+		return models.Fail(models.TaskNotFound, id)
+	}
+	if entry.libraryID != libraryID {
+		r.mu.Unlock()
+		return models.Fail(models.InvalidLibrary, libraryID)
+	}
+	if !entry.cancellable {
+		r.mu.Unlock()
+		return models.Fail(models.TaskNotCancellable, id)
+	}
+	if entry.cancelled {
+		r.mu.Unlock()
+		return models.Fail(models.TaskAlreadyCancelled, id)
+	}
+	entry.cancelled = true
+	r.tasks[id] = entry
+	r.mu.Unlock()
+	// Call the cancel func captured under the lock. Re-reading the entry after
+	// unlocking could cancel a different task that reused the same id.
+	entry.cancel()
 	return nil
 }
 

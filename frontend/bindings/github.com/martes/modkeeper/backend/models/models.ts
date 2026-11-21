@@ -3,34 +3,10 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from '@wailsio/runtime'
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as config$0 from '../config/models.js'
 
-export class ActivateLibraryInput {
-  'libraryId': string
-
-  /** Creates a new ActivateLibraryInput instance. */
-  constructor($$source: Partial<ActivateLibraryInput> = {}) {
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new ActivateLibraryInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): ActivateLibraryInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new ActivateLibraryInput(
-      $$parsedSource as Partial<ActivateLibraryInput>,
-    )
-  }
+export interface ActivateLibraryInput {
+  libraryId: string
 }
 
 export enum BulkAction {
@@ -44,96 +20,21 @@ export enum BulkAction {
   BulkActionDelete = 'delete',
 }
 
-export class BulkUpdateModsInput {
-  'libraryId': string
-  'modIds': string[]
-  'action': BulkAction
-
-  /** Creates a new BulkUpdateModsInput instance. */
-  constructor($$source: Partial<BulkUpdateModsInput> = {}) {
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('modIds' in $$source)) {
-      this['modIds'] = []
-    }
-    if (!('action' in $$source)) {
-      this['action'] = BulkAction.$zero
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new BulkUpdateModsInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): BulkUpdateModsInput {
-    const $$createField1_0 = $$createType0
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    if ('modIds' in $$parsedSource) {
-      $$parsedSource['modIds'] = $$createField1_0($$parsedSource['modIds'])
-    }
-    return new BulkUpdateModsInput(
-      $$parsedSource as Partial<BulkUpdateModsInput>,
-    )
-  }
+export interface BulkUpdateModsInput {
+  libraryId: string
+  modIds: string[] | null
+  action: BulkAction
 }
 
-export class CreateLibraryInput {
-  'gameRoot': string
-  'libraryRoot': string | null
-  'name': string | null
-
-  /** Creates a new CreateLibraryInput instance. */
-  constructor($$source: Partial<CreateLibraryInput> = {}) {
-    if (!('gameRoot' in $$source)) {
-      this['gameRoot'] = ''
-    }
-    if (!('libraryRoot' in $$source)) {
-      this['libraryRoot'] = null
-    }
-    if (!('name' in $$source)) {
-      this['name'] = null
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new CreateLibraryInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): CreateLibraryInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new CreateLibraryInput($$parsedSource as Partial<CreateLibraryInput>)
-  }
+export interface CreateLibraryInput {
+  gameRoot: string
+  libraryRoot: string | null
+  name: string | null
 }
 
-export class DeleteLibraryInput {
-  'libraryId': string
-  'deleteFiles': boolean
-
-  /** Creates a new DeleteLibraryInput instance. */
-  constructor($$source: Partial<DeleteLibraryInput> = {}) {
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('deleteFiles' in $$source)) {
-      this['deleteFiles'] = false
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new DeleteLibraryInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): DeleteLibraryInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new DeleteLibraryInput($$parsedSource as Partial<DeleteLibraryInput>)
-  }
+export interface DeleteLibraryInput {
+  libraryId: string
+  deleteFiles: boolean
 }
 
 export enum ForgeKind {
@@ -146,102 +47,21 @@ export enum ForgeKind {
   ForgeKindAddon = 'addon',
 }
 
-export class InstallModArchivesInput {
-  'taskId': string
-  'libraryId': string
-  'archivePaths': string[]
-
-  /** Creates a new InstallModArchivesInput instance. */
-  constructor($$source: Partial<InstallModArchivesInput> = {}) {
-    if (!('taskId' in $$source)) {
-      this['taskId'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('archivePaths' in $$source)) {
-      this['archivePaths'] = []
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new InstallModArchivesInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): InstallModArchivesInput {
-    const $$createField2_0 = $$createType0
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    if ('archivePaths' in $$parsedSource) {
-      $$parsedSource['archivePaths'] = $$createField2_0(
-        $$parsedSource['archivePaths'],
-      )
-    }
-    return new InstallModArchivesInput(
-      $$parsedSource as Partial<InstallModArchivesInput>,
-    )
-  }
+export interface InstallModArchivesInput {
+  taskId: string
+  libraryId: string
+  archivePaths: string[] | null
 }
 
 export type LibraryEntry = any
 
-export class LibraryWorkspace {
-  'activeLibraryId'?: string | null
-  'libraries': LibraryEntry[]
-  'modsByLibraryId': { [_ in string]?: ModSummary[] }
-  'toolsByLibraryId': { [_ in string]?: ToolSummary[] }
-  'settings': config$0.AppSettings
-  'configWarning'?: string | null
-
-  /** Creates a new LibraryWorkspace instance. */
-  constructor($$source: Partial<LibraryWorkspace> = {}) {
-    if (!('libraries' in $$source)) {
-      this['libraries'] = []
-    }
-    if (!('modsByLibraryId' in $$source)) {
-      this['modsByLibraryId'] = {}
-    }
-    if (!('toolsByLibraryId' in $$source)) {
-      this['toolsByLibraryId'] = {}
-    }
-    if (!('settings' in $$source)) {
-      this['settings'] = new config$0.AppSettings()
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new LibraryWorkspace instance from a string or object.
-   */
-  static createFrom($$source: any = {}): LibraryWorkspace {
-    const $$createField1_0 = $$createType1
-    const $$createField2_0 = $$createType4
-    const $$createField3_0 = $$createType7
-    const $$createField4_0 = $$createType8
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    if ('libraries' in $$parsedSource) {
-      $$parsedSource['libraries'] = $$createField1_0(
-        $$parsedSource['libraries'],
-      )
-    }
-    if ('modsByLibraryId' in $$parsedSource) {
-      $$parsedSource['modsByLibraryId'] = $$createField2_0(
-        $$parsedSource['modsByLibraryId'],
-      )
-    }
-    if ('toolsByLibraryId' in $$parsedSource) {
-      $$parsedSource['toolsByLibraryId'] = $$createField3_0(
-        $$parsedSource['toolsByLibraryId'],
-      )
-    }
-    if ('settings' in $$parsedSource) {
-      $$parsedSource['settings'] = $$createField4_0($$parsedSource['settings'])
-    }
-    return new LibraryWorkspace($$parsedSource as Partial<LibraryWorkspace>)
-  }
+export interface LibraryWorkspace {
+  activeLibraryId?: string | null
+  libraries: LibraryEntry[] | null
+  modsByLibraryId: { [_ in string]?: ModSummary[] | null } | null
+  toolsByLibraryId: { [_ in string]?: ToolSummary[] | null } | null
+  settings: config$0.AppSettings
+  configWarning?: string | null
 }
 
 export enum ModSource {
@@ -254,56 +74,23 @@ export enum ModSource {
   ModSourceForge = 'forge',
 }
 
-export class ModSummary {
-  'id': string
-  'libraryId': string
-  'name': string
-  'type': ModType
-  'isEnabled': boolean
-  'sourcePath'?: string | null
-  'installedPath'?: string | null
-  'installedAt'?: string | null
-  'updatedAt': string
-  'version'?: string | null
-  'forgeId'?: number | null
-  'forgeGuid'?: string | null
-  'source'?: ModSource | null
-  'forgeKind'?: ForgeKind | null
-  'forgeVersionId'?: number | null
-  'forgeMetaCachedAt'?: string | null
-
-  /** Creates a new ModSummary instance. */
-  constructor($$source: Partial<ModSummary> = {}) {
-    if (!('id' in $$source)) {
-      this['id'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('name' in $$source)) {
-      this['name'] = ''
-    }
-    if (!('type' in $$source)) {
-      this['type'] = ModType.$zero
-    }
-    if (!('isEnabled' in $$source)) {
-      this['isEnabled'] = false
-    }
-    if (!('updatedAt' in $$source)) {
-      this['updatedAt'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new ModSummary instance from a string or object.
-   */
-  static createFrom($$source: any = {}): ModSummary {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new ModSummary($$parsedSource as Partial<ModSummary>)
-  }
+export interface ModSummary {
+  id: string
+  libraryId: string
+  name: string
+  type: ModType
+  isEnabled: boolean
+  sourcePath?: string | null
+  installedPath?: string | null
+  installedAt?: string | null
+  updatedAt: string
+  version?: string | null
+  forgeId?: number | null
+  forgeGuid?: string | null
+  source?: ModSource | null
+  forgeKind?: ForgeKind | null
+  forgeVersionId?: number | null
+  forgeMetaCachedAt?: string | null
 }
 
 export enum ModType {
@@ -318,106 +105,23 @@ export enum ModType {
   ModTypeUnknown = 'unknown',
 }
 
-export class OperationAccepted {
-  'accepted': boolean
-
-  /** Creates a new OperationAccepted instance. */
-  constructor($$source: Partial<OperationAccepted> = {}) {
-    if (!('accepted' in $$source)) {
-      this['accepted'] = false
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new OperationAccepted instance from a string or object.
-   */
-  static createFrom($$source: any = {}): OperationAccepted {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new OperationAccepted($$parsedSource as Partial<OperationAccepted>)
-  }
+export interface OperationAccepted {
+  accepted: boolean
 }
 
-export class RebuildLibraryCacheInput {
-  'taskId': string
-  'libraryId': string
-
-  /** Creates a new RebuildLibraryCacheInput instance. */
-  constructor($$source: Partial<RebuildLibraryCacheInput> = {}) {
-    if (!('taskId' in $$source)) {
-      this['taskId'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new RebuildLibraryCacheInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): RebuildLibraryCacheInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new RebuildLibraryCacheInput(
-      $$parsedSource as Partial<RebuildLibraryCacheInput>,
-    )
-  }
+export interface RebuildLibraryCacheInput {
+  taskId: string
+  libraryId: string
 }
 
-export class RenameLibraryInput {
-  'libraryId': string
-  'name': string
-
-  /** Creates a new RenameLibraryInput instance. */
-  constructor($$source: Partial<RenameLibraryInput> = {}) {
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('name' in $$source)) {
-      this['name'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new RenameLibraryInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): RenameLibraryInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new RenameLibraryInput($$parsedSource as Partial<RenameLibraryInput>)
-  }
+export interface RenameLibraryInput {
+  libraryId: string
+  name: string
 }
 
-export class SyncModsInput {
-  'taskId': string
-  'libraryId': string
-
-  /** Creates a new SyncModsInput instance. */
-  constructor($$source: Partial<SyncModsInput> = {}) {
-    if (!('taskId' in $$source)) {
-      this['taskId'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new SyncModsInput instance from a string or object.
-   */
-  static createFrom($$source: any = {}): SyncModsInput {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new SyncModsInput($$parsedSource as Partial<SyncModsInput>)
-  }
+export interface SyncModsInput {
+  taskId: string
+  libraryId: string
 }
 
 export enum TaskOperation {
@@ -435,58 +139,15 @@ export enum TaskOperation {
 /**
  * Pointer fields intentionally serialize as explicit null when absent.
  */
-export class TaskProgressEvent {
-  'taskId': string
-  'libraryId': string
-  'operation': TaskOperation
-  'sequence': number
-  'kind': TaskProgressKind
-  'stage': TaskProgressStage
-  'percent': number | null
-  'log': TaskProgressLog | null
-
-  /** Creates a new TaskProgressEvent instance. */
-  constructor($$source: Partial<TaskProgressEvent> = {}) {
-    if (!('taskId' in $$source)) {
-      this['taskId'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('operation' in $$source)) {
-      this['operation'] = TaskOperation.$zero
-    }
-    if (!('sequence' in $$source)) {
-      this['sequence'] = 0
-    }
-    if (!('kind' in $$source)) {
-      this['kind'] = TaskProgressKind.$zero
-    }
-    if (!('stage' in $$source)) {
-      this['stage'] = TaskProgressStage.$zero
-    }
-    if (!('percent' in $$source)) {
-      this['percent'] = null
-    }
-    if (!('log' in $$source)) {
-      this['log'] = null
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new TaskProgressEvent instance from a string or object.
-   */
-  static createFrom($$source: any = {}): TaskProgressEvent {
-    const $$createField7_0 = $$createType10
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    if ('log' in $$parsedSource) {
-      $$parsedSource['log'] = $$createField7_0($$parsedSource['log'])
-    }
-    return new TaskProgressEvent($$parsedSource as Partial<TaskProgressEvent>)
-  }
+export interface TaskProgressEvent {
+  taskId: string
+  libraryId: string
+  operation: TaskOperation
+  sequence: number
+  kind: TaskProgressKind
+  stage: TaskProgressStage
+  percent: number | null
+  log: TaskProgressLog | null
 }
 
 export enum TaskProgressKind {
@@ -511,34 +172,10 @@ export enum TaskProgressLevel {
   TaskLevelError = 'error',
 }
 
-export class TaskProgressLog {
-  'level': TaskProgressLevel
-  'code': string
-  'message': string
-
-  /** Creates a new TaskProgressLog instance. */
-  constructor($$source: Partial<TaskProgressLog> = {}) {
-    if (!('level' in $$source)) {
-      this['level'] = TaskProgressLevel.$zero
-    }
-    if (!('code' in $$source)) {
-      this['code'] = ''
-    }
-    if (!('message' in $$source)) {
-      this['message'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new TaskProgressLog instance from a string or object.
-   */
-  static createFrom($$source: any = {}): TaskProgressLog {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new TaskProgressLog($$parsedSource as Partial<TaskProgressLog>)
-  }
+export interface TaskProgressLog {
+  level: TaskProgressLevel
+  code: string
+  message: string
 }
 
 export enum TaskProgressStage {
@@ -551,6 +188,7 @@ export enum TaskProgressStage {
   TaskStageTaskCompleted = 'task_completed',
   TaskStageTaskPartialFailure = 'task_partial_failure',
   TaskStageTaskFailed = 'task_failed',
+  TaskStageTaskCancelled = 'task_cancelled',
   TaskStageSyncPlan = 'sync_plan',
   TaskStageSyncPreflight = 'sync_preflight',
   TaskStageSyncCleanup = 'sync_cleanup',
@@ -571,55 +209,12 @@ export enum TaskProgressStage {
   TaskStageCachePersist = 'cache_persist',
 }
 
-export class ToolSummary {
-  'id': string
-  'libraryId': string
-  'name': string
-  'executablePath': string
-  'iconDataUrl'?: string | null
-  'launchArgs'?: string | null
-  'updatedAt': string
-
-  /** Creates a new ToolSummary instance. */
-  constructor($$source: Partial<ToolSummary> = {}) {
-    if (!('id' in $$source)) {
-      this['id'] = ''
-    }
-    if (!('libraryId' in $$source)) {
-      this['libraryId'] = ''
-    }
-    if (!('name' in $$source)) {
-      this['name'] = ''
-    }
-    if (!('executablePath' in $$source)) {
-      this['executablePath'] = ''
-    }
-    if (!('updatedAt' in $$source)) {
-      this['updatedAt'] = ''
-    }
-
-    Object.assign(this, $$source)
-  }
-
-  /**
-   * Creates a new ToolSummary instance from a string or object.
-   */
-  static createFrom($$source: any = {}): ToolSummary {
-    let $$parsedSource =
-      typeof $$source === 'string' ? JSON.parse($$source) : $$source
-    return new ToolSummary($$parsedSource as Partial<ToolSummary>)
-  }
+export interface ToolSummary {
+  id: string
+  libraryId: string
+  name: string
+  executablePath: string
+  iconDataUrl?: string | null
+  launchArgs?: string | null
+  updatedAt: string
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Array($Create.Any)
-const $$createType1 = $Create.Array($Create.Any)
-const $$createType2 = ModSummary.createFrom
-const $$createType3 = $Create.Array($$createType2)
-const $$createType4 = $Create.Map($Create.Any, $$createType3)
-const $$createType5 = ToolSummary.createFrom
-const $$createType6 = $Create.Array($$createType5)
-const $$createType7 = $Create.Map($Create.Any, $$createType6)
-const $$createType8 = config$0.AppSettings.createFrom
-const $$createType9 = TaskProgressLog.createFrom
-const $$createType10 = $Create.Nullable($$createType9)

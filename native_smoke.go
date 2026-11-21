@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -14,6 +16,10 @@ type NativeSmokeService struct {
 	settings chan string
 	ready    chan struct{}
 	event    chan string
+	ui       chan string
+	flow     chan string
+	release  chan struct{}
+	once     sync.Once
 }
 
 func newNativeSmokeService() *NativeSmokeService {
@@ -21,11 +27,17 @@ func newNativeSmokeService() *NativeSmokeService {
 		settings: make(chan string, 1),
 		ready:    make(chan struct{}, 1),
 		event:    make(chan string, 1),
+		ui:       make(chan string, 1),
+		flow:     make(chan string, 1),
+		release:  make(chan struct{}),
 	}
 }
 
 func nativeSmokeURL(enabled bool) string {
 	if enabled {
+		if url := os.Getenv("MODKEEPER_NATIVE_SMOKE_URL"); url != "" {
+			return url
+		}
 		return "/?native-smoke=1"
 	}
 	return "/"
@@ -46,11 +58,35 @@ func (s *NativeSmokeService) ReportEvent(value string) error {
 	return nil
 }
 
+func (s *NativeSmokeService) ReportUIInteraction(value string) error {
+	log.Printf("native-smoke: PASS xdotool-driven native UI interaction (%s)", value)
+	s.ui <- value
+	return nil
+}
+
+func (s *NativeSmokeService) ReportNativeFlow(value string) error {
+	log.Printf("native-smoke: %s", value)
+	s.flow <- value
+	return nil
+}
+
+func (s *NativeSmokeService) HoldInstall() {
+	<-s.release
+}
+
+func (s *NativeSmokeService) ReleaseInstall() {
+	s.once.Do(func() { close(s.release) })
+}
+
 func runNativeSmoke(app *application.App, window *application.WebviewWindow, service *NativeSmokeService) {
-	const deadline = 15 * time.Second
+	log.Printf("native-smoke: automation flow=%q ui=%q", os.Getenv("MODKEEPER_NATIVE_SMOKE_FLOW"), os.Getenv("MODKEEPER_NATIVE_SMOKE_UI"))
 	wait := func(link string, receive func() error) bool {
 		done := make(chan error, 1)
 		go func() { done <- receive() }()
+		deadline := 15 * time.Second
+		if link == "real backend archive flows" {
+			deadline = 3 * time.Minute
+		}
 		timer := time.NewTimer(deadline)
 		defer timer.Stop()
 		select {
@@ -117,6 +153,9 @@ func runNativeSmoke(app *application.App, window *application.WebviewWindow, ser
 		}
 		return nil
 	}) {
+		return
+	}
+	if os.Getenv("MODKEEPER_NATIVE_SMOKE_FLOW") == "1" || os.Getenv("MODKEEPER_NATIVE_SMOKE_UI") == "1" {
 		return
 	}
 	app.Quit()

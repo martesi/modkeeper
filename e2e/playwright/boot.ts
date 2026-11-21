@@ -19,6 +19,9 @@ export async function bootMockApp(page: Page): Promise<void> {
     page.getByRole('navigation', { name: /primary navigation/i }),
   ).toBeVisible()
   await expect(page.getByRole('link', { name: /library/i })).toBeVisible()
+  // The first load warms the dev app. Assert clean startup diagnostics on the
+  // deliberate clean-storage reload below, not on the warm-up document.
+  consoleErrors.length = 0
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   await expect(page.getByRole('link', { name: /library/i })).toBeVisible()

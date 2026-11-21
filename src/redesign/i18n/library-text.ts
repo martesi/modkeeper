@@ -5,6 +5,7 @@
 import { t } from '@lingui/core/macro'
 import type { TaskOperation, TaskProgressStage } from '../data/redesign-types'
 import { taskProgressText } from './task-progress-text'
+import { SUPPORTED_ARCHIVE_EXTENSIONS } from '../shared/utils/file-filters'
 
 const unknownTaskLabel = () =>
   t({ id: 'library.task.operation.unknown', message: 'Task' })
@@ -44,6 +45,7 @@ export const libraryText = {
     }),
   activeTasksLabel: () =>
     t({ id: 'library.task.activeLabel', message: 'Active tasks' }),
+  cancelTask: () => t({ id: 'library.task.cancel', message: 'Cancel import' }),
   unknownTaskOperation: () => unknownTaskLabel(),
   unknownTaskLibrary: () =>
     t({ id: 'library.task.library.unknown', message: 'Unknown library' }),
@@ -210,6 +212,51 @@ export const libraryText = {
     t({
       id: 'library.import.unsupportedArchiveRejected',
       message: 'Only .zip and .7z archives can be imported',
+    }),
+  archivePathsTitle: () =>
+    t({ id: 'library.import.pathsTitle', message: 'Enter mod archive paths' }),
+  archivePathsDescription: () =>
+    t({
+      id: 'library.import.pathsDescription',
+      message: 'Enter one path per line, or separate paths with commas.',
+    }),
+  archivePathsLabel: () =>
+    t({ id: 'library.import.pathsLabel', message: 'Archive paths' }),
+  archivePathsPlaceholder: () =>
+    t({
+      id: 'library.import.pathsPlaceholder',
+      message: 'C:\\mods\\example.zip',
+    }),
+  gameRootPathTitle: () =>
+    t({
+      id: 'library.manage.gameRootPathTitle',
+      message: 'Enter game root path',
+    }),
+  gameRootPathDescription: () =>
+    t({
+      id: 'library.manage.gameRootPathDescription',
+      message: 'Enter the path to the SPT game folder.',
+    }),
+  gameRootPathLabel: () =>
+    t({ id: 'library.manage.gameRootPathLabel', message: 'Game root path' }),
+  gameRootPathPlaceholder: () =>
+    t({
+      id: 'library.manage.gameRootPathPlaceholder',
+      message: 'C:\\SPT',
+    }),
+  pathInputConfirm: () =>
+    t({ id: 'library.pathInput.confirm', message: 'Use path' }),
+  pathInputCancel: () =>
+    t({ id: 'library.pathInput.cancel', message: 'Cancel' }),
+  pathInputRequired: () =>
+    t({
+      id: 'library.pathInput.required',
+      message: 'Enter at least one path.',
+    }),
+  pathInputUnsupported: () =>
+    t({
+      id: 'library.pathInput.unsupported',
+      message: `One or more paths do not use a supported archive extension (${SUPPORTED_ARCHIVE_EXTENSIONS.map((extension) => `.${extension}`).join(' or ')}).`,
     }),
 
   // Toolbar
@@ -446,6 +493,16 @@ export const libraryText = {
     t({
       id: 'library.tools.executablePathPlaceholder',
       message: 'System path to the target file',
+    }),
+  executablePathDialogTitle: () =>
+    t({
+      id: 'library.tools.executablePathDialogTitle',
+      message: 'Enter executable path',
+    }),
+  executablePathDialogDescription: () =>
+    t({
+      id: 'library.tools.executablePathDialogDescription',
+      message: 'Enter the path to the tool executable.',
     }),
   browse: () => t({ id: 'library.tools.browse', message: 'Browse' }),
   selectExecutable: () =>

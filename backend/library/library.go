@@ -2,9 +2,11 @@
 package library
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/registry"
+	"github.com/martes/modkeeper/backend/security"
 	"github.com/martes/modkeeper/backend/spt"
 	"github.com/martes/modkeeper/backend/store"
 )
@@ -117,7 +120,179 @@ func Load(root string) (*Library, error) {
 	if m.Mods == nil {
 		m.Mods = map[string]models.Mod{}
 	}
-	return &Library{manifest: m, Root: root, GameRoot: game, ModsDir: mods, StagingDir: staging, BackupsDir: backups}, nil
+	l := &Library{manifest: m, Root: root, GameRoot: game, ModsDir: mods, StagingDir: staging, BackupsDir: backups}
+	return l, nil
+}
+
+// recoverInterruptedInstall reconciles the files and manifest from the
+// transaction phase, then removes only library-owned staging artifacts.
+func recoverInterruptedInstall(l *Library) error {
+	return recoverInterruptedInstallWithHook(l, nil)
+}
+
+func recoverInterruptedInstallWithHook(l *Library, afterMarkerRemoved func(string) error) error {
+	backups, err := os.ReadDir(l.BackupsDir)
+	if os.IsNotExist(err) {
+		backups, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	type markerPair struct {
+		prepared  string
+		committed string
+	}
+	pairs := make(map[string]markerPair)
+	for _, entry := range backups {
+		name := entry.Name()
+		if strings.HasSuffix(name, ".install.pending") {
+			return invalidInstallMarker(filepath.Join(l.BackupsDir, name), fmt.Errorf("legacy marker format"))
+		}
+		suffix, phase := ".install.prepared", installPrepared
+		if strings.HasSuffix(name, ".install.committed") {
+			suffix, phase = ".install.committed", installCommitted
+		} else if !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		id := strings.TrimSuffix(name, suffix)
+		if entry.IsDir() || security.ValidateModID(id) != nil {
+			return invalidInstallMarker(filepath.Join(l.BackupsDir, name), fmt.Errorf("invalid marker path"))
+		}
+		pair := pairs[id]
+		if phase == installPrepared {
+			pair.prepared = filepath.Join(l.BackupsDir, name)
+		} else {
+			pair.committed = filepath.Join(l.BackupsDir, name)
+		}
+		pairs[id] = pair
+	}
+
+	markers := make(map[string]bool)
+	ids := make([]string, 0, len(pairs))
+	for id := range pairs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	transactions := make(map[string]installTransaction, len(pairs))
+	for _, id := range ids {
+		pair := pairs[id]
+		var prepared, committed installTransaction
+		if pair.prepared != "" {
+			prepared, err = readInstallTransaction(pair.prepared, id)
+			if err != nil {
+				return invalidInstallMarker(pair.prepared, err)
+			}
+			if prepared.Phase != installPrepared {
+				return invalidInstallMarker(pair.prepared, fmt.Errorf("marker phase does not match its filename"))
+			}
+		}
+		if pair.committed != "" {
+			committed, err = readInstallTransaction(pair.committed, id)
+			if err != nil {
+				return invalidInstallMarker(pair.committed, err)
+			}
+			if committed.Phase != installCommitted {
+				return invalidInstallMarker(pair.committed, fmt.Errorf("marker phase does not match its filename"))
+			}
+		}
+		if pair.prepared != "" && pair.committed != "" &&
+			!sameInstallTransaction(prepared, committed) {
+			return invalidInstallMarker(pair.committed, fmt.Errorf("prepared and committed marker contents disagree"))
+		}
+		if pair.committed != "" {
+			transactions[id] = committed
+		} else {
+			transactions[id] = prepared
+		}
+	}
+	for _, id := range ids {
+		pair := pairs[id]
+		markers[id] = true
+		if err := recoverInstallTransaction(l, pair.prepared, pair.committed, transactions[id], afterMarkerRemoved); err != nil {
+			return err
+		}
+	}
+	for _, entry := range backups {
+		if entry.IsDir() && strings.HasSuffix(entry.Name(), ".snapshot") {
+			if security.ValidateModID(strings.TrimSuffix(entry.Name(), ".snapshot")) != nil {
+				continue
+			}
+			id := strings.TrimSuffix(entry.Name(), ".snapshot")
+			if markers[id] {
+				continue
+			}
+			// A snapshot without a marker is left only before transaction
+			// preparation or after commit-marker removal. In both cases the
+			// destination and manifest are authoritative.
+			if err := os.RemoveAll(filepath.Join(l.BackupsDir, entry.Name())); err != nil {
+				return err
+			}
+		} else if entry.IsDir() && isSnapshotTemp(entry.Name()) {
+			if err := os.RemoveAll(filepath.Join(l.BackupsDir, entry.Name())); err != nil {
+				return err
+			}
+		} else if strings.HasPrefix(entry.Name(), ".modkeeper-install-tmp-") {
+			if err := os.RemoveAll(filepath.Join(l.BackupsDir, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	staged, err := os.ReadDir(l.StagingDir)
+	if os.IsNotExist(err) {
+		staged, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range staged {
+		if err := os.RemoveAll(filepath.Join(l.StagingDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	mods, err := os.ReadDir(l.ModsDir)
+	if os.IsNotExist(err) {
+		mods, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range mods {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".modkeeper-tmp-") {
+			if err := os.RemoveAll(filepath.Join(l.ModsDir, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func sameInstallTransaction(prepared, committed installTransaction) bool {
+	prepared.Phase = installCommitted
+	return reflect.DeepEqual(prepared, committed)
+}
+
+func invalidInstallMarker(path string, cause error) error {
+	return fmt.Errorf(
+		"InvalidLibrary: install recovery marker %q is invalid or uses an older format; no install files were changed. Preserve the library and backups, then restore a consistent mod tree and manifest from a trusted backup before removing this marker: %w",
+		path,
+		cause,
+	)
+}
+
+func isSnapshotTemp(name string) bool {
+	const prefix = ".modkeeper-snapshot-tmp-"
+	suffix := strings.TrimPrefix(name, prefix)
+	if suffix == name || suffix == "" || len(suffix) > 10 {
+		return false
+	}
+	// os.MkdirTemp appends strconv.Itoa(random uint32), so the suffix is 1 to 10
+	// digits. Requiring exactly 10 characters leaves most temp dirs behind.
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 func (l *Library) Persist() error {
 	base := l.Root
@@ -144,6 +319,9 @@ func (l *Library) Persist() error {
 		if e == nil {
 			e = os.Rename(tmp, filepath.Join(base, file))
 		}
+		if e == nil {
+			e = syncLibraryDir(base)
+		}
 		if e != nil {
 			_ = os.Remove(tmp)
 			return e
@@ -156,17 +334,23 @@ func (l *Library) DTO() models.LibraryDTO {
 }
 
 type Service struct {
-	Store         *store.AppConfigStore
-	Registry      *registry.TaskRegistry
-	active        *Library
-	warning       *string
-	sendProgress  func(models.TaskProgressEvent) error
-	sendWorkspace func(models.WorkspaceEvent) error
-	tasks         sync.WaitGroup
+	Store          *store.AppConfigStore
+	Registry       *registry.TaskRegistry
+	active         *Library
+	warning        *string
+	sendProgress   func(models.TaskProgressEvent) error
+	sendWorkspace  func(models.WorkspaceEvent) error
+	tasks          sync.WaitGroup
+	libraryMu      sync.RWMutex
+	startupMu      sync.Mutex
+	startupStarted bool
 	// copyMod is copyTree in production; tests inject failures to exercise the
 	// upgrade snapshot restore path.
-	copyMod   func(src, dst string) error
-	modWrites sync.Mutex
+	copyMod                func(src, dst string) error
+	installTransactionHook func(string)
+	installMarkerWriter    func(string, installTransaction) error
+	installTaskHook        func(string)
+	modWrites              sync.Mutex
 }
 
 // DeriveLibraryRoot returns the default library location for a game install.
@@ -215,16 +399,28 @@ func New(path string) (*Service, error) {
 	return &Service{Store: &store.AppConfigStore{Path: path, Config: c}, Registry: registry.NewTaskRegistry()}, nil
 }
 func (s *Service) Start() error {
+	s.startupMu.Lock()
+	s.startupStarted = true
+	s.startupMu.Unlock()
 	if id := s.Store.Config.AppState.ActiveLibraryID; id != nil {
 		if k := s.Store.Config.FindLibrary(*id); k != nil {
 			go func() {
-				l, e := Load(k.LibraryRoot)
-				if e == nil {
-					s.active = l
-					s.Registry.SetActive(l.manifest.ID, true)
-				} else {
-					s.warning = strPtr(e.Error())
-				}
+				e := func() error {
+					s.libraryMu.Lock()
+					defer s.libraryMu.Unlock()
+					l, err := Load(k.LibraryRoot)
+					if err == nil {
+						err = recoverInterruptedInstall(l)
+					}
+					if err == nil {
+						s.active = l
+						s.warning = nil
+						s.Registry.SetActive(l.manifest.ID, true)
+					} else {
+						s.warning = strPtr(err.Error())
+					}
+					return err
+				}()
 				s.Registry.FinishStartupLoad(e)
 			}()
 			return nil
@@ -234,7 +430,35 @@ func (s *Service) Start() error {
 	return nil
 }
 func strPtr(s string) *string { return &s }
+func (s *Service) tryBeginLibraryTransition() error {
+	if !s.libraryMu.TryLock() {
+		return models.Fail(models.LibraryBusy)
+	}
+	return nil
+}
+
 func (s *Service) Workspace() *models.LibraryWorkspace {
+	s.startupMu.Lock()
+	startupStarted := s.startupStarted
+	s.startupMu.Unlock()
+	if startupStarted {
+		ctx, cancel := context.WithTimeout(context.Background(), 9*time.Second)
+		_ = s.Registry.WaitForStartupLoad(ctx)
+		timedOut := ctx.Err() != nil
+		cancel()
+		if timedOut {
+			return &models.LibraryWorkspace{
+				ActiveLibraryID:  s.Store.Config.AppState.ActiveLibraryID,
+				Libraries:        []models.LibraryEntry{},
+				ModsByLibraryID:  map[string][]models.ModSummary{},
+				ToolsByLibraryID: map[string][]models.ToolSummary{},
+				Settings:         s.Store.Config.Settings,
+				ConfigWarning:    strPtr("Initial library recovery did not finish. Preserve the library and backups, then retry after checking the library files."),
+			}
+		}
+	}
+	s.libraryMu.RLock()
+	defer s.libraryMu.RUnlock()
 	w := &models.LibraryWorkspace{ActiveLibraryID: s.Store.Config.AppState.ActiveLibraryID, Libraries: []models.LibraryEntry{}, ModsByLibraryID: map[string][]models.ModSummary{}, ToolsByLibraryID: map[string][]models.ToolSummary{}, Settings: s.Store.Config.Settings, ConfigWarning: s.warning}
 	for _, k := range s.Store.Config.KnownLibraries {
 		m, _, mods, _, _, e := layout(k.LibraryRoot)
@@ -253,11 +477,13 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 		w.ModsByLibraryID[k.ID] = rows
 		w.ToolsByLibraryID[k.ID] = []models.ToolSummary{}
 	}
-	s.warning = nil
-	w.ConfigWarning = s.warning
 	return w
 }
 func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
+	if err := s.tryBeginLibraryTransition(); err != nil {
+		return err
+	}
+	defer s.libraryMu.Unlock()
 	root := ""
 	if in.LibraryRoot != nil {
 		root = *in.LibraryRoot
@@ -281,6 +507,10 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				existing, loadErr = Load(root)
 				if loadErr == nil {
 					l := existing
+					if err := recoverInterruptedInstall(l); err != nil {
+						s.warning = strPtr(err.Error())
+						return err
+					}
 					prev := s.Store.Config
 					s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
 					s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
@@ -289,6 +519,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						return err
 					}
 					s.active = l
+					s.warning = nil
 					s.Registry.SetActive(l.manifest.ID, true)
 					return nil
 				}
@@ -323,6 +554,10 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				return fmt.Errorf("InvalidLibrary: %s: %w", root, loadErr)
 			}
 			l := existing
+			if err := recoverInterruptedInstall(l); err != nil {
+				s.warning = strPtr(err.Error())
+				return err
+			}
 			prev := s.Store.Config
 			s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
 			s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
@@ -331,6 +566,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				return err
 			}
 			s.active = l
+			s.warning = nil
 			s.Registry.SetActive(l.manifest.ID, true)
 			return nil
 		}
@@ -350,16 +586,25 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 		return e
 	}
 	s.active = l
+	s.warning = nil
 	s.Registry.SetActive(l.manifest.ID, true)
 	return nil
 }
 func (s *Service) ActivateLibrary(id string) error {
+	if err := s.tryBeginLibraryTransition(); err != nil {
+		return err
+	}
+	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibrary(id)
 	if k == nil {
 		return fmt.Errorf("InvalidLibrary: Library not registered")
 	}
 	l, e := Load(k.LibraryRoot)
 	if e != nil {
+		return e
+	}
+	if e = recoverInterruptedInstall(l); e != nil {
+		s.warning = strPtr(e.Error())
 		return e
 	}
 	prev := s.Store.Config
@@ -369,10 +614,15 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	s.active = l
+	s.warning = nil
 	s.Registry.SetActive(id, true)
 	return nil
 }
 func (s *Service) RenameLibrary(id, name string) error {
+	if err := s.tryBeginLibraryTransition(); err != nil {
+		return err
+	}
+	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibrary(id)
 	if k == nil {
 		return fmt.Errorf("InvalidLibrary: Library not registered")
@@ -405,6 +655,10 @@ func (s *Service) RenameLibrary(id, name string) error {
 	return e
 }
 func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
+	if err := s.tryBeginLibraryTransition(); err != nil {
+		return err
+	}
+	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibraryByHandle(id)
 	if k == nil {
 		return fmt.Errorf("InvalidLibrary: Library not registered")
@@ -504,33 +758,121 @@ func (s *Service) copyModTree(src, dst string) error {
 	return copyTree(src, dst)
 }
 
+func (s *Service) writeInstallMarker(path string, transaction installTransaction) error {
+	if s.installMarkerWriter != nil {
+		return s.installMarkerWriter(path, transaction)
+	}
+	return writeInstallTransaction(path, transaction)
+}
+
 // snapshotMod copies an installed mod to a bounded backup path before an
 // upgrade. A successful upgrade removes it; a failed one restores it.
 func (s *Service) snapshotMod(id string) (string, error) {
 	source := filepath.Join(s.active.ModsDir, id)
-	if _, err := os.Stat(source); err != nil {
+	info, err := os.Lstat(source)
+	if os.IsNotExist(err) {
 		return "", nil
 	}
-	snapshot := filepath.Join(s.active.BackupsDir, id+".snapshot")
-	if err := os.RemoveAll(snapshot); err != nil {
+	if err != nil {
 		return "", err
 	}
-	if err := copyTree(source, snapshot); err != nil {
+	if !info.IsDir() {
+		return "", fmt.Errorf("ModIdConflict: installed mod path is not a directory: %s", source)
+	}
+	snapshot := filepath.Join(s.active.BackupsDir, id+".snapshot")
+	tmp, err := os.MkdirTemp(s.active.BackupsDir, ".modkeeper-snapshot-tmp-")
+	if err != nil {
+		return "", err
+	}
+	if err := copyTree(source, tmp); err != nil {
+		_ = os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.RemoveAll(snapshot); err != nil {
+		_ = os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, snapshot); err != nil {
+		_ = os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := syncLibraryDir(s.active.BackupsDir); err != nil {
 		return "", err
 	}
 	return snapshot, nil
 }
 
-func (s *Service) restoreMod(id, snapshot string) error {
-	if snapshot == "" {
-		return nil
-	}
+func (s *Service) installModTree(ctx context.Context, src, id string, onTempCreated func()) error {
 	destination := filepath.Join(s.active.ModsDir, id)
+	tmp, err := os.MkdirTemp(s.active.ModsDir, ".modkeeper-tmp-"+id+"-")
+	if err != nil {
+		return err
+	}
+	if onTempCreated != nil {
+		onTempCreated()
+	}
+	defer os.RemoveAll(tmp)
+	if err := s.copyModTree(src, tmp); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(destination); err != nil {
 		return err
 	}
-	if err := copyTree(snapshot, destination); err != nil {
+	if err := os.Rename(tmp, destination); err != nil {
 		return err
 	}
-	return os.RemoveAll(snapshot)
+	if err := syncLibraryDir(s.active.ModsDir); err != nil {
+		return err
+	}
+	if s.installTransactionHook != nil {
+		s.installTransactionHook("after-replacement")
+	}
+	return nil
+}
+
+func (s *Service) finishInstallTransaction(transaction installTransaction) (bool, error) {
+	if err := s.active.Persist(); err != nil {
+		return false, err
+	}
+	if s.installTransactionHook != nil {
+		s.installTransactionHook("after-manifest-persist")
+	}
+	transaction.Phase = installCommitted
+	preparedMarker := installPreparedMarkerPath(s.active, transaction.ID)
+	committedMarker := installCommittedMarkerPath(s.active, transaction.ID)
+	if err := s.writeInstallMarker(committedMarker, transaction); err != nil {
+		committed := false
+		if written, readErr := readInstallTransaction(committedMarker, transaction.ID); readErr == nil && written.Phase == installCommitted {
+			committed = true
+		}
+		return committed, err
+	}
+	if s.installTransactionHook != nil {
+		s.installTransactionHook("after-committed-marker")
+	}
+	if err := removeIfExists(preparedMarker); err != nil {
+		return true, err
+	}
+	if err := syncLibraryDir(s.active.BackupsDir); err != nil {
+		return true, err
+	}
+	if err := removeIfExists(committedMarker); err != nil {
+		return true, err
+	}
+	if err := syncLibraryDir(s.active.BackupsDir); err != nil {
+		return true, err
+	}
+	if s.installTransactionHook != nil {
+		s.installTransactionHook("after-marker-removed")
+	}
+	if err := os.RemoveAll(installSnapshotPath(s.active, transaction.ID)); err != nil {
+		return true, err
+	}
+	if err := syncLibraryDir(s.active.BackupsDir); err != nil {
+		return true, err
+	}
+	return true, nil
 }

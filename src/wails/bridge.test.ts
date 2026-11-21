@@ -30,6 +30,56 @@ describe('Wails browser mock', () => {
     await dispatchCommand(undefined, undefined, () => calls.push('tauri'))
     expect(calls).toEqual(['tauri'])
   })
+
+  test('wraps Wails return values in the shared command result shape', async () => {
+    await expect(
+      dispatchCommand(
+        undefined,
+        () => ({ activeLibraryId: 'library' }),
+        () => null,
+      ),
+    ).resolves.toEqual({
+      status: 'ok',
+      data: { activeLibraryId: 'library' },
+    })
+  })
+
+  test('keeps structured Wails domain errors on the typed command path', async () => {
+    const failure = { code: 'LibraryBusy', data: null }
+    const runtimeError = new Error('call failed')
+    runtimeError.name = 'RuntimeError'
+    runtimeError.cause = JSON.stringify(failure)
+    await expect(
+      dispatchCommand(
+        undefined,
+        () => Promise.reject(runtimeError),
+        () => null,
+      ),
+    ).resolves.toEqual({ status: 'error', error: failure })
+  })
+
+  test('unwraps an object Wails cause and preserves unrelated transport failures', async () => {
+    const failure = { code: 'LibraryBusy', data: null }
+    const runtimeError = new Error('call failed')
+    runtimeError.name = 'RuntimeError'
+    runtimeError.cause = failure
+    await expect(
+      dispatchCommand(
+        undefined,
+        () => Promise.reject(runtimeError),
+        () => null,
+      ),
+    ).resolves.toEqual({ status: 'error', error: failure })
+
+    const transportError = new Error('connection closed')
+    await expect(
+      dispatchCommand(
+        undefined,
+        () => Promise.reject(transportError),
+        () => null,
+      ),
+    ).rejects.toBe(transportError)
+  })
   test('dispatches generated commands to the injected mock', async () => {
     // @ts-expect-error Test supplies a minimal browser global.
     globalThis.window = {}

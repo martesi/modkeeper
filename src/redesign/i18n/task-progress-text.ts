@@ -10,7 +10,7 @@ const operationText: Record<TaskOperation, () => string> = {
     t({ id: 'library.task.operation.cacheRebuild', message: 'Cache rebuild' }),
 }
 
-const stageText: Record<TaskProgressStage, () => string> = {
+const stageText: Record<string, () => string> = {
   task_started: () =>
     t({ id: 'library.task.stage.started', message: 'Starting' }),
   task_completed: () =>
@@ -22,6 +22,8 @@ const stageText: Record<TaskProgressStage, () => string> = {
     }),
   task_failed: () =>
     t({ id: 'library.task.stage.failed', message: 'Finishing with an error' }),
+  task_cancelled: () =>
+    t({ id: 'library.task.stage.cancelled', message: 'Import cancelled' }),
   sync_plan: () =>
     t({ id: 'library.task.stage.syncPlan', message: 'Planning sync' }),
   sync_preflight: () =>
@@ -77,5 +79,10 @@ const stageText: Record<TaskProgressStage, () => string> = {
 
 export const taskProgressText = {
   operation: (operation: TaskOperation) => operationText[operation](),
-  stage: (stage: TaskProgressStage) => stageText[stage](),
+  stage: (stage: TaskProgressStage) =>
+    stageText[stage as keyof typeof stageText]?.() ?? unknownStageText(),
+}
+
+function unknownStageText() {
+  return t({ id: 'library.task.stage.unknown', message: 'Task update' })
 }

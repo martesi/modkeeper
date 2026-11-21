@@ -35,6 +35,7 @@ pub enum SError {
     ConfigSaveFailed(String),
     #[display("Task id already in flight: {}", _0)]
     TaskIdInUse(String),
+    LibraryBusy,
 }
 
 macro_rules! impl_from {

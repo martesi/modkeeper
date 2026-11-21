@@ -52,6 +52,7 @@ import {
   libraryBusyAtom,
   libraryWorkspaceAtom,
   type PendingTaskSource,
+  getWorkspaceVersion,
   setWorkspace,
   addPendingTask,
   removePendingTask,
@@ -59,6 +60,7 @@ import {
   isLibraryTaskPending,
   setWorkspaceStatus,
 } from '../state/library-state'
+import type { WorkspaceReadGuard } from './workspace-recovery'
 import { canRetryFailedArchives } from './task-outcome'
 import type { InstallTaskOutcome } from './task-outcome'
 import { setSettings } from '../state/settings-state'
@@ -291,14 +293,36 @@ function findSummary(
 
 // --- Workspace load ---
 
-export async function loadLibraryWorkspace(): Promise<LibraryWorkspace | null> {
+export async function loadLibraryWorkspace(
+  recoveryGuard?: WorkspaceReadGuard,
+): Promise<LibraryWorkspace | null> {
+  const guard: WorkspaceReadGuard = recoveryGuard ?? {
+    isActive: () => true,
+    isCurrent: () => true,
+    onApplied: () => {},
+  }
+  const versionAtStart = getWorkspaceVersion()
+  const isCurrent = () =>
+    guard.isCurrent() && versionAtStart === getWorkspaceVersion()
+  if (!isCurrent()) {
+    if (guard.isActive()) setWorkspaceStatus('ready')
+    return null
+  }
+
   setWorkspaceStatus('loading')
   let failed = false
+  let superseded = false
   const workspace = await runPlainCommand({
     isTauri: hasNativeRuntime(),
     invoke: () => commands.getLibraryWorkspace(),
-    mock: () => applyWorkspace(getMockWorkspace()),
+    mock: getMockWorkspace,
     apply: applyWorkspace,
+    applyMock: true,
+    onApplied: guard.onApplied,
+    onStale: () => {
+      superseded = true
+      if (guard.isActive()) setWorkspaceStatus('ready')
+    },
     onDomainError: (error) => {
       failed = true
       surfaceError(error)
@@ -308,8 +332,11 @@ export async function loadLibraryWorkspace(): Promise<LibraryWorkspace | null> {
       surfaceTransportError('getLibraryWorkspace', error)
     },
     current: currentWorkspace,
+    isCurrent,
   })
 
+  if (!guard.isActive()) return null
+  if (superseded) return null
   if (failed) {
     setWorkspaceStatus('error')
     return null

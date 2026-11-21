@@ -11,7 +11,6 @@
 import {
   Call as $Call,
   CancellablePromise as $CancellablePromise,
-  Create as $Create,
 } from '@wailsio/runtime'
 
 export function ListenerReady(): $CancellablePromise<void> {
