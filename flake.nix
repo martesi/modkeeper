@@ -21,22 +21,21 @@
           rustToolchain = pkgs.rust-bin.stable.latest.default.override {
             extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
           };
+          # Webview stack only. nixpkgs' wails3 already propagates the GTK
+          # graphics half of it (gtk4, cairo, pango, glib, harfbuzz,
+          # gdk-pixbuf, librsvg, vulkan-loader) plus pkg-config, so those are
+          # not declared here; this list keeps the load-time libraries that
+          # wails3 does not bring in.
           tauriLibs = with pkgs; [
-            cairo
             dbus
-            gdk-pixbuf
-            glib
             gtk3
-            harfbuzz
-            librsvg
             libsoup_3
             openssl
-            pango
             webkitgtk_4_1
             webkitgtk_6_0
           ];
           goPackages = [ pkgs.go pkgs.wails3 pkgs.xvfb-run ];
-          basePackages = [ rustToolchain pkgs.bun pkgs.pkg-config ] ++ tauriLibs ++ goPackages;
+          basePackages = [ rustToolchain pkgs.bun ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
               export CARGO_HOME=/agt/xdg/cache/rust
