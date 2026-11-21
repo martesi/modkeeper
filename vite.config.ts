@@ -62,7 +62,7 @@ export default defineConfig(() => ({
     },
   },
     server: {
-    port: wails ? 34115 : 1420,
+    port: wails ? Number(process.env.WAILS_VITE_PORT || 34115) : 1420,
     strictPort: true,
     host: host || false,
     hmr: host

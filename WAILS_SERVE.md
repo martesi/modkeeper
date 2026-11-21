@@ -4,7 +4,7 @@ The application uses Wails v3. Run commands from the repository root. Run `bun i
 
 ## Development
 
-Run `bun run dev:wails` to start Vite with the Wails development flags. Run `nix develop -c wails3 dev -config ./build/config.yml` to start the native Wails development app. Browser mode is useful for UI work, but it does not test native IPC.
+Run `bun run dev:wails` to start Vite with the Wails development flags. Run `nix develop -c wails3 dev -config ./build/config.yml -port 34115` to start the native Wails development app (the `-port` must match Vite's Wails port in `vite.config.ts`). Browser mode is useful for UI work, but it does not test native IPC.
 
 ## Native build
 

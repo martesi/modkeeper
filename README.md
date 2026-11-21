@@ -82,8 +82,8 @@ Modkeeper is still in early development and is **not recommended for daily or pr
 
 The Wails frontend uses the same Vite sources and keeps the Tauri default unchanged:
 
-- Run `nix develop .#e2e -c wails3 dev -config ./build/config.yml` to start Wails v3.
-- Run `nix develop -c wails3 build` to build the Wails application.
+- Run `nix develop .#e2e -c wails3 dev -config ./build/config.yml -port 34115` to start Wails v3.
+- Run `nix develop -c wails3 build` to build the Wails application. Build the Wails Windows executables and NSIS installers from Linux with `./scripts/build-windows.sh`; see [WAILS_WINDOWS.md](WAILS_WINDOWS.md) for release and verification commands.
 - Run `bun run build` for the existing Tauri-compatible frontend build.
 - After `wails3 dev` starts, `bun run e2e:wails` checks that its Vite server serves the app shell. This is not a native-window or IPC test.
 
