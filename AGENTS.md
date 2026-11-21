@@ -24,7 +24,8 @@
 - Keep a green CI run as the merge condition. A local pass is not evidence for gates you did not run.
 
 ### Work isolation
-- Use one branch per task. Prefer a separate worktree or jj workspace (`jj workspace add ../modkeeper-<task> -r main`) over editing a shared workspace.
+- Use one branch per task and one worktree per branch: `git worktree add ../modkeeper-<task> -b <task>`.
+- Prefer Git worktrees over `jj workspace add`. A jj workspace only works here with `--colocate`: without a Git working tree Nix cannot evaluate the flake, because it reads repository state through Git.
 - Do not mix unrelated work in one branch or commit. Commit on the branch and let CI run before merging.
 
 ### Frontend Specifics
