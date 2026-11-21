@@ -36,7 +36,9 @@
           # wails3 bundles its own go-task, but the Taskfile entry points are
           # also run directly from the shell, which needs the CLI.
           goPackages = [ pkgs.go pkgs.go-task pkgs.wails3 pkgs.xvfb-run ];
-          basePackages = [ rustToolchain pkgs.bun ] ++ tauriLibs ++ goPackages;
+          # curl: the Taskfile readiness polls and the CI server smoke test use
+          # it, and the dev shell must not depend on a host-provided curl.
+          basePackages = [ rustToolchain pkgs.bun pkgs.curl ] ++ tauriLibs ++ goPackages;
           cargoCacheHook = ''
             if [ -z "''${CARGO_HOME:-}" ] && [ -d /agt/xdg/cache ]; then
               export CARGO_HOME=/agt/xdg/cache/rust
