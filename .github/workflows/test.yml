@@ -63,6 +63,14 @@ jobs:
       - name: Frontend tests
         run: bun run test
 
+      # Diagnostic: isolates the generated bindings' module link from the rest
+      # of the suite.
+      - name: Probe generated bindings import
+        if: always()
+        run: |
+          bun -e "import('./frontend/bindings/github.com/martes/modkeeper/backend/app').then((m) => console.log('bindings ok', Object.keys(m).length)).catch((e) => { console.error('bindings failed', e.message); process.exit(1) })"
+          bun test src/wails/bridge.test.ts 2>&1 | tail -6
+
       - name: Rust tests
         run: bun run test:rust --locked
 
