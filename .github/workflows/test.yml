@@ -49,6 +49,14 @@ jobs:
       - name: Check test path selection
         run: bun run paths:check
 
+      # Diagnostic: separates a Bun-on-Windows module-link failure from a
+      # test-runner failure for the generated bindings' import.
+      - name: Probe Wails runtime import
+        run: bun -e "const m = await import('@wailsio/runtime'); console.log('runtime import ok', typeof m.Call)"
+
+      - name: Frontend tests
+        run: bun run test
+
       - name: Rust tests
         run: bun run test:rust --locked
 
@@ -93,7 +101,7 @@ jobs:
 
       # Bun on Windows fails to link the named `Call` export of the ESM
       # @wailsio/runtime package at test time, while Vite's bundler resolves it.
-      # The suite is identical under Linux, so it runs here with the same Bun.
+      # The suite is identical under Linux, so it also runs here.
       - name: Frontend tests
         run: nix develop .#default -c bun run test
 

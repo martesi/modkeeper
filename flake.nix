@@ -21,11 +21,10 @@
           rustToolchain = pkgs.rust-bin.stable.latest.default.override {
             extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
           };
-          # Webview stack only. nixpkgs' wails3 already propagates the GTK
-          # graphics half of it (gtk4, cairo, pango, glib, harfbuzz,
-          # gdk-pixbuf, librsvg, vulkan-loader) plus pkg-config, so those are
-          # not declared here; this list keeps the load-time libraries that
-          # wails3 does not bring in.
+          # Webview stack. nixpkgs' wails3 already brings the GTK4 graphics
+          # half and WebKitGTK 6.0 into the build environment, plus pkg-config,
+          # so none of those are declared here. This list is the load-time
+          # closure for the shell hook's library path.
           tauriLibs = with pkgs; [
             dbus
             gtk3
