@@ -46,9 +46,6 @@ jobs:
       - name: Check design tokens
         run: bun run scripts/check-tokens.ts
 
-      - name: Frontend tests
-        run: bun run test
-
       - name: Check test path selection
         run: bun run paths:check
 
@@ -93,6 +90,12 @@ jobs:
 
       - name: Vet
         run: nix develop .#default -c go vet ./...
+
+      # Bun on Windows fails to link the named `Call` export of the ESM
+      # @wailsio/runtime package at test time, while Vite's bundler resolves it.
+      # The suite is identical under Linux, so it runs here with the same Bun.
+      - name: Frontend tests
+        run: nix develop .#default -c bun run test
 
       - name: Go tests
         run: nix develop .#default -c go test ./...
