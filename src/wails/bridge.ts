@@ -106,7 +106,7 @@ export function cancelInstallTask(
  * opener, so this bound Go method replaces the Tauri opener plugin. The browser
  * mock never reaches this path because `platformKind()` stays `browser`.
  */
-export function openPathInFileManager(path: string): Promise<void> {
+export function openPathWithPlatformOpener(path: string): Promise<void> {
   if (isWails()) return Promise.resolve(wailsApp.OpenPath(path))
   return Promise.reject(new Error('OpenPath is only available in Wails'))
 }

@@ -46,7 +46,9 @@ Wails derives the JS name by lowercasing the first letter of the exported method
 match the TS names exactly. `ApplyWindowEffect` remains a bound method but is a compatibility no-op;
 the effect is seeded from the saved theme when the window is created. `OpenPath` sends directories
 to `Env.OpenFileManager` and files to `Browser.OpenFile`. `Log` writes through the Wails application
-logger, which the desktop entrypoint points at `modkeeper.log` in the config directory.
+logger, which the desktop entrypoint points at `modkeeper.log` in the config directory. The log file
+is append-only and does not rotate, matching Tauri's default `KeepAll` rotation policy; it grows
+across runs.
 
 ## Wire contract (`backend/models`)
 

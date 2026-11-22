@@ -100,8 +100,8 @@ export async function openUrl(url: string): Promise<void> {
 // opener plugin behavior.
 export async function openPath(path: string): Promise<void> {
   if (platformKind() === 'wails') {
-    const { openPathInFileManager } = await import('@/wails')
-    return openPathInFileManager(path)
+    const { openPathWithPlatformOpener } = await import('@/wails')
+    return openPathWithPlatformOpener(path)
   }
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-opener')).openPath(path)

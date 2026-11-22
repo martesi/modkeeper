@@ -77,8 +77,10 @@ func forwardWindowFileDrops(window *application.WebviewWindow) {
 	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		files := event.Context().DroppedFiles()
 		target := event.Context().DropTargetDetails()
-		// Emit from this window instead of the application bus so the event
-		// carries the source window.
+		// Emit from this window so the payload carries the source window.
+		// Wails v3.1.0 still fans the event out through the application event
+		// bus, so another window would receive this drop too; consumers must
+		// filter on Sender when that matters.
 		if window.EmitEvent(fileDropEvent, dropPayload(files, target)) {
 			log.Printf("modkeeper: file-drop event was cancelled")
 		}

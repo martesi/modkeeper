@@ -3,22 +3,61 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/martes/modkeeper/backend"
 	"github.com/martes/modkeeper/backend/config"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+// bestEffortWriter reports success even when its sink fails. Logging must not
+// turn a missing console or a full disk into an application error.
+type bestEffortWriter struct{ writer io.Writer }
+
+func (w bestEffortWriter) Write(p []byte) (int, error) {
+	if w.writer != nil {
+		_, _ = w.writer.Write(p)
+	}
+	return len(p), nil
+}
+
+// dropAssetServerNoise removes the asset server's per-request Info records so
+// they cannot bury frontend diagnostics. Warnings and errors still pass.
+type dropAssetServerNoise struct{ next slog.Handler }
+
+func (h dropAssetServerNoise) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.next.Enabled(ctx, level)
+}
+
+func (h dropAssetServerNoise) Handle(ctx context.Context, record slog.Record) error {
+	if record.Level == slog.LevelInfo &&
+		(strings.Contains(record.Message, "[AssetFileServerFS]") ||
+			strings.Contains(record.Message, "AssetServer")) {
+		return nil
+	}
+	return h.next.Handle(ctx, record)
+}
+
+func (h dropAssetServerNoise) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return dropAssetServerNoise{next: h.next.WithAttrs(attrs)}
+}
+
+func (h dropAssetServerNoise) WithGroup(name string) slog.Handler {
+	return dropAssetServerNoise{next: h.next.WithGroup(name)}
+}
+
 // configureLogging gives the Wails application logger a file sink in the config
 // directory. The frontend Log bound method writes through this logger, which is
-// the Wails counterpart to Tauri's log plugin.
-func configureLogging(options *application.Options, configPath string) func() {
+// the Wails counterpart to Tauri's log plugin. The file is written before the
+// optional stderr sink because Windows GUI builds have no console.
+func configureLogging(options *application.Options, configPath string, stderr io.Writer) func() {
 	path := logFilePath(configPath)
 	if path == "" {
 		log.Printf("modkeeper: no log file path available; logging to stderr only")
@@ -33,10 +72,14 @@ func configureLogging(options *application.Options, configPath string) func() {
 		log.Printf("modkeeper: cannot open log file %s: %v", path, err)
 		return func() {}
 	}
-	options.Logger = slog.New(slog.NewTextHandler(
-		io.MultiWriter(os.Stderr, file),
+	sinks := []io.Writer{bestEffortWriter{writer: file}}
+	if stderr != nil {
+		sinks = append(sinks, bestEffortWriter{writer: stderr})
+	}
+	options.Logger = slog.New(dropAssetServerNoise{next: slog.NewTextHandler(
+		io.MultiWriter(sinks...),
 		&slog.HandlerOptions{Level: slog.LevelInfo},
-	))
+	)})
 	return func() { _ = file.Close() }
 }
 
@@ -66,7 +109,7 @@ func main() {
 		})
 	}
 	options := appOptions(appBackend)
-	closeLog := configureLogging(&options, appBackend.ConfigPath)
+	closeLog := configureLogging(&options, appBackend.ConfigPath, os.Stderr)
 	defer closeLog()
 	if smoke {
 		application.RegisterEvent[string]("native-smoke-event")

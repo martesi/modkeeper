@@ -13,6 +13,6 @@ func (a *App) Log(message string) error {
 	if app == nil || app.Logger == nil {
 		return models.Fail(models.Unexpected, "application logger is unavailable")
 	}
-	app.Logger.Info(message)
+	app.Logger.With("source", "frontend").Info(message)
 	return nil
 }
