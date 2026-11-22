@@ -360,7 +360,7 @@ func TestCrashAfterCommittedMarkerKeepsUpgradeOnTwoRestarts(t *testing.T) {
 		if err := restarted.Start(); err != nil {
 			t.Fatal(err)
 		}
-		workspace := restarted.Workspace()
+		workspace := mustWorkspace(t, restarted)
 		if workspace.ConfigWarning != nil {
 			t.Fatalf("restart %d warning=%q", restart, *workspace.ConfigWarning)
 		}

@@ -579,7 +579,7 @@ func TestTestAssemblyUnreadableManifestIsPathOnlyStub(t *testing.T) {
 	root := filepath.Join(env.GameRoot, "broken")
 	_ = os.MkdirAll(root, 0700)
 	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: "broken", LibraryRoot: root})
-	w := s.Workspace()
+	w := mustWorkspace(t, s)
 	if len(w.Libraries) != 1 || w.Libraries[0].Stub == nil || w.Libraries[0].Summary != nil {
 		t.Fatalf("workspace: %+v", w.Libraries)
 	}
@@ -592,7 +592,7 @@ func TestTestAssemblyReportsModsAndDeployStale(t *testing.T) {
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
-	w := s.Workspace()
+	w := mustWorkspace(t, s)
 	if len(w.Libraries) != 1 {
 		t.Fatalf("libraries: %d", len(w.Libraries))
 	}

@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
@@ -338,6 +337,7 @@ type Service struct {
 	Registry       *registry.TaskRegistry
 	active         *Library
 	warning        *string
+	warningMu      sync.Mutex
 	sendProgress   func(models.TaskProgressEvent) error
 	sendWorkspace  func(models.WorkspaceEvent) error
 	tasks          sync.WaitGroup
@@ -405,23 +405,23 @@ func (s *Service) Start() error {
 	if id := s.Store.Config.AppState.ActiveLibraryID; id != nil {
 		if k := s.Store.Config.FindLibrary(*id); k != nil {
 			go func() {
-				e := func() error {
-					s.libraryMu.Lock()
-					defer s.libraryMu.Unlock()
-					l, err := Load(k.LibraryRoot)
-					if err == nil {
-						err = recoverInterruptedInstall(l)
-					}
-					if err == nil {
-						s.active = l
-						s.warning = nil
-						s.Registry.SetActive(l.manifest.ID, true)
-					} else {
-						s.warning = strPtr(err.Error())
-					}
-					return err
-				}()
-				s.Registry.FinishStartupLoad(e)
+				defer s.Registry.FinishStartupLoad(nil)
+				s.libraryMu.Lock()
+				defer s.libraryMu.Unlock()
+				l, err := Load(k.LibraryRoot)
+				if err != nil {
+					// Rust clears the active id on a load failure so the next
+					// launch does not repeat it, and persists the cleared config.
+					s.clearActiveLibrarySelection(err)
+					return
+				}
+				if recoveryErr := recoverInterruptedInstall(l); recoveryErr != nil {
+					s.setWarning(recoveryErr.Error())
+					return
+				}
+				s.active = l
+				s.clearWarning()
+				s.Registry.SetActive(l.manifest.ID, true)
 			}()
 			return nil
 		}
@@ -429,6 +429,41 @@ func (s *Service) Start() error {
 	s.Registry.FinishStartupLoad(nil)
 	return nil
 }
+
+// clearActiveLibrarySelection deselects the library whose load failed and
+// persists the cleared config. A save failure is reported once through the
+// workspace warning, matching Rust's startup path.
+func (s *Service) clearActiveLibrarySelection(cause error) {
+	s.Store.Config.AppState.ActiveLibraryID = nil
+	s.active = nil
+	s.Registry.SetActive("", false)
+	s.setWarning(cause.Error())
+	if err := s.Store.Save(); err != nil {
+		s.setWarning(err.Error())
+	}
+}
+
+func (s *Service) setWarning(message string) {
+	s.warningMu.Lock()
+	s.warning = strPtr(message)
+	s.warningMu.Unlock()
+}
+
+func (s *Service) clearWarning() {
+	s.warningMu.Lock()
+	s.warning = nil
+	s.warningMu.Unlock()
+}
+
+// takeWarning consumes the pending warning; the first workspace carries it.
+func (s *Service) takeWarning() *string {
+	s.warningMu.Lock()
+	defer s.warningMu.Unlock()
+	warning := s.warning
+	s.warning = nil
+	return warning
+}
+
 func strPtr(s string) *string { return &s }
 func (s *Service) tryBeginLibraryTransition() error {
 	if !s.libraryMu.TryLock() {
@@ -437,48 +472,6 @@ func (s *Service) tryBeginLibraryTransition() error {
 	return nil
 }
 
-func (s *Service) Workspace() *models.LibraryWorkspace {
-	s.startupMu.Lock()
-	startupStarted := s.startupStarted
-	s.startupMu.Unlock()
-	if startupStarted {
-		ctx, cancel := context.WithTimeout(context.Background(), 9*time.Second)
-		_ = s.Registry.WaitForStartupLoad(ctx)
-		timedOut := ctx.Err() != nil
-		cancel()
-		if timedOut {
-			return &models.LibraryWorkspace{
-				ActiveLibraryID:  s.Store.Config.AppState.ActiveLibraryID,
-				Libraries:        []models.LibraryEntry{},
-				ModsByLibraryID:  map[string][]models.ModSummary{},
-				ToolsByLibraryID: map[string][]models.ToolSummary{},
-				Settings:         s.Store.Config.Settings,
-				ConfigWarning:    strPtr("Initial library recovery did not finish. Preserve the library and backups, then retry after checking the library files."),
-			}
-		}
-	}
-	s.libraryMu.RLock()
-	defer s.libraryMu.RUnlock()
-	w := &models.LibraryWorkspace{ActiveLibraryID: s.Store.Config.AppState.ActiveLibraryID, Libraries: []models.LibraryEntry{}, ModsByLibraryID: map[string][]models.ModSummary{}, ToolsByLibraryID: map[string][]models.ToolSummary{}, Settings: s.Store.Config.Settings, ConfigWarning: s.warning}
-	for _, k := range s.Store.Config.KnownLibraries {
-		m, _, mods, _, _, e := layout(k.LibraryRoot)
-		if e != nil {
-			w.Libraries = append(w.Libraries, models.StubEntry(k.LibraryRoot))
-			continue
-		}
-		game := resolveGameRoot(k.LibraryRoot, m.GameRoot)
-		stamp := time.Now().UTC().Format(time.RFC3339)
-		w.Libraries = append(w.Libraries, models.SummaryEntry(models.LibrarySummary{ID: k.ID, Name: m.Name, GameRoot: game, LibraryRoot: k.LibraryRoot, SPTVersion: &m.SPTVersion, CacheStatus: models.CacheStatus{State: models.CacheStateReady}, DeployStale: m.IsDirty, UpdatedAt: stamp}))
-		rows := []models.ModSummary{}
-		for _, v := range m.Mods {
-			installed := filepath.Join(mods, v.ID)
-			rows = append(rows, models.ModSummary{ID: v.ID, LibraryID: k.ID, Name: v.Name, Type: v.Type, IsEnabled: v.Enabled, InstalledPath: &installed, Source: &v.Source, UpdatedAt: stamp})
-		}
-		w.ModsByLibraryID[k.ID] = rows
-		w.ToolsByLibraryID[k.ID] = []models.ToolSummary{}
-	}
-	return w
-}
 func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	if err := s.tryBeginLibraryTransition(); err != nil {
 		return err
@@ -508,7 +501,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				if loadErr == nil {
 					l := existing
 					if err := recoverInterruptedInstall(l); err != nil {
-						s.warning = strPtr(err.Error())
+						s.setWarning(err.Error())
 						return err
 					}
 					prev := s.Store.Config
@@ -519,7 +512,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						return err
 					}
 					s.active = l
-					s.warning = nil
+					s.clearWarning()
 					s.Registry.SetActive(l.manifest.ID, true)
 					return nil
 				}
@@ -555,7 +548,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 			}
 			l := existing
 			if err := recoverInterruptedInstall(l); err != nil {
-				s.warning = strPtr(err.Error())
+				s.setWarning(err.Error())
 				return err
 			}
 			prev := s.Store.Config
@@ -566,7 +559,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				return err
 			}
 			s.active = l
-			s.warning = nil
+			s.clearWarning()
 			s.Registry.SetActive(l.manifest.ID, true)
 			return nil
 		}
@@ -586,7 +579,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 		return e
 	}
 	s.active = l
-	s.warning = nil
+	s.clearWarning()
 	s.Registry.SetActive(l.manifest.ID, true)
 	return nil
 }
@@ -604,7 +597,7 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	if e = recoverInterruptedInstall(l); e != nil {
-		s.warning = strPtr(e.Error())
+		s.setWarning(e.Error())
 		return e
 	}
 	prev := s.Store.Config
@@ -614,7 +607,7 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	s.active = l
-	s.warning = nil
+	s.clearWarning()
 	s.Registry.SetActive(id, true)
 	return nil
 }

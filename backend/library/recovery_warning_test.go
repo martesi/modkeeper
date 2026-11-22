@@ -45,12 +45,15 @@ func TestStartupAndActivationWarnOnInvalidInstallMarkers(t *testing.T) {
 				if err := restarted.Start(); err != nil {
 					t.Fatal(err)
 				}
-				workspace := restarted.Workspace()
+				workspace := mustWorkspace(t, restarted)
 				if workspace.ConfigWarning == nil ||
 					!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
 					t.Fatalf("immediate workspace warning=%v; want startup recovery guidance", workspace.ConfigWarning)
 				}
-				assertRecoveryWarning(t, restarted, markerPath, marker.content)
+				assertRecoveryState(t, markerPath, marker.content)
+				if consumed := mustWorkspace(t, restarted); consumed.ConfigWarning != nil {
+					t.Fatalf("second workspace warning=%q; want it consumed", *consumed.ConfigWarning)
+				}
 			})
 
 			t.Run("activation", func(t *testing.T) {
@@ -151,7 +154,7 @@ func TestCommittedRecoveryPreservesSnapshotWhenDestinationIsUnavailable(t *testi
 				if err := restarted.Start(); err != nil {
 					t.Fatal(err)
 				}
-				workspace := restarted.Workspace()
+				workspace := mustWorkspace(t, restarted)
 				if workspace.ConfigWarning == nil ||
 					!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
 					t.Fatalf("restart %d warning=%v; want repair guidance", restart, workspace.ConfigWarning)
@@ -204,11 +207,19 @@ func seedInvalidRecoveryState(t *testing.T, l *Library, markerPath, marker strin
 
 func assertRecoveryWarning(t *testing.T, service *Service, markerPath, marker string) {
 	t.Helper()
-	workspace := service.Workspace()
+	workspace := mustWorkspace(t, service)
 	if workspace.ConfigWarning == nil ||
 		!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
 		t.Fatalf("workspace warning=%v; want actionable recovery guidance", workspace.ConfigWarning)
 	}
+	if consumed := mustWorkspace(t, service); consumed.ConfigWarning != nil {
+		t.Fatalf("second workspace warning=%q; want it consumed", *consumed.ConfigWarning)
+	}
+	assertRecoveryState(t, markerPath, marker)
+}
+
+func assertRecoveryState(t *testing.T, markerPath, marker string) {
+	t.Helper()
 	if got, err := os.ReadFile(markerPath); err != nil || string(got) != marker {
 		t.Fatalf("marker changed during failed recovery: %q %v", got, err)
 	}

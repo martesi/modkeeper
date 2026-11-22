@@ -30,6 +30,8 @@ type TaskRegistry struct {
 	startupOnce sync.Once
 }
 
+const startupLoadTimeout = 10 * time.Second
+
 type taskEntry struct {
 	libraryID   string
 	cancel      context.CancelFunc
@@ -125,7 +127,7 @@ func (r *TaskRegistry) FinishStartupLoad(err error) {
 }
 
 func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(startupLoadTimeout)
 	defer timer.Stop()
 	select {
 	case <-r.startup:
@@ -133,7 +135,7 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return fmt.Errorf("initial library load timed out")
+		return fmt.Errorf("Initial library load timed out after %s", startupLoadTimeout)
 	}
 }
 

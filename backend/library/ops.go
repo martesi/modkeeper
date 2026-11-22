@@ -135,6 +135,21 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 	return s.active.Persist()
 }
 
+// sendWorkspaceSnapshot attaches the current workspace to a completion event.
+// A workspace assembly failure (startup handshake not finished) skips the event
+// instead of publishing an empty state.
+func (s *Service) sendWorkspaceSnapshot(event models.WorkspaceEvent) {
+	if s.sendWorkspace == nil {
+		return
+	}
+	workspace, err := s.Workspace()
+	if err != nil {
+		return
+	}
+	event.Workspace = *workspace
+	_ = s.sendWorkspace(event)
+}
+
 func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progress func(models.TaskProgressEvent) error) (*models.OperationAccepted, error) {
 	if progress != nil {
 		s.sendProgress = progress
@@ -162,7 +177,7 @@ func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progre
 		rebuilt := time.Now().UTC().Format(time.RFC3339)
 		status := &models.CacheStatus{State: models.CacheStateReady, LastRebuiltAt: &rebuilt}
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Workspace: *s.Workspace(), CacheStatus: status})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, CacheStatus: status})
 		}
 		return nil
 	}), nil
@@ -318,7 +333,7 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		}
 		e.Completed(task_progress.ArchiveOutcome(len(failures), len(in.ArchivePaths)))
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 		}
 		return nil
 	}), nil
@@ -328,7 +343,7 @@ func (s *Service) finishCancelled(e *task_progress.Emitter, in models.InstallMod
 	s.active.manifest.Mods = mods
 	e.Cancelled()
 	if s.sendWorkspace != nil {
-		_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: []models.ArchiveFailure{}, Workspace: *s.Workspace()})
+		s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: []models.ArchiveFailure{}})
 	}
 }
 
@@ -372,7 +387,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 				e.Completed(task_progress.Failure)
 			}
 			if s.sendWorkspace != nil {
-				_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+				s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 			}
 			return err
 		}
@@ -388,7 +403,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			e.Completed(task_progress.Success)
 		}
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 		}
 		return nil
 	}), nil
