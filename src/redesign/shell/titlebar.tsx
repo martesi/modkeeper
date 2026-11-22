@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAtom } from 'jotai'
 import {
   closeWindow,
+  hasNativeWindowChrome,
   isWindowMaximized,
   minimizeWindow,
   onWindowResize,
@@ -41,6 +42,7 @@ import {
   setTitlebarSearchQuery,
 } from './titlebar-search'
 import { TitleBarDragRegion } from './titlebar-drag'
+import { showWindowControls } from './titlebar-chrome'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -76,7 +78,9 @@ export function TitleBar() {
   const isMacOS =
     navigator.userAgent.includes('Macintosh') ||
     navigator.userAgent.includes('Mac OS X')
-  const showCaptionButtons = platformKind() !== 'browser' && !isMacOS
+  const nativeWindowChrome = hasNativeWindowChrome()
+  const showCaptionButtons = showWindowControls(isMacOS)
+  const macNativeChrome = isMacOS && nativeWindowChrome
 
   // The titlebar entry opens the same centered palette at every width. Ctrl+F
   // remains available for the former wide-field and narrow collapsed-field paths.
@@ -99,7 +103,7 @@ export function TitleBar() {
   }, [pathname, searchEnabled])
 
   useEffect(() => {
-    if (platformKind() === 'browser') return
+    if (!nativeWindowChrome) return
     if (isMacOS) {
       handleWindowOperation(setWindowChrome('overlay'))
       return
@@ -135,7 +139,7 @@ export function TitleBar() {
       disposed = true
       unlistenResize?.()
     }
-  }, [isMacOS])
+  }, [isMacOS, nativeWindowChrome])
 
   return (
     <Dialog
@@ -143,14 +147,16 @@ export function TitleBar() {
       onOpenChange={(open) => setPaletteOpenPath(open ? pathname : null)}
     >
       <header
-        data-macos={isMacOS ? 'true' : undefined}
+        data-macos={macNativeChrome ? 'true' : undefined}
         data-caption={showCaptionButtons ? 'true' : undefined}
         className="mk-titlebar relative z-20 flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/25"
       >
-        <TitleBarDragRegion platform={platformKind()} />
+        <TitleBarDragRegion
+          platform={nativeWindowChrome ? platformKind() : 'browser'}
+        />
 
         <div
-          className={`relative z-10 flex h-11 items-center gap-2 pointer-events-none ${isMacOS ? 'pl-[76px]' : 'pl-2'}`}
+          className={`relative z-10 flex h-11 items-center gap-2 pointer-events-none ${macNativeChrome ? 'pl-[76px]' : 'pl-2'}`}
         >
           <NavigationToggle
             expanded={effectiveNavigationExpanded}

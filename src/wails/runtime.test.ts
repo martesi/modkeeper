@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { hasNativeRuntime, isWails, wailsWindow } from './runtime'
+import {
+  hasNativeRuntime,
+  isWails,
+  isWailsDesktop,
+  wailsWindow,
+} from './runtime'
 
 const originalWindow = globalThis.window
 
@@ -13,6 +18,7 @@ describe('Wails runtime detection', () => {
     // @ts-expect-error Test supplies a minimal window stub.
     globalThis.window = {}
     expect(isWails()).toBe(false)
+    expect(isWailsDesktop()).toBe(false)
     expect(hasNativeRuntime()).toBe(false)
   })
 
@@ -27,7 +33,14 @@ describe('Wails runtime detection', () => {
     // @ts-expect-error Test supplies a minimal window stub.
     globalThis.window = { _wails: { environment: { OS: 'linux' } } }
     expect(isWails()).toBe(true)
+    expect(isWailsDesktop()).toBe(true)
     expect(hasNativeRuntime()).toBe(true)
+  })
+
+  test('does not treat a server page as a desktop Wails window', () => {
+    // @ts-expect-error Test supplies a minimal window stub.
+    globalThis.window = { _wails: {} }
+    expect(isWailsDesktop()).toBe(false)
   })
 
   test('returns the window only when available', () => {

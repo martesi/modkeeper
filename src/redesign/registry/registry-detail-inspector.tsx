@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { openUrl, platformKind } from '@/platform'
+import { hasNativeWindowChrome, openUrl } from '@/platform'
 import semver from 'semver'
 import type { ForgeDetail, ForgeVersionsPage } from '@gen/bindings'
 import {
@@ -252,8 +252,10 @@ export function RegistryDetailInspector({
 
   async function handleOpenExternal(url: string | null | undefined) {
     if (!url) return
-    if (platformKind() === 'browser') {
-      window.open(url, '_blank')
+    // A server or browser page opens the link in the user's local tab. Asking
+    // the server host to open it would target a desktop nobody is looking at.
+    if (!hasNativeWindowChrome()) {
+      window.open(url, '_blank', 'noopener,noreferrer')
       return
     }
     try {

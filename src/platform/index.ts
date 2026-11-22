@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { hasNativeRuntime, isWails, wailsWindow } from '@/wails/runtime'
+import {
+  hasNativeRuntime,
+  isWails,
+  isWailsDesktop,
+  wailsWindow,
+} from '@/wails/runtime'
 
 export type PlatformKind = 'wails' | 'tauri' | 'browser'
 export type FileSelectionOptions = {
@@ -20,6 +25,29 @@ export function platformKind(): PlatformKind {
   if (isWails()) return 'wails'
   if (hasNativeRuntime() && !wailsWindow()?.__MK_WAILS_MOCK__) return 'tauri'
   return 'browser'
+}
+
+/**
+ * A desktop shell owns native file dialogs. The Wails server build compiles the
+ * same frontend as the native app, but it serves a browser page without the
+ * desktop environment marker, so it has no native dialogs either.
+ */
+export function hasNativeFilePicker(): boolean {
+  return hasNativeDesktopShell()
+}
+
+/** Minimize, maximize and close need a native window to act on. */
+export function hasNativeWindowChrome(): boolean {
+  return hasNativeDesktopShell()
+}
+
+/** Revealing a path hands it to the OS file manager on the desktop host. */
+export function canOpenPath(): boolean {
+  return hasNativeDesktopShell()
+}
+
+function hasNativeDesktopShell(): boolean {
+  return platformKind() === 'tauri' || isWailsDesktop()
 }
 
 function tauriDialogOptions(options: FileSelectionOptions) {
@@ -88,10 +116,12 @@ export async function pickDirectory(
 }
 
 export async function openUrl(url: string): Promise<void> {
-  if (platformKind() === 'wails')
+  if (platformKind() === 'wails' && isWailsDesktop())
     return (await import('@wailsio/runtime')).Browser.OpenURL(url)
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-opener')).openUrl(url)
+  // Server and browser pages have no desktop host to open the URL, so use the
+  // local tab instead of asking the server to open it.
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 

@@ -19,6 +19,19 @@ export function isWails(): boolean {
   return Boolean(wailsWindow()?._wails?.environment)
 }
 
+/**
+ * A native Wails window injects `_wails.environment`. The server build also
+ * compiles the frontend with `WAILS_APP=true`, so `isWails()` is true there, but
+ * it serves a plain browser page and never injects that environment object.
+ *
+ * `@wailsio/runtime` exports `Flags.GetFlag`, but it reads `window._wails.flags`,
+ * which the server page does not receive. The environment marker is the reliable
+ * desktop signal.
+ */
+export function isWailsDesktop(): boolean {
+  return Boolean(wailsWindow()?._wails?.environment)
+}
+
 export function hasNativeRuntime(): boolean {
   const target = wailsWindow()
   return Boolean(target?.__TAURI__ || target?.__MK_WAILS_MOCK__ || isWails())

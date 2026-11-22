@@ -192,6 +192,21 @@ export const libraryText = {
       id: 'library.empty.dropBrowse',
       message: 'or click to browse local files',
     }),
+  pathEntryTitle: () =>
+    t({
+      id: 'library.empty.pathEntryTitle',
+      message: 'Add mod archives to this library',
+    }),
+  pathEntryAction: () =>
+    t({
+      id: 'library.empty.pathEntryAction',
+      message: 'Enter archive paths',
+    }),
+  pathEntryServerAction: () =>
+    t({
+      id: 'library.empty.pathEntryServerAction',
+      message: 'Enter archive paths on the server host',
+    }),
   dropSupported: () =>
     t({ id: 'library.empty.dropSupported', message: 'SUPPORTED: .zip, .7z' }),
   manageLibraries: () =>

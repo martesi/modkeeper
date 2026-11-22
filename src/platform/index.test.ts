@@ -93,9 +93,15 @@ const platform = await import('./index')
 const originalWindow = globalThis.window
 const originalOpen = originalWindow?.open
 const originalInfo = console.info
+const originalWailsFlag = import.meta.env.WAILS
 function setWindow(value: Record<string, unknown>) {
   // @ts-expect-error Tests install minimal runtime markers.
   globalThis.window = value
+}
+function setWailsBuildFlag(value: string | undefined) {
+  const env = import.meta.env as Record<string, string | undefined>
+  if (value === undefined) delete env.WAILS
+  else env.WAILS = value
 }
 afterEach(() => {
   calls.length = 0
@@ -105,6 +111,7 @@ afterEach(() => {
   globalThis.window = originalWindow
   if (globalThis.window) window.open = originalOpen
   console.info = originalInfo
+  setWailsBuildFlag(originalWailsFlag)
 })
 
 describe('platform capability dispatch', () => {
@@ -115,6 +122,39 @@ describe('platform capability dispatch', () => {
     expect(platform.platformKind()).toBe('tauri')
     setWindow({})
     expect(platform.platformKind()).toBe('browser')
+  })
+
+  test('reports native capabilities only for desktop shells', () => {
+    // Desktop Wails injects the environment marker.
+    setWailsBuildFlag('true')
+    setWindow({ _wails: { environment: { OS: 'linux' } } })
+    expect(platform.platformKind()).toBe('wails')
+    expect(platform.hasNativeFilePicker()).toBe(true)
+    expect(platform.hasNativeWindowChrome()).toBe(true)
+    expect(platform.canOpenPath()).toBe(true)
+
+    // The server build compiles with WAILS_APP=true but serves a plain page
+    // with no environment marker.
+    setWindow({ _wails: {} })
+    expect(platform.platformKind()).toBe('wails')
+    expect(platform.hasNativeFilePicker()).toBe(false)
+    expect(platform.hasNativeWindowChrome()).toBe(false)
+    expect(platform.canOpenPath()).toBe(false)
+
+    // A plain browser build has no native runtime at all.
+    setWailsBuildFlag('false')
+    setWindow({})
+    expect(platform.platformKind()).toBe('browser')
+    expect(platform.hasNativeFilePicker()).toBe(false)
+    expect(platform.hasNativeWindowChrome()).toBe(false)
+    expect(platform.canOpenPath()).toBe(false)
+
+    // Tauri is a desktop shell too.
+    setWindow({ __TAURI__: {} })
+    expect(platform.platformKind()).toBe('tauri')
+    expect(platform.hasNativeFilePicker()).toBe(true)
+    expect(platform.hasNativeWindowChrome()).toBe(true)
+    expect(platform.canOpenPath()).toBe(true)
   })
 
   test('dispatches file pickers to Tauri and Wails', async () => {
@@ -162,6 +202,20 @@ describe('platform capability dispatch', () => {
       'wails-close',
     ])
     expect(calls).toContainEqual(['wails-call', expect.any(Number), '/tmp/x'])
+  })
+
+  test('opens server and browser URLs in a local tab', async () => {
+    setWailsBuildFlag('true')
+    setWindow({ _wails: {} })
+    const open = mock(() => null)
+    window.open = open
+    await platform.openUrl('https://example.test')
+    expect(open).toHaveBeenCalledWith(
+      'https://example.test',
+      '_blank',
+      'noopener,noreferrer',
+    )
+    expect(calls).toEqual([])
   })
 
   test('selects the Wails window chrome for each titlebar style', async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import {
   closeTitlebarPaletteOnEscape,
   focusTitlebarPaletteInput,
@@ -6,6 +6,49 @@ import {
   openTitlebarPaletteForShortcut,
   setTitlebarSearchQuery,
 } from './titlebar-search'
+import { showWindowControls } from './titlebar-chrome'
+
+const originalWindow = globalThis.window
+const originalWailsFlag = import.meta.env.WAILS
+
+function setWindow(value: Record<string, unknown>) {
+  // @ts-expect-error Tests install minimal runtime markers.
+  globalThis.window = value
+}
+
+function setWailsBuildFlag(value: string | undefined) {
+  const env = import.meta.env as Record<string, string | undefined>
+  if (value === undefined) delete env.WAILS
+  else env.WAILS = value
+}
+
+afterEach(() => {
+  globalThis.window = originalWindow
+  setWailsBuildFlag(originalWailsFlag)
+})
+
+describe('titlebar window controls', () => {
+  test('are absent without native window chrome', () => {
+    setWailsBuildFlag('true')
+    setWindow({ _wails: {} })
+    expect(showWindowControls(false)).toBe(false)
+
+    setWailsBuildFlag('false')
+    setWindow({})
+    expect(showWindowControls(false)).toBe(false)
+  })
+
+  test('render for non-macOS desktop shells only', () => {
+    setWailsBuildFlag('true')
+    setWindow({ _wails: { environment: { OS: 'linux' } } })
+    expect(showWindowControls(false)).toBe(true)
+    expect(showWindowControls(true)).toBe(false)
+
+    setWailsBuildFlag('false')
+    setWindow({ __TAURI__: {} })
+    expect(showWindowControls(false)).toBe(true)
+  })
+})
 
 describe('titlebar command palette', () => {
   test('opens with Ctrl+K and Ctrl+F only when search is available', () => {

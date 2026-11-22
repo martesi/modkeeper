@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { pickDirectory, platformKind } from '@/platform'
+import { canOpenPath, pickDirectory } from '@/platform'
 import { toast } from 'sonner'
 import { Copy, FolderOpen, Plus, RefreshCw, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,6 +33,9 @@ import type {
   LibrarySummary,
 } from '../../data/redesign-types'
 import { openGameRoot, openLibraryRoot } from '../../shared/utils/app-opener'
+import { pickWithNativeOrPathEntry } from '../../shared/utils/picker-gate'
+import { runPickerAction } from '../../shared/utils/picker-errors'
+import { commonText } from '../../i18n/common-text'
 import { libraryText } from '../../i18n/library-text'
 import { DeleteLibraryConfirmDialog } from './delete-library-confirm-dialog'
 import { usePathInputDialog } from '../../shared/hooks/use-path-input-dialog'
@@ -67,18 +70,19 @@ export function ManageLibraryDialog({
     null
 
   async function handleAddLibrary() {
-    const gameRoot =
-      platformKind() === 'browser'
-        ? ((
-            await requestPathInput({
-              mode: 'single',
-              title: libraryText.gameRootPathTitle(),
-              description: libraryText.gameRootPathDescription(),
-              label: libraryText.gameRootPathLabel(),
-              placeholder: libraryText.gameRootPathPlaceholder(),
-            })
-          )?.[0] ?? null)
-        : await pickDirectory({ title: libraryText.selectGameRoot() })
+    const gameRoot = await pickWithNativeOrPathEntry<string | null>(
+      () => pickDirectory({ title: libraryText.selectGameRoot() }),
+      async () =>
+        (
+          await requestPathInput({
+            mode: 'single',
+            title: libraryText.gameRootPathTitle(),
+            description: libraryText.gameRootPathDescription(),
+            label: libraryText.gameRootPathLabel(),
+            placeholder: libraryText.gameRootPathPlaceholder(),
+          })
+        )?.[0] ?? null,
+    )
     if (!gameRoot) return
     const outcome = await createLibrary({ gameRoot })
     if (outcome.status !== 'success') return
@@ -129,7 +133,12 @@ export function ManageLibraryDialog({
             })}
             <button
               type="button"
-              onClick={() => void handleAddLibrary()}
+              onClick={() =>
+                void runPickerAction(handleAddLibrary, {
+                  message: commonText.somethingWentWrong(),
+                  context: 'add library action',
+                })
+              }
               aria-label={libraryText.addLibraryTab()}
               title={libraryText.addLibraryTab()}
               className={cn(
@@ -325,16 +334,18 @@ function PathRow({
       >
         <Copy />
       </FidelityIconButton>
-      <FidelityIconButton
-        size="sm"
-        variant="secondary"
-        className="bg-transparent"
-        aria-label={libraryText.openInExplorer()}
-        title={libraryText.openInExplorer()}
-        onClick={onOpen}
-      >
-        <FolderOpen />
-      </FidelityIconButton>
+      {canOpenPath() && (
+        <FidelityIconButton
+          size="sm"
+          variant="secondary"
+          className="bg-transparent"
+          aria-label={libraryText.openInExplorer()}
+          title={libraryText.openInExplorer()}
+          onClick={onOpen}
+        >
+          <FolderOpen />
+        </FidelityIconButton>
+      )}
     </div>
   )
 }
