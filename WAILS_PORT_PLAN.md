@@ -317,6 +317,11 @@ installation remains opt-in; the server build has no user desktop, so `OpenPath`
 error there. Wails applies the Windows backdrop when it creates the window, so later theme changes
 do not re-apply it.
 
+Known follow-up (not fixed): `sendWorkspaceSnapshot` in `backend/library/ops.go` calls
+`Workspace()`, which takes `libraryMu.RLock` while the task goroutine already holds that read lock.
+Go's `RWMutex` is not reentrant, so a queued writer can deadlock a task-completion event. Assemble
+the snapshot outside the task's read lock, or pass it in, rather than adding a recursive lock.
+
 macOS backdrop decision: the macOS backdrop/translucency is intentionally omitted and the window
 keeps a solid background. Wails v3.1.0 needs `-tags private_mac_apis` for webview transparency
 (`mac_public_api_darwin.go` makes the transparency call a no-op without it), no build path passes

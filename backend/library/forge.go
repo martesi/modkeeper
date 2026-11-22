@@ -92,10 +92,6 @@ func forgeWireError(err error) models.Error {
 	if errors.As(err, &coded) {
 		return *coded
 	}
-	var forgeErr *forge.Error
-	if errors.As(err, &forgeErr) {
-		return models.Error{Code: forgeErr.Code, Data: forgeErr.Data}
-	}
 	return models.Error{Code: models.Unexpected, Data: err.Error()}
 }
 
