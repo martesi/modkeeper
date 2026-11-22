@@ -1,25 +1,26 @@
 package library
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
 	"github.com/martes/modkeeper/backend/models"
+	"github.com/martes/modkeeper/backend/registry"
 	"github.com/martes/modkeeper/backend/store"
 )
 
 func mustWorkspace(t *testing.T, s *Service) *models.LibraryWorkspace {
 	t.Helper()
-	workspace, err := s.Workspace()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return workspace
+	return s.Workspace()
 }
 
 func findWorkspaceSummary(t *testing.T, w *models.LibraryWorkspace, id string) *models.LibrarySummary {
@@ -42,6 +43,48 @@ func findWorkspaceMod(t *testing.T, w *models.LibraryWorkspace, libraryID, modID
 	}
 	t.Fatalf("mod %q missing from library %q: %+v", modID, libraryID, w.ModsByLibraryID[libraryID])
 	return nil
+}
+
+// addInactiveLibrary registers a library without activating it, so workspace
+// assembly reads its files instead of the in-memory active instance.
+func addInactiveLibrary(t *testing.T, s *Service, gameRoot, root string) *Library {
+	t.Helper()
+	l, err := Create(gameRoot, root, filepath.Base(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
+	if err := s.Store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+func rewriteTOML(t *testing.T, path string, mutate func(map[string]any)) {
+	t.Helper()
+	var raw map[string]any
+	if _, err := toml.DecodeFile(path, &raw); err != nil {
+		t.Fatal(err)
+	}
+	mutate(raw)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := toml.NewEncoder(f).Encode(raw); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertStub(t *testing.T, w *models.LibraryWorkspace, path string) {
+	t.Helper()
+	if len(w.Libraries) != 1 || w.Libraries[0].Stub == nil || w.Libraries[0].Stub.Path != path {
+		t.Fatalf("library entry = %+v; want a stub for %s", w.Libraries, path)
+	}
 }
 
 // Rust fills the mod summary from the manifest plus the installed tree
@@ -132,6 +175,32 @@ func TestTestWorkspaceModSummaryMirrorsManifestAndFileMetadata(t *testing.T) {
 		t.Fatalf("local mod gained forge identity: %+v", fallback)
 	}
 
+	// The wire contract, not just the Go structs, carries these fields.
+	encoded, err := json.Marshal(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Libraries       []map[string]any            `json:"libraries"`
+		ModsByLibraryID map[string][]map[string]any `json:"modsByLibraryId"`
+	}
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	cache, ok := wire.Libraries[0]["cacheStatus"].(map[string]any)
+	if !ok {
+		t.Fatalf("cacheStatus is not a JSON object: %s", encoded)
+	}
+	if _, ok := cache["lastRebuiltAt"]; !ok {
+		t.Fatalf("cacheStatus.lastRebuiltAt missing from wire: %s", encoded)
+	}
+	wireMod := wire.ModsByLibraryID[libraryID][0]
+	for _, field := range []string{"installedAt", "forgeVersionId", "forgeGuid", "version"} {
+		if _, ok := wireMod[field]; !ok {
+			t.Fatalf("%s missing from wire mod summary: %s", field, encoded)
+		}
+	}
+
 	// A poll with unchanged files must not churn timestamps.
 	second := mustWorkspace(t, s)
 	if !reflect.DeepEqual(workspace.ModsByLibraryID[libraryID], second.ModsByLibraryID[libraryID]) {
@@ -159,17 +228,9 @@ func TestTestWorkspaceCacheStatusMirrorsCacheFile(t *testing.T) {
 		t.Fatalf("active lastRebuiltAt = %v; want cache mtime %q", active.CacheStatus.LastRebuiltAt, activeCacheTime.Format(time.RFC3339))
 	}
 
-	otherRoot := filepath.Join(env.Root, "other-library")
-	other, err := Create(env.GameRoot, otherRoot, "Other")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: other.manifest.ID, LibraryRoot: otherRoot})
-	if err := s.Store.Save(); err != nil {
-		t.Fatal(err)
-	}
+	other := addInactiveLibrary(t, s, env.GameRoot, filepath.Join(env.Root, "other-library"))
 	otherCacheTime := time.Date(2025, 6, 7, 8, 9, 10, 0, time.UTC)
-	if err := os.Chtimes(filepath.Join(otherRoot, "cache.toml"), otherCacheTime, otherCacheTime); err != nil {
+	if err := os.Chtimes(filepath.Join(other.Root, "cache.toml"), otherCacheTime, otherCacheTime); err != nil {
 		t.Fatal(err)
 	}
 	valid := findWorkspaceSummary(t, mustWorkspace(t, s), other.manifest.ID)
@@ -179,7 +240,7 @@ func TestTestWorkspaceCacheStatusMirrorsCacheFile(t *testing.T) {
 		t.Fatalf("inactive cache status = %+v; want ready at %q", valid.CacheStatus, otherCacheTime.Format(time.RFC3339))
 	}
 
-	if err := os.WriteFile(filepath.Join(otherRoot, "cache.toml"), []byte("mods = ["), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(other.Root, "cache.toml"), []byte("mods = ["), 0600); err != nil {
 		t.Fatal(err)
 	}
 	failed := findWorkspaceSummary(t, mustWorkspace(t, s), other.manifest.ID)
@@ -203,29 +264,96 @@ func TestTestWorkspaceCacheStatusMirrorsCacheFile(t *testing.T) {
 	}
 }
 
-func TestTestWorkspaceReturnsConfigWarningOnce(t *testing.T) {
-	s, _ := newParityService(t)
-	s.setWarning("repair the library")
-	first := mustWorkspace(t, s)
-	if first.ConfigWarning == nil || *first.ConfigWarning != "repair the library" {
-		t.Fatalf("first configWarning = %v; want the pending warning", first.ConfigWarning)
+func TestTestWorkspaceCacheStatusRejectsCacheRustCannotRead(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{name: "empty", content: ""},
+		{name: "mod-entry-is-not-a-table", content: "mods = { a = 5 }\n"},
+		{name: "mod-entry-missing-fields", content: "mods = { a = { id = 'a' } }\n"},
 	}
-	second := mustWorkspace(t, s)
-	if second.ConfigWarning != nil {
-		t.Fatalf("second configWarning = %q; want it consumed", *second.ConfigWarning)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, env := newParityService(t)
+			l := addInactiveLibrary(t, s, env.GameRoot, filepath.Join(env.Root, "cache-library"))
+			if err := os.WriteFile(filepath.Join(l.Root, "cache.toml"), []byte(tc.content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			summary := findWorkspaceSummary(t, mustWorkspace(t, s), l.manifest.ID)
+			if summary.CacheStatus.State != models.CacheStateFailed {
+				t.Fatalf("cache state = %q; want failed for %q", summary.CacheStatus.State, tc.content)
+			}
+			if summary.CacheStatus.Message == nil || *summary.CacheStatus.Message == "" {
+				t.Fatal("failed cache status is missing its message")
+			}
+			if summary.CacheStatus.LastRebuiltAt != nil {
+				t.Fatalf("failed cache lastRebuiltAt = %q; want nil", *summary.CacheStatus.LastRebuiltAt)
+			}
+		})
 	}
 }
 
-func TestTestWorkspaceReturnsStartupLoadError(t *testing.T) {
+func TestTestWorkspaceStubsManifestWithoutIsDirty(t *testing.T) {
+	s, env := newParityService(t)
+	root := filepath.Join(env.Root, "strict-library")
+	l := addInactiveLibrary(t, s, env.GameRoot, root)
+	rewriteTOML(t, filepath.Join(root, "manifest.toml"), func(m map[string]any) {
+		delete(m, "isDirty")
+	})
+	assertStub(t, mustWorkspace(t, s), l.Root)
+}
+
+func TestTestWorkspaceStubsModWithoutType(t *testing.T) {
+	s, env := newParityService(t)
+	root := filepath.Join(env.Root, "strict-mod-library")
+	l := addInactiveLibrary(t, s, env.GameRoot, root)
+	l.manifest.Mods["mod-a"] = models.Mod{ID: "mod-a", Name: "Alpha", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	if err := l.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	rewriteTOML(t, filepath.Join(root, "manifest.toml"), func(m map[string]any) {
+		mods, ok := m["mods"].(map[string]any)
+		if !ok {
+			t.Fatal("mods table missing from fixture")
+		}
+		mod, ok := mods["mod-a"].(map[string]any)
+		if !ok {
+			t.Fatal("mod-a missing from fixture")
+		}
+		delete(mod, "type")
+	})
+	assertStub(t, mustWorkspace(t, s), l.Root)
+}
+
+// Workspace assembly never consumes the startup warning; only the
+// get_library_workspace command does.
+func TestTestWorkspaceDoesNotConsumeStartupWarning(t *testing.T) {
+	s, _ := newParityService(t)
+	s.setWarning("repair the library")
+	if warning := mustWorkspace(t, s).ConfigWarning; warning != nil {
+		t.Fatalf("workspace warning = %q; assembly must not attach the warning", *warning)
+	}
+	if warning := mustWorkspace(t, s).ConfigWarning; warning != nil {
+		t.Fatalf("second workspace warning = %q; assembly must not attach the warning", *warning)
+	}
+	first := s.TakeStartupWarning()
+	if first == nil || *first != "repair the library" {
+		t.Fatalf("take = %v; want the pending warning", first)
+	}
+	if second := s.TakeStartupWarning(); second != nil {
+		t.Fatalf("second take = %q; want it consumed", *second)
+	}
+}
+
+func TestTestWaitForInitialLoadReturnsStartupError(t *testing.T) {
 	s, _ := newParityService(t)
 	s.startupStarted = true
-	s.Registry.FinishStartupLoad(errors.New("Initial library load timed out after 10s"))
-	workspace, err := s.Workspace()
-	if workspace != nil {
-		t.Fatalf("workspace = %+v; want no synthetic workspace", workspace)
-	}
+	timeoutMessage := fmt.Sprintf("Initial library load timed out after %s", registry.StartupLoadTimeout)
+	s.Registry.FinishStartupLoad(errors.New(timeoutMessage))
+	err := s.WaitForInitialLoad()
 	var domain *models.Error
-	if !errors.As(err, &domain) || domain.Code != models.AsyncRuntimeError || domain.Data != "Initial library load timed out after 10s" {
+	if !errors.As(err, &domain) || domain.Code != models.AsyncRuntimeError || domain.Data != timeoutMessage {
 		t.Fatalf("startup error = %v; want AsyncRuntimeError with the Rust message", err)
 	}
 }
@@ -260,5 +388,44 @@ func TestTestStartupLoadFailureClearsPersistedActiveLibrary(t *testing.T) {
 	}
 	if persisted.AppState.ActiveLibraryID != nil {
 		t.Fatalf("persisted active library = %q; want cleared", *persisted.AppState.ActiveLibraryID)
+	}
+	// A plain load failure is logged by Rust, not handed to the frontend.
+	if warning := restarted.Workspace().ConfigWarning; warning != nil {
+		t.Fatalf("first workspace warning = %q; want none", *warning)
+	}
+	if warning := restarted.TakeStartupWarning(); warning != nil {
+		t.Fatalf("startup warning = %q; want none", *warning)
+	}
+}
+
+func TestTestStartupLoadFailureSurfacesOnlyTheSaveFailure(t *testing.T) {
+	s, env := newParityService(t)
+	l := createParityLibrary(t, s, env)
+	configPath := s.Store.Path
+	if err := os.Remove(filepath.Join(l.Root, "manifest.toml")); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Renaming onto an existing directory makes the cleared-config save fail.
+	blocked := filepath.Join(env.Root, "config-target")
+	if err := os.MkdirAll(blocked, 0700); err != nil {
+		t.Fatal(err)
+	}
+	restarted.Store.Path = blocked
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Registry.WaitForStartupLoad(t.Context()); err != nil {
+		t.Fatalf("startup load reported a task failure: %v", err)
+	}
+	if restarted.Store.Config.AppState.ActiveLibraryID != nil {
+		t.Fatal("in-memory active library was not cleared")
+	}
+	warning := restarted.TakeStartupWarning()
+	if warning == nil || !strings.Contains(*warning, "save config") {
+		t.Fatalf("startup warning = %v; want the config save failure", warning)
 	}
 }

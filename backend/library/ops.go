@@ -136,17 +136,11 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 }
 
 // sendWorkspaceSnapshot attaches the current workspace to a completion event.
-// A workspace assembly failure (startup handshake not finished) skips the event
-// instead of publishing an empty state.
 func (s *Service) sendWorkspaceSnapshot(event models.WorkspaceEvent) {
 	if s.sendWorkspace == nil {
 		return
 	}
-	workspace, err := s.Workspace()
-	if err != nil {
-		return
-	}
-	event.Workspace = *workspace
+	event.Workspace = *s.Workspace()
 	_ = s.sendWorkspace(event)
 }
 

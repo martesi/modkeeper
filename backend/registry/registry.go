@@ -30,7 +30,9 @@ type TaskRegistry struct {
 	startupOnce sync.Once
 }
 
-const startupLoadTimeout = 10 * time.Second
+// StartupLoadTimeout bounds the initial library handshake, matching Rust's
+// INITIAL_LIBRARY_LOAD_TIMEOUT.
+const StartupLoadTimeout = 10 * time.Second
 
 type taskEntry struct {
 	libraryID   string
@@ -127,7 +129,7 @@ func (r *TaskRegistry) FinishStartupLoad(err error) {
 }
 
 func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
-	timer := time.NewTimer(startupLoadTimeout)
+	timer := time.NewTimer(StartupLoadTimeout)
 	defer timer.Stop()
 	select {
 	case <-r.startup:
@@ -135,7 +137,7 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return fmt.Errorf("Initial library load timed out after %s", startupLoadTimeout)
+		return fmt.Errorf("Initial library load timed out after %s", StartupLoadTimeout)
 	}
 }
 

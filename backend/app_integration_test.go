@@ -644,6 +644,7 @@ func TestStartRecoversInterruptedInstallArtifacts(t *testing.T) {
 		ID         string                `toml:"id"`
 		Name       string                `toml:"name"`
 		GameRoot   string                `toml:"gameRoot"`
+		RepoRoot   string                `toml:"repoRoot"`
 		SPTVersion string                `toml:"sptVersion"`
 		Mods       map[string]models.Mod `toml:"mods"`
 		IsDirty    bool                  `toml:"isDirty"`

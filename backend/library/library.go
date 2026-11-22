@@ -26,6 +26,7 @@ type manifest struct {
 	ID         string                `toml:"id"`
 	Name       string                `toml:"name"`
 	GameRoot   string                `toml:"gameRoot"`
+	RepoRoot   string                `toml:"repoRoot"`
 	SPTVersion string                `toml:"sptVersion"`
 	Mods       map[string]models.Mod `toml:"mods"`
 	IsDirty    bool                  `toml:"isDirty"`
@@ -99,7 +100,7 @@ func Create(game, root, name string) (*Library, error) {
 			return nil, err
 		}
 	}
-	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, SPTVersion: v, Mods: map[string]models.Mod{}}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
+	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, RepoRoot: root, SPTVersion: v, Mods: map[string]models.Mod{}}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
 	return l, l.Persist()
 }
 func Load(root string) (*Library, error) {
@@ -296,6 +297,7 @@ func isSnapshotTemp(name string) bool {
 func (l *Library) Persist() error {
 	base := l.Root
 	m := l.manifest
+	m.RepoRoot = l.Root
 	rel, err := filepath.Rel(l.GameRoot, l.Root)
 	if err == nil && !strings.HasPrefix(rel, "..") {
 		depth := strings.Count(rel, string(os.PathSeparator)) + 1
@@ -412,7 +414,7 @@ func (s *Service) Start() error {
 				if err != nil {
 					// Rust clears the active id on a load failure so the next
 					// launch does not repeat it, and persists the cleared config.
-					s.clearActiveLibrarySelection(err)
+					s.clearActiveLibrarySelection()
 					return
 				}
 				if recoveryErr := recoverInterruptedInstall(l); recoveryErr != nil {
@@ -431,18 +433,35 @@ func (s *Service) Start() error {
 }
 
 // clearActiveLibrarySelection deselects the library whose load failed and
-// persists the cleared config. A save failure is reported once through the
-// workspace warning, matching Rust's startup path.
-func (s *Service) clearActiveLibrarySelection(cause error) {
+// persists the cleared config. Only a save failure is surfaced, matching Rust's
+// startup path; the load error itself stays out of the workspace warning.
+func (s *Service) clearActiveLibrarySelection() {
 	s.Store.Config.AppState.ActiveLibraryID = nil
 	s.active = nil
 	s.Registry.SetActive("", false)
-	s.setWarning(cause.Error())
 	if err := s.Store.Save(); err != nil {
 		s.setWarning(err.Error())
 	}
 }
 
+// WaitForInitialLoad blocks on the startup handshake for the commands Rust
+// waits in (get_library_workspace and bulk_update_mods). Other callers assemble
+// immediately.
+func (s *Service) WaitForInitialLoad() error {
+	s.startupMu.Lock()
+	started := s.startupStarted
+	s.startupMu.Unlock()
+	if !started {
+		return nil
+	}
+	if err := s.Registry.WaitForStartupLoad(context.Background()); err != nil {
+		return models.Fail(models.AsyncRuntimeError, err.Error())
+	}
+	return nil
+}
+
+// warningMu guards the warning independently of libraryMu because
+// TakeStartupWarning runs after Workspace releases the read lock.
 func (s *Service) setWarning(message string) {
 	s.warningMu.Lock()
 	s.warning = strPtr(message)
@@ -455,8 +474,9 @@ func (s *Service) clearWarning() {
 	s.warningMu.Unlock()
 }
 
-// takeWarning consumes the pending warning; the first workspace carries it.
-func (s *Service) takeWarning() *string {
+// TakeStartupWarning consumes the pending warning. Only the
+// get_library_workspace command calls it, matching Rust's one-shot handoff.
+func (s *Service) TakeStartupWarning() *string {
 	s.warningMu.Lock()
 	defer s.warningMu.Unlock()
 	warning := s.warning
@@ -625,6 +645,7 @@ func (s *Service) RenameLibrary(id, name string) error {
 		return e
 	}
 	m.Name = name
+	m.RepoRoot = k.LibraryRoot
 	b := filepath.Join(k.LibraryRoot, "manifest.toml")
 	f, e := os.CreateTemp(filepath.Dir(b), ".tmp-*")
 	if e != nil {

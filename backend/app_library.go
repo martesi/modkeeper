@@ -10,7 +10,13 @@ func (a *App) GetLibraryWorkspace() (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
 		return nil, a.initFailure()
 	}
-	return a.Library.Workspace()
+	if err := a.Library.WaitForInitialLoad(); err != nil {
+		return nil, err
+	}
+	workspace := a.Library.Workspace()
+	// Rust hands the startup warning to this command only.
+	workspace.ConfigWarning = a.Library.TakeStartupWarning()
+	return workspace, nil
 }
 func (a *App) CreateLibrary(input models.CreateLibraryInput) (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
@@ -19,7 +25,7 @@ func (a *App) CreateLibrary(input models.CreateLibraryInput) (*models.LibraryWor
 	if err := a.Library.CreateLibrary(input); err != nil {
 		return nil, err
 	}
-	return a.Library.Workspace()
+	return a.Library.Workspace(), nil
 }
 func (a *App) ActivateLibrary(input models.ActivateLibraryInput) (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
@@ -28,7 +34,7 @@ func (a *App) ActivateLibrary(input models.ActivateLibraryInput) (*models.Librar
 	if err := a.Library.ActivateLibrary(input.LibraryID); err != nil {
 		return nil, err
 	}
-	return a.Library.Workspace()
+	return a.Library.Workspace(), nil
 }
 func (a *App) RenameLibrary(input models.RenameLibraryInput) (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
@@ -37,7 +43,7 @@ func (a *App) RenameLibrary(input models.RenameLibraryInput) (*models.LibraryWor
 	if err := a.Library.RenameLibrary(input.LibraryID, input.Name); err != nil {
 		return nil, err
 	}
-	return a.Library.Workspace()
+	return a.Library.Workspace(), nil
 }
 func (a *App) DeleteLibrary(input models.DeleteLibraryInput) (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
@@ -46,16 +52,19 @@ func (a *App) DeleteLibrary(input models.DeleteLibraryInput) (*models.LibraryWor
 	if err := a.Library.DeleteLibrary(input.LibraryID, input.DeleteFiles); err != nil {
 		return nil, err
 	}
-	return a.Library.Workspace()
+	return a.Library.Workspace(), nil
 }
 func (a *App) BulkUpdateMods(input models.BulkUpdateModsInput) (*models.LibraryWorkspace, error) {
 	if a.Library == nil {
 		return nil, a.initFailure()
 	}
+	if err := a.Library.WaitForInitialLoad(); err != nil {
+		return nil, err
+	}
 	if err := a.Library.BulkUpdateMods(input); err != nil {
 		return nil, err
 	}
-	return a.Library.Workspace()
+	return a.Library.Workspace(), nil
 }
 func (a *App) SyncMods(input models.SyncModsInput) (*models.OperationAccepted, error) {
 	if a.Library == nil {
