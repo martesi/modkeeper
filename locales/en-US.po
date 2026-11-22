@@ -267,7 +267,7 @@ msgstr "App Theme"
 #~ msgid "Appearance"
 #~ msgstr "Appearance"
 
-#: src/utils/translation.ts:9
+#: src/utils/translation.ts:8
 msgid "Archive"
 msgstr "Archive"
 
@@ -304,7 +304,7 @@ msgstr "Archive structure and safety are verified locally upon download."
 #~ msgid "Are you sure you want to restore backup from {0}? This will replace the current mod state."
 #~ msgstr "Are you sure you want to restore backup from {0}? This will replace the current mod state."
 
-#: src/utils/translation.ts:10
+#: src/utils/translation.ts:9
 msgid "Auto backup"
 msgstr "Auto backup"
 
@@ -1873,8 +1873,8 @@ msgid "library.tools.selectExecutable"
 msgstr "Select executable"
 
 #: src/utils/translation.ts:8
-msgid "Select Game Root Directory"
-msgstr "Select Game Root Directory"
+#~ msgid "Select Game Root Directory"
+#~ msgstr "Select Game Root Directory"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:216
