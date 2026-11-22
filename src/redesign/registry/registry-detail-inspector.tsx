@@ -14,9 +14,9 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { openUrl, platformKind } from '@/platform'
+import { openUrl } from '@/platform'
 import semver from 'semver'
-import type { ForgeDetail, ForgeVersionsPage } from '@gen/bindings'
+import type { ForgeDetail, ForgeVersionsPage } from '@/wails/contract'
 import {
   Select,
   SelectContent,
@@ -252,14 +252,10 @@ export function RegistryDetailInspector({
 
   async function handleOpenExternal(url: string | null | undefined) {
     if (!url) return
-    if (platformKind() === 'browser') {
-      window.open(url, '_blank')
-      return
-    }
     try {
       await openUrl(url)
     } catch {
-      window.open(url, '_blank')
+      window.open(url, '_blank', 'noopener,noreferrer')
     }
   }
 

@@ -1,4 +1,4 @@
-import type { ForgeDetail, ForgeSearchItem } from '@gen/bindings'
+import type { ForgeDetail, ForgeSearchItem } from '@/wails/contract'
 import { ConfirmDialog } from '../shared/components/confirm-dialog'
 import { commonText } from '../i18n/common-text'
 import { registryText } from '../i18n/registry-text'

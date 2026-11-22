@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { getDefaultStore } from 'jotai'
-import type { ForgeSearchItem, ModSummary } from '@gen/bindings'
+import type { ForgeSearchItem, ModSummary } from '@/wails/contract'
 import {
   evaluateAddonParentConstraint,
   getAddonParentInfo,

@@ -1,9 +1,12 @@
 package spt
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/martes/modkeeper/backend/models"
 )
 
 func put(t *testing.T, p, data string) {
@@ -47,7 +50,8 @@ func TestSyncingRediscoversTheServerLayoutBeforeVersionValidation(t *testing.T) 
 	put(t, filepath.Join(root, "SPT/SPT.Server.exe"), "")
 	put(t, filepath.Join(root, "SPT_Runtime/SPT.Server.exe"), "")
 	_, err := Discover(root)
-	if e, ok := err.(*Fail); !ok || e.Code != "ParseError" {
+	var coded *models.Error
+	if !errors.As(err, &coded) || coded.Code != models.ParseError {
 		t.Fatalf("got %v", err)
 	}
 }

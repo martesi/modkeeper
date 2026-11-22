@@ -7,6 +7,7 @@ import {
   InstallModArchives,
 } from '../frontend/bindings/github.com/martes/modkeeper/backend/app'
 import { commands } from './wails'
+import { onFileDrop } from './platform'
 import type { TaskProgressEvent } from '../frontend/bindings/github.com/martes/modkeeper/backend/models/models'
 
 const smokeService = 'main.NativeSmokeService'
@@ -48,6 +49,9 @@ export async function startNativeSmoke() {
               .__nativeSmokeGoExecJS === true,
         }),
       )
+    })
+    await onFileDrop((paths) => {
+      void Call.ByName(`${smokeService}.ReportDropFiles`, JSON.stringify(paths))
     })
     await Call.ByName(`${smokeService}.ListenerReady`)
     mountNativeUIAssertion()

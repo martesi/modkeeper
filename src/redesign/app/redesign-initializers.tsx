@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai'
 import { useTheme } from 'next-themes'
 import { platformKind } from '@/platform'
 import { toast } from 'sonner'
-import { commands } from '@gen/bindings'
+import { commands } from '@/wails'
 import { themeToIsDark } from '@/utils/theme'
 import {
   initWorkspaceEventBus,

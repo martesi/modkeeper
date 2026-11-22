@@ -3,7 +3,7 @@
  */
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
-import type { ForgeKind } from '@gen/bindings'
+import type { ForgeKind } from '@/wails/contract'
 
 export type RegistryKindFilter = 'all' | 'mods' | 'addons'
 

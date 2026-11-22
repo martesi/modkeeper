@@ -3,12 +3,12 @@ package modfs
 
 import (
 	"encoding/base64"
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/martes/modkeeper/backend/models"
 	"github.com/zeebo/blake3"
 )
 
@@ -68,7 +68,7 @@ func Scan(root string, serverMods, clientPlugins string) (ModFS, error) {
 		out.ModType = "unknown"
 	}
 	if len(ids) == 0 {
-		return out, errors.New("UnableToDetermineModId")
+		return out, models.Fail(models.UnableToDetermineModId)
 	}
 	sort.Strings(ids)
 	sum := blake3.Sum256([]byte(strings.ToLower(strings.Join(ids, ""))))

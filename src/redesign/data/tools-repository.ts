@@ -7,7 +7,7 @@
  * across app restarts in Tauri. The shapes below mirror the frozen `ToolSummary` so swapping the
  * body for real `commands.*` calls is a local change.
  */
-import { openPath, platformKind } from '@/platform'
+import { canOpenPath, openPath, platformKind } from '@/platform'
 import { toast } from 'sonner'
 import { getDefaultStore } from 'jotai'
 import type {
@@ -81,17 +81,20 @@ export function deleteTool(input: {
 }
 
 /**
- * Launch via the opener plugin (executes the file with the OS default handler). Launch arguments
- * cannot be passed through the opener — that too needs the backend tool command (§7d); they are
- * stored but unused, and the UI labels them accordingly.
+ * Launch the file with the OS default handler through the platform opener.
+ * This is the same handoff Tauri's opener plugin performs; whether the OS
+ * executes a given file depends on its registered handler. Launch arguments
+ * cannot be passed through the opener, so they are stored but unused, and the
+ * UI labels them accordingly.
  */
 export async function launchTool(tool: ToolSummary): Promise<void> {
-  toast.info(libraryText.launchingTool(tool.name))
-  if (platformKind() === 'browser') {
-    // MOCK-FALLBACK: nothing to execute in the browser prototype.
+  if (!canOpenPath()) {
+    // MOCK-FALLBACK: browser and server pages cannot execute a desktop file.
     console.info('[redesign] would launch tool:', tool.executablePath)
+    toast.error(libraryText.toolLaunchFailed(tool.name))
     return
   }
+  toast.info(libraryText.launchingTool(tool.name))
   try {
     await openPath(tool.executablePath)
   } catch (error) {

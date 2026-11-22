@@ -37,6 +37,47 @@ export interface DeleteLibraryInput {
   deleteFiles: boolean
 }
 
+export interface ForgeAddonParent {
+  id: number
+  guid: string
+  name: string
+  detailUrl: string | null
+}
+
+export interface ForgeDependency {
+  modId: number | null
+  modGuid: string | null
+  modName: string | null
+  versionConstraint: string | null
+  isOptional: boolean | null
+}
+
+export interface ForgeDetail {
+  kind: ForgeKind
+  id: number
+  guid: string
+  name: string
+  slug: string | null
+  teaser: string | null
+  description: string | null
+  thumbnail: string | null
+  detailUrl: string | null
+  fikaCompatibility: boolean | null
+  parentModId: number | null
+  parent: ForgeAddonParent | null
+  modVersionConstraint: string | null
+  isDetached: boolean | null
+  stale: boolean
+}
+
+export interface ForgeDownloadVersionInput {
+  taskId: string
+  libraryId: string
+  kind: ForgeKind
+  itemId: number
+  versionId: number
+}
+
 export enum ForgeKind {
   /**
    * The Go zero value for the underlying type of the enum.
@@ -45,6 +86,72 @@ export enum ForgeKind {
 
   ForgeKindMod = 'mod',
   ForgeKindAddon = 'addon',
+}
+
+export interface ForgeMatchInstalledModInput {
+  libraryId: string
+  installedModId: string
+  kind: ForgeKind
+  itemId: number
+  versionId: number
+}
+
+export interface ForgePageInfo {
+  currentPage: number | null
+  lastPage: number | null
+  perPage: number | null
+  total: number | null
+}
+
+export interface ForgeSearchItem {
+  kind: ForgeKind
+  id: number
+  guid: string
+  name: string
+  slug: string | null
+  teaser: string | null
+  thumbnail: string | null
+  detailUrl: string | null
+  fikaCompatibility: boolean | null
+  parentModId: number | null
+  parentModGuid: string | null
+  parentModName: string | null
+  parentModDetailUrl: string | null
+  modVersionConstraint: string | null
+  isDetached: boolean | null
+}
+
+export interface ForgeSearchPage {
+  items: ForgeSearchItem[] | null
+  pagination: ForgePageInfo
+  stale: boolean
+}
+
+export interface ForgeSearchResponse {
+  sptVersion: string
+  mods: ForgeSearchPage
+  addons: ForgeSearchPage
+}
+
+export interface ForgeVersion {
+  kind: ForgeKind
+  itemId: number
+  id: number
+  version: string
+  description: string | null
+  link: string
+  contentLength: number
+  sptVersionConstraint: string | null
+  fikaCompatibility: string | null
+  dependencies: ForgeDependency[] | null
+}
+
+export interface ForgeVersionsPage {
+  kind: ForgeKind
+  itemId: number
+  versions: ForgeVersion[] | null
+  pagination: ForgePageInfo
+  stale: boolean
 }
 
 export interface InstallModArchivesInput {
@@ -217,4 +324,26 @@ export interface ToolSummary {
   iconDataUrl?: string | null
   launchArgs?: string | null
   updatedAt: string
+}
+
+/**
+ * WindowDropElementDetails identifies the drop target element reported by
+ * Wails. It is empty when the drop did not land on a marked element.
+ */
+export interface WindowDropElementDetails {
+  id: string
+  classList: string[] | null
+  attributes: { [_ in string]?: string } | null
+}
+
+/**
+ * WindowFilesDroppedEvent is the payload the desktop window forwards to the
+ * frontend on `modkeeper:files-dropped`. It mirrors Wails' native file-drop
+ * payload so the renderer can read the dropped paths and the hovered element.
+ */
+export interface WindowFilesDroppedEvent {
+  filenames: string[] | null
+  x: number
+  y: number
+  elementDetails: WindowDropElementDetails
 }

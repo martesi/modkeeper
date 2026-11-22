@@ -1,9 +1,18 @@
 import { commands as tauriCommands } from '@gen/bindings'
 import * as wailsApp from '../../frontend/bindings/github.com/martes/modkeeper/backend/app'
+import type { Commands } from './contract'
 import { isWails } from './runtime'
 import { getWailsMock } from './mock'
 
-type Commands = typeof tauriCommands
+/**
+ * Tauri stays a runtime-only fallback: its command map is opaque here, so no
+ * caller inherits a Specta type. The app-facing command types come from the
+ * Wails contract.
+ */
+const tauriFallback = tauriCommands as unknown as Record<
+  string,
+  (...args: unknown[]) => unknown
+>
 
 interface WireError {
   code: string
@@ -62,7 +71,11 @@ export function dispatchCommand(
               : Promise.reject(error),
           ),
       )
-  return Promise.resolve(tauri())
+  return Promise.resolve(tauri()).then((value) =>
+    value && typeof value === 'object' && 'status' in value
+      ? value
+      : { status: 'ok', data: value },
+  )
 }
 
 /**
@@ -70,7 +83,7 @@ export function dispatchCommand(
  * Wails v3 bindings are generated in frontend/bindings by `wails3 generate bindings`.
  */
 export const commands: Commands = Object.fromEntries(
-  Object.entries(tauriCommands).map(([name, tauriCall]) => [
+  Object.entries(tauriFallback).map(([name, tauriCall]) => [
     name,
     (...args: unknown[]) => {
       const mock = getWailsMock()?.commands?.[name]
@@ -88,7 +101,7 @@ export const commands: Commands = Object.fromEntries(
       )
     },
   ]),
-) as Commands
+) as unknown as Commands
 
 export function cancelInstallTask(
   taskId: string,
@@ -99,4 +112,23 @@ export function cancelInstallTask(
     return Promise.resolve(mock(taskId, libraryId)).then(() => undefined)
   if (isWails()) return Promise.resolve(wailsApp.CancelTask(taskId, libraryId))
   return Promise.reject(new Error('CancelTask is only available in Wails'))
+}
+
+/**
+ * Opens a file or directory with the platform opener. Wails has no JavaScript
+ * opener, so this bound Go method replaces the Tauri opener plugin. The browser
+ * mock never reaches this path because `platformKind()` stays `browser`.
+ */
+export function openPathWithPlatformOpener(path: string): Promise<void> {
+  if (isWails()) return Promise.resolve(wailsApp.OpenPath(path))
+  return Promise.reject(new Error('OpenPath is only available in Wails'))
+}
+
+/**
+ * Writes a frontend diagnostic through the Wails application logger. main.go
+ * points that logger at the config directory, replacing Tauri's log plugin.
+ */
+export function logToFile(message: string): Promise<void> {
+  if (isWails()) return Promise.resolve(wailsApp.Log(message))
+  return Promise.reject(new Error('Log is only available in Wails'))
 }

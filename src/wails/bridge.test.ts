@@ -44,6 +44,12 @@ describe('Wails browser mock', () => {
     })
   })
 
+  test('wraps raw Tauri return values in the same command result shape', async () => {
+    await expect(
+      dispatchCommand(undefined, undefined, () => undefined),
+    ).resolves.toEqual({ status: 'ok', data: undefined })
+  })
+
   test('keeps structured Wails domain errors on the typed command path', async () => {
     const failure = { code: 'LibraryBusy', data: null }
     const runtimeError = new Error('call failed')

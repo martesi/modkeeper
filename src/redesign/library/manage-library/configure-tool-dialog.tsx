@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { pickFiles, platformKind } from '@/platform'
+import { pickFiles } from '@/platform'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,8 @@ import {
   deleteTool,
   type ToolDraft,
 } from '../../data/tools-repository'
+import { pickWithNativeOrPathEntry } from '../../shared/utils/picker-gate'
+import { runPickerAction } from '../../shared/utils/picker-errors'
 import { libraryText } from '../../i18n/library-text'
 import { commonText } from '../../i18n/common-text'
 import type { LibraryId, ToolSummary } from '../../data/redesign-types'
@@ -93,18 +95,19 @@ function ConfigureToolForm({
   }
 
   async function handleBrowse() {
-    const path =
-      platformKind() === 'browser'
-        ? ((
-            await requestPathInput({
-              mode: 'single',
-              title: libraryText.executablePathDialogTitle(),
-              description: libraryText.executablePathDialogDescription(),
-              label: libraryText.executablePathLabel(),
-              placeholder: libraryText.executablePathPlaceholder(),
-            })
-          )?.[0] ?? null)
-        : await pickExecutable()
+    const path = await pickWithNativeOrPathEntry<string | null>(
+      pickExecutable,
+      async () =>
+        (
+          await requestPathInput({
+            mode: 'single',
+            title: libraryText.executablePathDialogTitle(),
+            description: libraryText.executablePathDialogDescription(),
+            label: libraryText.executablePathLabel(),
+            placeholder: libraryText.executablePathPlaceholder(),
+          })
+        )?.[0] ?? null,
+    )
     if (path) setDraft((prev) => ({ ...prev, executablePath: path }))
   }
 
@@ -163,7 +166,12 @@ function ConfigureToolForm({
           />
           <FidelityButton
             variant="secondary"
-            onClick={() => void handleBrowse()}
+            onClick={() =>
+              void runPickerAction(handleBrowse, {
+                message: commonText.somethingWentWrong(),
+                context: 'configure tool browse action',
+              })
+            }
           >
             {libraryText.browse()}
           </FidelityButton>

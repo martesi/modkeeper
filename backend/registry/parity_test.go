@@ -8,6 +8,7 @@ import (
 
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/process"
+	"github.com/martes/modkeeper/backend/testenv"
 )
 
 func TestStartupLibraryWaitsForBackgroundLoadCompletion(t *testing.T) {
@@ -93,9 +94,12 @@ func TestTestProcessGuardDetectsRunningProcess(t *testing.T) {
 }
 
 func TestTestProcessInitializationFailureDoesNotReportSafeToDeploy(t *testing.T) {
-	expected := errors.New("Unable to inspect running processes")
+	expected := errors.New("access denied")
 	err := (ProcessGuard{Inspector: process.Fake{Err: expected}}).AssertStopped([]string{"game.exe"}, models.ProcessRunning)
-	if err == nil || !errors.Is(err, expected) {
-		t.Fatalf("inspection failure reported safe: %v", err)
-	}
+	testenv.RequireWireError(t, err, models.IOError, "Unable to inspect running processes: access denied")
+}
+
+func TestProcessGuardWithoutAnInspectorIsACodedFailure(t *testing.T) {
+	err := ProcessGuard{}.AssertStopped([]string{"game.exe"}, models.ProcessRunning)
+	testenv.RequireWireError(t, err, models.IOError, "Unable to inspect running processes: process inspection is not configured")
 }

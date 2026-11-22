@@ -30,6 +30,11 @@ type TaskRegistry struct {
 	startupOnce sync.Once
 }
 
+// StartupLoadTimeout bounds the initial library handshake, matching Rust's
+// INITIAL_LIBRARY_LOAD_TIMEOUT. It is exported as public parity API so callers
+// and tests can derive the timeout error message.
+const StartupLoadTimeout = 10 * time.Second
+
 type taskEntry struct {
 	libraryID   string
 	cancel      context.CancelFunc
@@ -54,7 +59,7 @@ func (r *TaskRegistry) AssertActiveLibrary(id string) error {
 		return models.Fail(models.NoActiveLibrary)
 	}
 	if r.activeID != id {
-		return models.Fail(models.InvalidLibrary, id)
+		return models.Fail(models.InvalidLibrary, id, "not the active library")
 	}
 	return nil
 }
@@ -92,7 +97,7 @@ func (r *TaskRegistry) CancelTask(id, libraryID string) error {
 	}
 	if entry.libraryID != libraryID {
 		r.mu.Unlock()
-		return models.Fail(models.InvalidLibrary, libraryID)
+		return models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	if !entry.cancellable {
 		r.mu.Unlock()
@@ -125,7 +130,7 @@ func (r *TaskRegistry) FinishStartupLoad(err error) {
 }
 
 func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(StartupLoadTimeout)
 	defer timer.Stop()
 	select {
 	case <-r.startup:
@@ -133,7 +138,7 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return fmt.Errorf("initial library load timed out")
+		return fmt.Errorf("Initial library load timed out after %s", StartupLoadTimeout)
 	}
 }
 
@@ -142,9 +147,12 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 type ProcessGuard struct{ Inspector process.Inspector }
 
 func (g ProcessGuard) AssertStopped(paths []string, code string) error {
+	if g.Inspector == nil {
+		return models.Fail(models.IOError, "Unable to inspect running processes: process inspection is not configured")
+	}
 	running, err := g.Inspector.IsRunning(paths)
 	if err != nil {
-		return fmt.Errorf("inspect running processes: %w", err)
+		return models.Fail(models.IOError, fmt.Sprintf("Unable to inspect running processes: %v", err))
 	}
 	if running {
 		return models.Fail(code)

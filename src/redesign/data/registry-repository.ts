@@ -1,14 +1,15 @@
 /*
  * Registry repository (registry-ui-design.md §3, §6).
  *
- * Direct bridge to Tauri commands: forgeSearch, forgeModDetail, forgeModVersions,
- * forgeAddonVersions, forgeDownloadVersion, and forgeMatchInstalledMod.
+ * The UI calls these functions, never the generated bindings directly. The
+ * Wails bridge routes each command to Wails, the in-memory mock, or Tauri, and
+ * normalizes both transports to the shared CommandResult shape.
  * Provides browser mock fallback for dev/testing when platformKind() === 'browser'.
  */
 import { platformKind } from '@/platform'
 import { getDefaultStore } from 'jotai'
 import { toast } from 'sonner'
-import { commands } from '@gen/bindings'
+import { commands } from '@/wails'
 import type {
   ForgeDetail,
   ForgeDownloadVersionInput,
@@ -19,7 +20,7 @@ import type {
   ForgeVersionsPage,
   OperationAccepted,
   SError,
-} from '@gen/bindings'
+} from '@/wails/contract'
 import {
   addPendingTask,
   isLibraryTaskPending,

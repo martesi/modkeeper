@@ -8,20 +8,12 @@ import {
   beforeEach,
   describe,
   expect,
-  mock,
   test,
 } from 'bun:test'
 import { pendingTasksAtom, taskResultAtom } from '../state/library-state'
+import { installLinguiMacroMock } from '../testing/lingui-macro'
 
-mock.module('../i18n/common-text', () => ({
-  commonText: { close: () => 'Close' },
-}))
-mock.module('../i18n/library-text', () => ({
-  libraryText: {
-    tasksActiveCount: (count: number) => `Tasks, ${count} active`,
-    tasksLabel: () => 'Tasks',
-  },
-}))
+installLinguiMacroMock()
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()

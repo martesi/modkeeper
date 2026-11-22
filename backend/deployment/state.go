@@ -2,6 +2,7 @@
 package deployment
 
 import (
+	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/linker"
@@ -39,27 +40,22 @@ type DeploymentPlan struct {
 	Directories []string
 }
 
-// Error keeps the Rust error-code/data contract independent of library services.
-type Error struct {
-	Code string
-	Data any
-}
-
-func (e *Error) Error() string { return fmt.Sprintf("%s: %v", e.Code, e.Data) }
+// The helpers below keep the Rust error-code/data contract on the wire.
 func collision(path string) error {
-	return &Error{"FileCollision", []string{fmt.Sprintf("Deployment target already exists or cannot be safely removed: '%s'.", path)}}
+	return models.Fail(models.FileCollision, []string{fmt.Sprintf("Deployment target already exists or cannot be safely removed: '%s'.", path)})
 }
 func invalid(l Layout, detail string) error {
-	return &Error{"InvalidLibrary", []string{l.LibraryRoot, detail}}
+	return models.Fail(models.InvalidLibrary, l.LibraryRoot, detail)
 }
 func ioError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := err.(*Error); ok {
+	var coded *models.Error
+	if errors.As(err, &coded) {
 		return err
 	}
-	return &Error{"IOError", err.Error()}
+	return models.Fail(models.IOError, err.Error())
 }
 func ProtectedPaths(r spt.Rules) []string { return []string{r.ServerMods, r.ClientPlugins} }
 func IsProtected(path string, r spt.Rules) bool {

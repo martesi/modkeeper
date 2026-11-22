@@ -1,12 +1,10 @@
 package forge
 
-import "fmt"
+import "github.com/martes/modkeeper/backend/models"
 
-// Error preserves SError until the foundation models.Error is available.
-type Error struct {
-	Code string `json:"code"`
-	Data any    `json:"data"`
-}
+// Error preserves the Rust SError wire representation: {code, data}. It is an
+// alias of the shared model so backend.MarshalError recognizes Forge failures
+// on the command return path, not only in completion events.
+type Error = models.Error
 
-func (e *Error) Error() string        { return fmt.Sprintf("%s: %v", e.Code, e.Data) }
-func fail(code, message string) error { return &Error{Code: code, Data: message} }
+func fail(code, message string) error { return models.Fail(code, message) }

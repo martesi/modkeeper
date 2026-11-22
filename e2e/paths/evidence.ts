@@ -323,6 +323,7 @@ export const evidence: readonly Evidence[] = [
       native('PASS frontend event listener ready'),
       native('PASS Go emitted registered event'),
       native('PASS event payload observed by frontend and reported to Go'),
+      native('PASS native file drop reaches the renderer callback'),
     ],
     true,
   ),

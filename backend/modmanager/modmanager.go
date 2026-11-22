@@ -3,7 +3,6 @@ package modmanager
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -40,6 +39,10 @@ func AddModWithMetadata(l *Library, id, name, kind, source string, active bool, 
 	if !ok {
 		m = models.Mod{ID: id, Name: name}
 	}
+	if kind != "" {
+		// The library manifest records the scanned mod type, like Rust's install.
+		m.Type = models.ModType(kind)
+	}
 	m.ApplyInstall(active, nil, time.Now())
 	if metadata != nil && metadata.Forge != nil {
 		m.ApplyInstall(active, metadata.Forge, time.Now())
@@ -67,7 +70,7 @@ func writeManifest(path string, m models.Mod, kind string) error {
 }
 func RemoveMod(l *Library, id string) error {
 	if _, ok := l.Mods[id]; !ok {
-		return errors.New("ModNotFound")
+		return models.Fail(models.ModNotFound, id)
 	}
 	if err := os.RemoveAll(filepath.Join(l.Root, id)); err != nil {
 		return err
@@ -79,11 +82,11 @@ func RemoveMod(l *Library, id string) error {
 func ToggleMod(l *Library, id string, active bool) error {
 	m, ok := l.Mods[id]
 	if !ok {
-		return errors.New("ModNotFound")
+		return models.Fail(models.ModNotFound, id)
 	}
 	m.Enabled = active
 	l.Mods[id] = m
-	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, "")
+	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, string(m.Type))
 }
 func NormalizeModFolders(root, serverMods, clientPlugins string, mods map[string]models.Mod) ([][2]string, error) {
 	entries, err := os.ReadDir(root)
@@ -109,7 +112,7 @@ func NormalizeModFolders(root, serverMods, clientPlugins string, mods map[string
 		}
 		dst := filepath.Join(root, m.ID)
 		if _, err = os.Stat(dst); err == nil {
-			return nil, errors.New("ModIdConflict")
+			return nil, models.Fail(models.ModIdConflict, e.Name(), m.ID)
 		}
 		if err = os.Rename(old, dst); err != nil {
 			return nil, err

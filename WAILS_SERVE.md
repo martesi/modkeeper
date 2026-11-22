@@ -10,6 +10,28 @@ To run the headless Wails server backend with Vite HMR, run `nix develop .#defau
 
 `task build:server` builds the frontend and a server-tagged executable at `build/bin/modkeeper-server`. `task run:server` builds and runs that executable. Run these tasks inside the Nix development shell.
 
+## Server mode
+
+The server build serves the same frontend bundle as the desktop app, but a browser page has no native Wails environment: `window._wails.environment` exists only in the desktop webview. The frontend therefore treats server and plain-browser pages as path-entry surfaces. The frontend subscribes to `wails:runtime-config-ready` and the window `load` event, so capability-dependent controls update after the native environment arrives instead of keeping a first-render value.
+
+In server mode these work end to end:
+
+- Create the first library by entering the game root path.
+- Add mod archives by entering one archive path per line or separating paths with commas.
+- Browse, search and install from the Forge registry.
+- Enable, disable, delete, sync and rebuild the library cache.
+
+These need the desktop app:
+
+- Native file and folder pickers.
+- OS drag and drop into the window.
+- Opening a file or folder in the OS file manager.
+- Window minimize, maximize and close controls.
+
+Paths come from the server host filesystem, not from the browser machine. A remote browser user must enter paths exactly as the server host sees them. This branch supports path entry only, not file upload from the browser.
+
+Assumption: the person who configures a library can name paths that exist on the server host.
+
 ## Native build
 
 Build the native frontend and app inside the Nix development environment with:
