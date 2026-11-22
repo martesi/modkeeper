@@ -5,7 +5,7 @@ import type {
   ForgeDetail,
   ForgeSearchItem,
   ForgeSearchResponse,
-} from '@gen/bindings'
+} from '@/wails/contract'
 import { activeLibraryAtom } from '../state/library-state'
 import {
   registryAddonPageAtom,

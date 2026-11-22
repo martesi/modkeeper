@@ -1,6 +1,10 @@
 import { Events as WailsEvents } from '@wailsio/runtime'
 import { events as tauriEvents } from '@gen/bindings'
-import { TaskProgress, WorkspaceEvent } from '../../frontend/bindings/events'
+import {
+  TaskProgress as TaskProgressEventName,
+  WorkspaceEvent as WorkspaceEventName,
+} from '../../frontend/bindings/events'
+import type { TaskProgressEvent, WorkspaceEvent } from './contract'
 import { wailsWindow } from './runtime'
 import { getWailsMock } from './mock'
 
@@ -74,11 +78,12 @@ function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
 }
 
 export const events = {
-  taskProgress: makeEvent<Parameters<typeof tauriEvents.taskProgress.emit>[0]>(
-    TaskProgress,
+  taskProgress: makeEvent<TaskProgressEvent>(
+    TaskProgressEventName,
     'taskProgress',
   ),
-  workspaceEvent: makeEvent<
-    Parameters<typeof tauriEvents.workspaceEvent.emit>[0]
-  >(WorkspaceEvent, 'workspaceEvent'),
+  workspaceEvent: makeEvent<WorkspaceEvent>(
+    WorkspaceEventName,
+    'workspaceEvent',
+  ),
 }

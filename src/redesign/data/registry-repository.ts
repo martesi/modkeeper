@@ -1,7 +1,7 @@
 /*
  * Registry repository (registry-ui-design.md §3, §6).
  *
- * The UI calls these functions, never `@gen/bindings` commands directly. The
+ * The UI calls these functions, never the generated bindings directly. The
  * Wails bridge routes each command to Wails, the in-memory mock, or Tauri, and
  * normalizes both transports to the shared CommandResult shape.
  * Provides browser mock fallback for dev/testing when platformKind() === 'browser'.
@@ -20,7 +20,7 @@ import type {
   ForgeVersionsPage,
   OperationAccepted,
   SError,
-} from '@gen/bindings'
+} from '@/wails/contract'
 import {
   addPendingTask,
   isLibraryTaskPending,

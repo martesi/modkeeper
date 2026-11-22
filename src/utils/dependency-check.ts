@@ -1,4 +1,4 @@
-import { Mod } from '@/gen/bindings'
+import type { Mod } from '@/wails/contract'
 import semver from 'semver'
 
 export enum DependencyStatus {

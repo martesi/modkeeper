@@ -1,7 +1,7 @@
 /*
  * Library repository (consolidated-spec.md §10).
  *
- * The UI calls these functions, never `@gen/bindings` directly. Every function is real-first /
+ * The UI calls these functions, never the generated bindings directly. Every function is real-first /
  * mock-fallback: it tries the generated Tauri command, and if no backend is present (browser
  * prototype) or the transport fails (backend killed), it falls back to `example-data.ts`. Every
  * fallback is tagged `MOCK-FALLBACK` so it is a single grep target that goes to zero once the

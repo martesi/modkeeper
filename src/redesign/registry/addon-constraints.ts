@@ -4,7 +4,7 @@ import type {
   ForgeKind,
   ForgeSearchItem,
   ModSummary,
-} from '@gen/bindings'
+} from '@/wails/contract'
 
 function parseRustSemver(version: string): string | null {
   const parsed = semver.parse(version)

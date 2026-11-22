@@ -16,7 +16,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openUrl } from '@/platform'
 import semver from 'semver'
-import type { ForgeDetail, ForgeVersionsPage } from '@gen/bindings'
+import type { ForgeDetail, ForgeVersionsPage } from '@/wails/contract'
 import {
   Select,
   SelectContent,

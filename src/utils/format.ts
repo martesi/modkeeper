@@ -1,4 +1,4 @@
-import { Mod } from '@gen/bindings'
+import type { Mod } from '@/wails/contract'
 import { tDivider } from './translation'
 
 export function formatAuthor(mod: Mod) {

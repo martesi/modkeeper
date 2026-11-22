@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ModInitialIcon } from '../library/mod-initial-icon'
-import type { ForgeKind } from '@gen/bindings'
+import type { ForgeKind } from '@/wails/contract'
 
 export function RegistryThumbnail({
   name,

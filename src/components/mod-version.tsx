@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { formatAuthor } from '@/utils/format'
-import { Mod } from '@gen/bindings'
+import type { Mod } from '@/wails/contract'
 import { HTMLAttributes } from 'react'
 
 export function ModVersion({
