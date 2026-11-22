@@ -166,6 +166,28 @@ describe('platform capability dispatch', () => {
     setWindow({ _wails: { environment: {} } })
     expect(await platform.pickFiles()).toEqual(['/native/file.zip'])
     expect(await platform.pickDirectory()).toBe('/native/file.zip')
+    expect(calls.filter(([name]) => name === 'wails-dialog')).toHaveLength(2)
+  })
+
+  test('does not open native pickers without a desktop shell', async () => {
+    setWailsBuildFlag('true')
+    setWindow({ _wails: {} })
+    expect(await platform.pickFiles()).toEqual([])
+    expect(await platform.pickDirectory()).toBeNull()
+    expect(calls).toEqual([])
+
+    setWailsBuildFlag('false')
+    setWindow({})
+    expect(await platform.pickFiles()).toEqual([])
+    expect(await platform.pickDirectory()).toBeNull()
+    expect(calls).toEqual([])
+
+    setWindow({ __MK_WAILS_MOCK__: {} })
+    expect(platform.platformKind()).toBe('browser')
+    expect(platform.hasNativeFilePicker()).toBe(false)
+    expect(await platform.pickFiles()).toEqual([])
+    expect(await platform.pickDirectory()).toBeNull()
+    expect(calls).toEqual([])
   })
 
   test('dispatches openers and window helpers', async () => {

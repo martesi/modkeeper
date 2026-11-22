@@ -16,6 +16,7 @@ import {
   type ToolDraft,
 } from '../../data/tools-repository'
 import { pickWithNativeOrPathEntry } from '../../shared/utils/picker-gate'
+import { runPickerAction } from '../../shared/utils/picker-errors'
 import { libraryText } from '../../i18n/library-text'
 import { commonText } from '../../i18n/common-text'
 import type { LibraryId, ToolSummary } from '../../data/redesign-types'
@@ -165,7 +166,12 @@ function ConfigureToolForm({
           />
           <FidelityButton
             variant="secondary"
-            onClick={() => void handleBrowse()}
+            onClick={() =>
+              void runPickerAction(handleBrowse, {
+                message: commonText.somethingWentWrong(),
+                context: 'configure tool browse action',
+              })
+            }
           >
             {libraryText.browse()}
           </FidelityButton>

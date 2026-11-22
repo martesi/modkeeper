@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { isNativeDesktopShell } from '@/wails/runtime'
 import {
   closeTitlebarPaletteOnEscape,
   focusTitlebarPaletteInput,
@@ -31,22 +32,22 @@ describe('titlebar window controls', () => {
   test('are absent without native window chrome', () => {
     setWailsBuildFlag('true')
     setWindow({ _wails: {} })
-    expect(showWindowControls(false)).toBe(false)
+    expect(showWindowControls(false, isNativeDesktopShell())).toBe(false)
 
     setWailsBuildFlag('false')
     setWindow({})
-    expect(showWindowControls(false)).toBe(false)
+    expect(showWindowControls(false, isNativeDesktopShell())).toBe(false)
   })
 
   test('render for non-macOS desktop shells only', () => {
     setWailsBuildFlag('true')
     setWindow({ _wails: { environment: { OS: 'linux' } } })
-    expect(showWindowControls(false)).toBe(true)
-    expect(showWindowControls(true)).toBe(false)
+    expect(showWindowControls(false, isNativeDesktopShell())).toBe(true)
+    expect(showWindowControls(true, isNativeDesktopShell())).toBe(false)
 
     setWailsBuildFlag('false')
     setWindow({ __TAURI__: {} })
-    expect(showWindowControls(false)).toBe(true)
+    expect(showWindowControls(false, isNativeDesktopShell())).toBe(true)
   })
 })
 

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useAtom } from 'jotai'
 import {
   closeWindow,
-  hasNativeWindowChrome,
   isWindowMaximized,
   minimizeWindow,
   onWindowResize,
@@ -10,6 +9,7 @@ import {
   setWindowChrome,
   toggleMaximizeWindow,
 } from '@/platform'
+import { useNativeDesktopShell } from '@/platform/use-native-desktop-shell'
 import { useRouterState } from '@tanstack/react-router'
 import { Maximize, Copy, Minus, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -78,8 +78,8 @@ export function TitleBar() {
   const isMacOS =
     navigator.userAgent.includes('Macintosh') ||
     navigator.userAgent.includes('Mac OS X')
-  const nativeWindowChrome = hasNativeWindowChrome()
-  const showCaptionButtons = showWindowControls(isMacOS)
+  const nativeWindowChrome = useNativeDesktopShell()
+  const showCaptionButtons = showWindowControls(isMacOS, nativeWindowChrome)
   const macNativeChrome = isMacOS && nativeWindowChrome
 
   // The titlebar entry opens the same centered palette at every width. Ctrl+F

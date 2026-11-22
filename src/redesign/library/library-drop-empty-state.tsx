@@ -1,4 +1,5 @@
-import { hasNativeFilePicker, platformKind } from '@/platform'
+import { platformKind } from '@/platform'
+import { useNativeDesktopShell } from '@/platform/use-native-desktop-shell'
 import { LibraryEmptyCard } from './library-empty-card'
 import { useArchiveFilePicker } from '../shared/hooks/use-archive-file-picker'
 import { runPickerAction } from '../shared/utils/picker-errors'
@@ -11,7 +12,7 @@ import { libraryText } from '../i18n/library-text'
  */
 export function LibraryDropEmptyState() {
   const { pickAndInstall, pathInputDialog } = useArchiveFilePicker()
-  const nativePicker = hasNativeFilePicker()
+  const nativePicker = useNativeDesktopShell()
   const serverMode = platformKind() === 'wails' && !nativePicker
 
   return (

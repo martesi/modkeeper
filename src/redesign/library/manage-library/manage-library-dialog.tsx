@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { canOpenPath, pickDirectory } from '@/platform'
+import { pickDirectory } from '@/platform'
+import { useNativeDesktopShell } from '@/platform/use-native-desktop-shell'
 import { toast } from 'sonner'
 import { Copy, FolderOpen, Plus, RefreshCw, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -308,6 +309,7 @@ function PathRow({
   path: string
   onOpen: () => void
 }) {
+  const nativeDesktop = useNativeDesktopShell()
   async function handleCopy() {
     await navigator.clipboard.writeText(path)
     toast.success(libraryText.pathCopied())
@@ -334,7 +336,7 @@ function PathRow({
       >
         <Copy />
       </FidelityIconButton>
-      {canOpenPath() && (
+      {nativeDesktop && (
         <FidelityIconButton
           size="sm"
           variant="secondary"

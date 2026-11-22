@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
+  getNativeDesktopSnapshot,
   hasNativeRuntime,
+  isNativeDesktopShell,
   isWails,
   isWailsDesktop,
+  subscribeNativeDesktopShell,
   wailsWindow,
 } from './runtime'
 
@@ -41,6 +44,70 @@ describe('Wails runtime detection', () => {
     // @ts-expect-error Test supplies a minimal window stub.
     globalThis.window = { _wails: {} }
     expect(isWailsDesktop()).toBe(false)
+    expect(isNativeDesktopShell()).toBe(false)
+  })
+
+  test('notifies subscribers when Wails injects the environment', () => {
+    const target = new EventTarget() as EventTarget & {
+      _wails?: { environment?: { OS?: string } }
+    }
+    target._wails = {}
+    // @ts-expect-error Test installs an EventTarget as the window.
+    globalThis.window = target
+    expect(isNativeDesktopShell()).toBe(false)
+
+    let changes = 0
+    const unsubscribe = subscribeNativeDesktopShell(() => {
+      changes += 1
+    })
+    target._wails.environment = { OS: 'linux' }
+    target.dispatchEvent(new Event('wails:runtime-config-ready'))
+
+    expect(isNativeDesktopShell()).toBe(true)
+    expect(getNativeDesktopSnapshot()).toBe(true)
+    expect(changes).toBe(1)
+    unsubscribe()
+  })
+
+  test('keeps a server page non-desktop through runtime events', () => {
+    const target = new EventTarget() as EventTarget & {
+      _wails?: { environment?: { OS?: string } }
+    }
+    target._wails = {}
+    // @ts-expect-error Test installs an EventTarget as the window.
+    globalThis.window = target
+
+    let changes = 0
+    const unsubscribe = subscribeNativeDesktopShell(() => {
+      changes += 1
+    })
+    target.dispatchEvent(new Event('wails:runtime-config-ready'))
+    target.dispatchEvent(new Event('load'))
+
+    expect(isNativeDesktopShell()).toBe(false)
+    expect(getNativeDesktopSnapshot()).toBe(false)
+    expect(changes).toBe(0)
+    unsubscribe()
+  })
+
+  test('reads a late environment on the window load fallback', () => {
+    const target = new EventTarget() as EventTarget & {
+      _wails?: { environment?: { OS?: string } }
+    }
+    target._wails = {}
+    // @ts-expect-error Test installs an EventTarget as the window.
+    globalThis.window = target
+
+    let changes = 0
+    const unsubscribe = subscribeNativeDesktopShell(() => {
+      changes += 1
+    })
+    target._wails.environment = { OS: 'linux' }
+    target.dispatchEvent(new Event('load'))
+
+    expect(isNativeDesktopShell()).toBe(true)
+    expect(changes).toBe(1)
+    unsubscribe()
   })
 
   test('returns the window only when available', () => {

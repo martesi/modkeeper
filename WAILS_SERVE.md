@@ -12,7 +12,7 @@ To run the headless Wails server backend with Vite HMR, run `nix develop .#defau
 
 ## Server mode
 
-The server build serves the same frontend bundle as the desktop app, but a browser page has no native Wails environment: `window._wails.environment` exists only in the desktop webview. The frontend therefore treats server and plain-browser pages as path-entry surfaces.
+The server build serves the same frontend bundle as the desktop app, but a browser page has no native Wails environment: `window._wails.environment` exists only in the desktop webview. The frontend therefore treats server and plain-browser pages as path-entry surfaces. The frontend subscribes to `wails:runtime-config-ready` and the window `load` event, so capability-dependent controls update after the native environment arrives instead of keeping a first-render value.
 
 In server mode these work end to end:
 
