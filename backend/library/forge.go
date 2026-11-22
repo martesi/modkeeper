@@ -79,15 +79,11 @@ func (s *Service) completeForgeInstall(input forge.ForgeDownloadVersionInput, in
 			Error:       forgeWireError(installErr),
 		})
 	}
-	if s.sendWorkspace == nil {
-		return
-	}
-	_ = s.sendWorkspace(models.WorkspaceEvent{
+	s.sendWorkspaceSnapshot(models.WorkspaceEvent{
 		Type:      models.WorkspaceEventModInstallCompleted,
 		TaskID:    input.TaskID,
 		LibraryID: input.LibraryID,
 		Failures:  failures,
-		Workspace: *s.Workspace(),
 	})
 }
 

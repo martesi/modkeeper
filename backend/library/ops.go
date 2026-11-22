@@ -269,13 +269,16 @@ func (s *Service) installStagedMod(ctx context.Context, archivePath string, item
 			delete(l.Mods, item.FS.ID)
 		}
 	} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
-		err = fmt.Errorf("ModIdConflict: untracked directory already exists for %s", item.FS.ID)
+		err = models.Fail(models.ModIdConflict, item.FS.ID, filepath.Join(s.active.ModsDir, item.FS.ID))
 	} else if !os.IsNotExist(statErr) {
 		err = statErr
 	}
 	newMod := previous
 	if !hadPrevious {
 		newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
+	}
+	if item.FS.ModType != "" {
+		newMod.Type = models.ModType(item.FS.ModType)
 	}
 	newMod.ApplyInstall(enable, forgeIdentity, time.Now())
 	if err == nil {

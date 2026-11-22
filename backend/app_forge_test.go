@@ -12,7 +12,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/forge"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/testenv"
@@ -36,18 +35,32 @@ func newForgeTestApp(t *testing.T) (*App, *testenv.Env, string, string) {
 	return app, env, libraryRoot, *workspace.ActiveLibraryID
 }
 
-// persistedMods reads the library manifest because the workspace projection is
-// owned by the wails-workspace change. After that branch merges, assert Forge
-// identity on the returned workspace instead.
-func persistedMods(t *testing.T, libraryRoot string) map[string]models.Mod {
+// assertForgeIdentity checks the Forge fields carried by a workspace row. The
+// workspace projection is the frontend contract, so Forge identity must survive
+// assembly instead of only living in manifest.toml.
+func assertForgeIdentity(t *testing.T, mod models.ModSummary, forgeID uint64, guid, kind, version string, versionID uint64) {
 	t.Helper()
-	var manifest struct {
-		Mods map[string]models.Mod `toml:"mods"`
+	if mod.Source == nil || *mod.Source != models.ModSourceForge {
+		t.Fatalf("source: %v", mod.Source)
 	}
-	if _, err := toml.DecodeFile(filepath.Join(libraryRoot, "manifest.toml"), &manifest); err != nil {
-		t.Fatalf("manifest: %v", err)
+	if mod.Version == nil || *mod.Version != version {
+		t.Fatalf("version: %v", mod.Version)
 	}
-	return manifest.Mods
+	if mod.ForgeID == nil || *mod.ForgeID != forgeID {
+		t.Fatalf("forgeId: %v", mod.ForgeID)
+	}
+	if mod.ForgeGUID == nil || *mod.ForgeGUID != guid {
+		t.Fatalf("forgeGuid: %v", mod.ForgeGUID)
+	}
+	if mod.ForgeKind == nil || string(*mod.ForgeKind) != kind {
+		t.Fatalf("forgeKind: %v", mod.ForgeKind)
+	}
+	if mod.ForgeVersionID == nil || *mod.ForgeVersionID != versionID {
+		t.Fatalf("forgeVersionId: %v", mod.ForgeVersionID)
+	}
+	if mod.Type == "" {
+		t.Fatal("type is empty; strict Load rejects it")
+	}
 }
 
 func forgePage(w http.ResponseWriter, id int, guid, name string) {
@@ -205,7 +218,7 @@ func TestBoundForgeReadsFailWithoutActiveLibrary(t *testing.T) {
 }
 
 func TestForgeMatchInstalledModReturnsWorkspace(t *testing.T) {
-	app, _, libraryRoot, libraryID := newForgeTestApp(t)
+	app, _, _, libraryID := newForgeTestApp(t)
 	archive := writeModArchiveContent(t, "MatchTarget.dll", "match payload")
 	if _, err := app.InstallModArchives(models.InstallModArchivesInput{TaskID: "match-install", LibraryID: libraryID, ArchivePaths: []string{archive}}); err != nil {
 		t.Fatal(err)
@@ -235,31 +248,12 @@ func TestForgeMatchInstalledModReturnsWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workspace.ModsByLibraryID[libraryID]) != 1 || workspace.ModsByLibraryID[libraryID][0].ID != installedID {
-		t.Fatalf("workspace: %+v", workspace.ModsByLibraryID[libraryID])
+	mods = workspace.ModsByLibraryID[libraryID]
+	if len(mods) != 1 || mods[0].ID != installedID {
+		t.Fatalf("workspace: %+v", mods)
 	}
-	matched, ok := persistedMods(t, libraryRoot)[installedID]
-	if !ok {
-		t.Fatal("matched mod is missing from the manifest")
-	}
-	if matched.Source != models.ModSourceForge {
-		t.Fatalf("source: %v", matched.Source)
-	}
-	if matched.Version == nil || *matched.Version != "1.2.0" {
-		t.Fatalf("version: %v", matched.Version)
-	}
-	if matched.ForgeID == nil || *matched.ForgeID != 1 {
-		t.Fatalf("forge id: %v", matched.ForgeID)
-	}
-	if matched.ForgeGUID == nil || *matched.ForgeGUID != "forge-guid" {
-		t.Fatalf("forge guid: %v", matched.ForgeGUID)
-	}
-	if matched.ForgeKind == nil || *matched.ForgeKind != models.ForgeKindMod {
-		t.Fatalf("forge kind: %v", matched.ForgeKind)
-	}
-	if matched.ForgeVersionID == nil || *matched.ForgeVersionID != 2 {
-		t.Fatalf("forge version id: %v", matched.ForgeVersionID)
-	}
+	matched := mods[0]
+	assertForgeIdentity(t, matched, 1, "forge-guid", "mod", "1.2.0", 2)
 	if matched.Name == "" || matched.ForgeMetaCachedAt == nil {
 		t.Fatalf("matched mod lost local identity: %+v", matched)
 	}
@@ -336,15 +330,10 @@ func TestForgeDownloadRunsRealHooksAndCompletesTask(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(*workspaceMod.InstalledPath, "SPT", "user", "mods", "ForgeDownloaded", "ForgeDownloaded.dll")); err != nil {
 		t.Fatalf("installed file: %v", err)
 	}
-	mod, ok := persistedMods(t, libraryRoot)[workspaceMod.ID]
-	if !ok {
-		t.Fatal("downloaded mod is missing from the manifest")
-	}
-	if mod.Version == nil || *mod.Version != "3.1.4" || mod.ForgeGUID == nil || *mod.ForgeGUID != "download-guid" {
-		t.Fatalf("installed mod: %+v", mod)
-	}
-	if mod.ForgeVersionID == nil || *mod.ForgeVersionID != 2 || mod.ForgeKind == nil || *mod.ForgeKind != models.ForgeKindMod {
-		t.Fatalf("installed forge identity: %+v", mod)
+	mod := workspaceMod
+	assertForgeIdentity(t, mod, 1, "download-guid", "mod", "3.1.4", 2)
+	if mod.Name == "" {
+		t.Fatalf("completion event mod: %+v", mod)
 	}
 	for _, dir := range []string{"staging", "backups"} {
 		entries, err := os.ReadDir(filepath.Join(libraryRoot, dir))
