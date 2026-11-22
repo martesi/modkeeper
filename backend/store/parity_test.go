@@ -1,12 +1,15 @@
 package store
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/models"
 )
 
 func TestTestLoadMissingFileYieldsDefault(t *testing.T) {
@@ -70,15 +73,41 @@ func TestTestSavedPinkAccentRoundTripsUnchanged(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
-func TestTestSaveFailureSurfacesConfigSaveFailedAndPreservesTarget(t *testing.T) {
+func TestSaveFailureSurfacesConfigSaveFailedAndPreservesTarget(t *testing.T) {
 	d := t.TempDir()
 	p := filepath.Join(d, "config.toml")
 	_ = SaveTo(p, config.Default())
 	before, _ := os.ReadFile(p)
 	blocked := filepath.Join(d, "blocked")
 	_ = os.MkdirAll(filepath.Join(blocked, "sub"), 0700)
-	if err := SaveTo(blocked, config.Default()); err == nil {
+	err := SaveTo(blocked, config.Default())
+	if err == nil {
 		t.Fatal("expected error")
+	}
+	var coded *models.Error
+	if !errors.As(err, &coded) {
+		t.Fatalf("got %T (%v); want *models.Error", err, err)
+	}
+	if coded.Code != models.ConfigSaveFailed {
+		t.Fatalf("code %q; want %q", coded.Code, models.ConfigSaveFailed)
+	}
+	detail, ok := coded.Data.(string)
+	if !ok || !strings.HasPrefix(detail, "save config: ") {
+		t.Fatalf("data %#v; want a cause string", coded.Data)
+	}
+	raw, marshalErr := json.Marshal(coded)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	var wire map[string]json.RawMessage
+	if unmarshalErr := json.Unmarshal(raw, &wire); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
+	}
+	if len(wire) != 2 || string(wire["code"]) != `"ConfigSaveFailed"` {
+		t.Fatalf("wire shape %s; want {code, data}", raw)
+	}
+	if _, exists := wire["data"]; !exists {
+		t.Fatalf("wire shape %s omits data; the bridge requires the key", raw)
 	}
 	after, _ := os.ReadFile(p)
 	if string(before) != string(after) {

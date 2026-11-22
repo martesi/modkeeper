@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,16 +37,22 @@ func (s *Service) SetInstallTaskHook(hook func(string)) {
 	s.installTaskHook = hook
 }
 
-func (s *Service) admit(taskID, libraryID string, op models.TaskOperation) (*task_progress.Emitter, context.Context, error) {
+func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requireStopped bool) (*task_progress.Emitter, context.Context, error) {
 	if taskID == "" || libraryID == "" {
-		return nil, nil, fmt.Errorf("ParseError: taskId and libraryId are required")
+		return nil, nil, models.Fail(models.ParseError, "taskId and libraryId are required")
 	}
 	if !s.libraryMu.TryRLock() {
 		return nil, nil, models.Fail(models.LibraryBusy)
 	}
+	if requireStopped {
+		if err := s.assertGameOrServerStopped(); err != nil {
+			s.libraryMu.RUnlock()
+			return nil, nil, err
+		}
+	}
 	if s.active == nil {
 		s.libraryMu.RUnlock()
-		return nil, nil, fmt.Errorf("NoActiveLibrary")
+		return nil, nil, models.Fail(models.NoActiveLibrary)
 	}
 	if err := s.Registry.AssertActiveLibrary(libraryID); err != nil {
 		s.libraryMu.RUnlock()
@@ -53,7 +60,7 @@ func (s *Service) admit(taskID, libraryID string, op models.TaskOperation) (*tas
 	}
 	if s.active.manifest.ID != libraryID {
 		s.libraryMu.RUnlock()
-		return nil, nil, fmt.Errorf("InvalidLibrary: %s", libraryID)
+		return nil, nil, models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	if !s.modWrites.TryLock() {
 		s.libraryMu.RUnlock()
@@ -96,18 +103,21 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 	defer s.libraryMu.RUnlock()
 	s.modWrites.Lock()
 	defer s.modWrites.Unlock()
-	if s.active == nil || s.active.manifest.ID != in.LibraryID {
-		return fmt.Errorf("InvalidLibrary: not the active library")
+	if s.active == nil {
+		return models.Fail(models.NoActiveLibrary)
+	}
+	if s.active.manifest.ID != in.LibraryID {
+		return models.Fail(models.InvalidLibrary, in.LibraryID, "not the active library")
 	}
 	if len(in.ModIDs) == 0 || (in.Action != models.BulkActionEnable && in.Action != models.BulkActionDisable && in.Action != models.BulkActionDelete) {
-		return fmt.Errorf("ParseError: invalid bulk update")
+		return models.Fail(models.ParseError, "invalid bulk update")
 	}
 	l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
 	switch in.Action {
 	case models.BulkActionEnable, models.BulkActionDisable:
 		for _, id := range in.ModIDs {
 			if _, ok := l.Mods[id]; !ok {
-				return fmt.Errorf("ModNotFound: %s", id)
+				return models.Fail(models.ModNotFound, id)
 			}
 		}
 		for _, id := range in.ModIDs {
@@ -139,7 +149,7 @@ func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progre
 	if progress != nil {
 		s.sendProgress = progress
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationCacheRebuild)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationCacheRebuild, false)
 	if err != nil {
 		return nil, err
 	}
@@ -173,9 +183,9 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		s.sendProgress = progress
 	}
 	if len(in.ArchivePaths) == 0 {
-		return nil, fmt.Errorf("ParseError: archivePaths is empty")
+		return nil, models.Fail(models.ParseError, "archivePaths is empty")
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationInstall)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationInstall, false)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +224,7 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 						delete(l.Mods, item.FS.ID)
 					}
 				} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
-					err = fmt.Errorf("ModIdConflict: untracked directory already exists for %s", item.FS.ID)
+					err = models.Fail(models.ModIdConflict, item.FS.ID, filepath.Join(s.active.ModsDir, item.FS.ID))
 				} else if !os.IsNotExist(statErr) {
 					err = statErr
 				}
@@ -336,7 +346,7 @@ func (s *Service) CancelTask(taskID, libraryID string) error {
 	s.libraryMu.RLock()
 	defer s.libraryMu.RUnlock()
 	if s.active == nil || s.active.manifest.ID != libraryID {
-		return fmt.Errorf("InvalidLibrary: %s", libraryID)
+		return models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	return s.Registry.CancelTask(taskID, libraryID)
 }
@@ -345,7 +355,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 	if progress != nil {
 		s.sendProgress = progress
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationSync)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationSync, true)
 	if err != nil {
 		return nil, err
 	}
@@ -395,8 +405,9 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 }
 
 func archiveError(err error) models.Error {
-	if e, ok := err.(*models.Error); ok {
-		return *e
+	var coded *models.Error
+	if errors.As(err, &coded) {
+		return *coded
 	}
 	return models.Error{Code: "Unexpected", Data: err.Error()}
 }

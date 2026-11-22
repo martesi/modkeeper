@@ -13,6 +13,10 @@ type Inspector interface {
 	IsRunning(paths []string) (bool, error)
 }
 
+// Default returns the inspector for the running platform. Callers must still
+// propagate its errors; Unsupported reports that inspection is unavailable.
+func Default() Inspector { return defaultInspector() }
+
 // Fake is a deterministic inspector for tests.
 type Fake struct {
 	Running bool

@@ -15,8 +15,8 @@ type Reporter interface {
 
 // ModFailure is kept local until the foundation's shared error records land.
 type ModFailure struct {
-	ModID string `json:"modId"`
-	Error *Error `json:"error"`
+	ModID string        `json:"modId"`
+	Error *models.Error `json:"error"`
 }
 type Report struct {
 	Failures []ModFailure

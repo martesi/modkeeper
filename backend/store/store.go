@@ -9,6 +9,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/models"
 )
 
 type AppConfigStore struct {
@@ -19,7 +20,7 @@ type AppConfigStore struct {
 func ConfigPath(debug bool) (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("unable to determine config directory: %w", err)
+		return "", models.Fail(models.IOError, "Unable to determine config directory")
 	}
 	name := "config.toml"
 	if debug {
@@ -35,10 +36,10 @@ func LoadFrom(path string) (config.AppConfig, error) {
 		return cfg, nil
 	}
 	if err != nil {
-		return cfg, err
+		return cfg, models.Fail(models.IOError, err.Error())
 	}
 	if _, err = toml.Decode(string(b), &cfg); err != nil {
-		return config.AppConfig{}, fmt.Errorf("parse app config: %w", err)
+		return config.AppConfig{}, models.Fail(models.ParseError, err.Error())
 	}
 	cfg.Normalize()
 	return cfg, nil
@@ -46,11 +47,11 @@ func LoadFrom(path string) (config.AppConfig, error) {
 
 func SaveTo(path string, cfg config.AppConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return saveFailure(err)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.tmp")
 	if err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return saveFailure(err)
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
@@ -65,12 +66,18 @@ func SaveTo(path string, cfg config.AppConfig) error {
 		err = closeErr
 	}
 	if err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return saveFailure(err)
 	}
 	if err = os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return saveFailure(err)
 	}
 	return nil
+}
+
+// saveFailure keeps the previous message while preserving the stable wire code
+// the Rust store emits for every write failure.
+func saveFailure(err error) error {
+	return models.Fail(models.ConfigSaveFailed, fmt.Sprintf("save config: %v", err))
 }
 
 func (s *AppConfigStore) Save() error { return SaveTo(s.Path, s.Config) }

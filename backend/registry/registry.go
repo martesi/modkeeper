@@ -54,7 +54,7 @@ func (r *TaskRegistry) AssertActiveLibrary(id string) error {
 		return models.Fail(models.NoActiveLibrary)
 	}
 	if r.activeID != id {
-		return models.Fail(models.InvalidLibrary, id)
+		return models.Fail(models.InvalidLibrary, id, "not the active library")
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func (r *TaskRegistry) CancelTask(id, libraryID string) error {
 	}
 	if entry.libraryID != libraryID {
 		r.mu.Unlock()
-		return models.Fail(models.InvalidLibrary, libraryID)
+		return models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	if !entry.cancellable {
 		r.mu.Unlock()

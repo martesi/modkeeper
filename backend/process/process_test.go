@@ -19,6 +19,18 @@ func TestFake(t *testing.T) {
 	}
 }
 
+// A target executable that no longer exists cannot be running. Treating it as
+// an inspection failure would make a broken library impossible to delete.
+func TestMissingExecutableIsNotAnInspectionFailure(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux /proc inspector is only available on Linux")
+	}
+	running, err := (Linux{}).IsRunning([]string{filepath.Join(t.TempDir(), "absent.exe")})
+	if err != nil || running {
+		t.Fatalf("got %v, %v; want a safe absence", running, err)
+	}
+}
+
 // TestProcessHelperBlock is the child of TestDetectCopiedRunningExecutable. A
 // test binary is the most reliable copy target: the same environment that ran
 // the suite can run it again.

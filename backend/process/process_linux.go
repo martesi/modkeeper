@@ -13,11 +13,19 @@ import (
 // Linux inspects /proc for executable paths.
 type Linux struct{}
 
+func defaultInspector() Inspector { return Linux{} }
+
 func (Linux) IsRunning(paths []string) (bool, error) {
 	canonical := make(map[string]struct{}, len(paths))
 	names := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
 		resolved, err := filepath.EvalSymlinks(path)
+		if os.IsNotExist(err) {
+			// A target that does not exist cannot be running. This keeps a
+			// broken library deletable instead of turning a missing file into
+			// an inspection failure.
+			continue
+		}
 		if err != nil {
 			return false, fmt.Errorf("canonicalize executable %q: %w", path, err)
 		}

@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !windows
 
 package process
 
@@ -6,5 +6,7 @@ package process
 // implementation. Callers must treat ErrUnsupported as an inspection failure,
 // not as proof that deployment is safe.
 type Unsupported struct{}
+
+func defaultInspector() Inspector { return Unsupported{} }
 
 func (Unsupported) IsRunning([]string) (bool, error) { return false, ErrUnsupported }
