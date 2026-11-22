@@ -7,6 +7,7 @@ import (
 	"github.com/martes/modkeeper/backend"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:dist
@@ -46,6 +47,27 @@ func startBackend(app *application.App, appBackend *backend.App) {
 	if err := appBackend.Start(); err != nil {
 		log.Printf("modkeeper: startup load failed: %v", err)
 	}
+}
+
+// forwardWindowFileDrops re-emits Wails' window file-drop event on the JS
+// event bus. Wails delivers `common:WindowFilesDropped` to Go window listeners
+// only, so the renderer cannot subscribe to it directly.
+func forwardWindowFileDrops(app *application.App, window *application.WebviewWindow) {
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		payload := models.WindowFilesDroppedEvent{
+			Filenames: event.Context().DroppedFiles(),
+		}
+		if details := event.Context().DropTargetDetails(); details != nil {
+			payload.X = details.X
+			payload.Y = details.Y
+			payload.ElementDetails = models.WindowDropElementDetails{
+				ID:         details.ElementID,
+				ClassList:  details.ClassList,
+				Attributes: details.Attributes,
+			}
+		}
+		app.Event.Emit("common:WindowFilesDropped", payload)
+	})
 }
 
 // wailsEventSink forwards service events to the Wails event bus.

@@ -40,6 +40,7 @@ import {
   openTitlebarPaletteForShortcut,
   setTitlebarSearchQuery,
 } from './titlebar-search'
+import { titlebarDragStyle } from './titlebar-drag'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -76,6 +77,7 @@ export function TitleBar() {
     navigator.userAgent.includes('Macintosh') ||
     navigator.userAgent.includes('Mac OS X')
   const showCaptionButtons = platformKind() !== 'browser' && !isMacOS
+  const dragStyle = titlebarDragStyle(platformKind())
 
   // The titlebar entry opens the same centered palette at every width. Ctrl+F
   // remains available for the former wide-field and narrow collapsed-field paths.
@@ -146,7 +148,12 @@ export function TitleBar() {
         data-caption={showCaptionButtons ? 'true' : undefined}
         className="mk-titlebar relative z-20 flex h-11 shrink-0 items-center justify-between border-b border-border bg-background/25"
       >
-        <div aria-hidden data-tauri-drag-region className="absolute inset-0" />
+        <div
+          aria-hidden
+          data-tauri-drag-region
+          style={dragStyle}
+          className="absolute inset-0"
+        />
 
         <div
           className={`relative z-10 flex h-11 items-center gap-2 pointer-events-none ${isMacOS ? 'pl-[76px]' : 'pl-2'}`}

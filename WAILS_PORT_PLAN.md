@@ -36,13 +36,14 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `forgeModVersions` | `ForgeModVersions(modID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeAddonVersions` | `ForgeAddonVersions(addonID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeDownloadVersion` | `ForgeDownloadVersion(input models.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
-| `openPath` | `OpenPath(path string) error` | Wails runtime limitation; console fallback |
+| `openPath` | `OpenPath(path string) error` | WX (bound Go method over `Env.OpenFileManager`) |
 | `selectFiles` | `SelectFiles() ([]string, error)` | Wails runtime limitation; no-op fallback |
 | `setWindowEffect` | `SetWindowEffect(effect string) error` | WX |
 | `getVersion` | `GetVersion() string` | WA |
 
 Wails derives the JS name by lowercasing the first letter of the exported method, so Go names must
-match the TS names exactly. `ApplyWindowEffect` stays as-is.
+match the TS names exactly. `ApplyWindowEffect` remains a bound method but is a compatibility no-op;
+the effect is seeded from the saved theme when the window is created.
 
 ## Wire contract (`backend/models`)
 
@@ -298,8 +299,10 @@ added SPT layout and metadata inspection; `wails/wg-frontend` added the Wails br
 `wails/wq-process` added process checks; `wails/wx-platform` added platform abstraction.
 
 Remaining gaps: Windows junction behavior is not proven equivalent; inspecting a real SPT
-installation remains opt-in; the Wails runtime has no openPath or file-drop API, so those
-actions are console output or no-ops rather than native integrations.
+installation remains opt-in; the server build has no user desktop, so `OpenPath` returns a typed
+error there; Wails applies the window backdrop and appearance when it creates the window, so later
+theme changes do not re-apply the native effect; frontend file logging stays on the console because
+Wails has no Tauri-style file log sink.
 
 ## Work protocol
 

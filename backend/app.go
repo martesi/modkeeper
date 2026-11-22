@@ -62,4 +62,8 @@ func (a *App) Start() error {
 	return a.Library.Start()
 }
 
-func (a *App) ApplyWindowEffect(isDark *bool) {}
+// ApplyWindowEffect is a compatibility no-op. Wails applies the window backdrop
+// and appearance when it creates the window, and has no runtime setter, so
+// main.go seeds both from the saved theme at startup. Returning success keeps
+// the existing frontend call path working when the user changes theme later.
+func (a *App) ApplyWindowEffect(isDark *bool) error { return nil }

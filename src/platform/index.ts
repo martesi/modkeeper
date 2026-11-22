@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { hasNativeRuntime, isWails, wailsWindow } from '@/wails/runtime'
 
 export type PlatformKind = 'wails' | 'tauri' | 'browser'
@@ -8,6 +9,12 @@ export type FileSelectionOptions = {
   defaultPath?: string
   title?: string
 }
+
+// Wails delivers file drops to Go window listeners; the Go bridge re-emits
+// this payload on the JS event bus. Only the paths matter to the renderer.
+const wailsFileDropSchema = z.object({
+  filenames: z.array(z.string()),
+})
 
 export function platformKind(): PlatformKind {
   if (isWails()) return 'wails'
@@ -89,8 +96,10 @@ export async function openUrl(url: string): Promise<void> {
 }
 
 export async function openPath(path: string): Promise<void> {
-  if (platformKind() === 'wails')
-    return Promise.reject(new Error(`Wails has no path opener API: ${path}`))
+  if (platformKind() === 'wails') {
+    const { openPathInFileManager } = await import('@/wails')
+    return openPathInFileManager(path)
+  }
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-opener')).openPath(path)
 }
@@ -100,7 +109,8 @@ export async function startWindowDrag(): Promise<void> {
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
       .startDragging()
-  if (platformKind() === 'wails') return
+  // Wails starts a drag from the `--wails-draggable: drag` CSS property on the
+  // titlebar element and exposes no public JS start-drag API.
 }
 
 export async function minimizeWindow(): Promise<void> {
@@ -143,8 +153,13 @@ export async function setWindowChrome(
       ? win.setTitleBarStyle('overlay')
       : win.setDecorations(false)
   }
-  if (platformKind() === 'wails' && option === 'frameless')
-    return (await import('@wailsio/runtime')).Window.SetFrameless(true)
+  if (platformKind() === 'wails') {
+    if (option === 'frameless')
+      return (await import('@wailsio/runtime')).Window.SetFrameless(true)
+    // Wails fixes the macOS overlay title bar when it creates the window
+    // (MacTitleBarHiddenInsetUnified in main.go) and exposes no runtime setter.
+    return
+  }
 }
 export async function onWindowResize(
   callback: () => void,
@@ -153,15 +168,25 @@ export async function onWindowResize(
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
       .onResized(callback)
+  if (platformKind() === 'wails')
+    return (await import('@wailsio/runtime')).Events.On(
+      'common:WindowDidResize',
+      callback,
+    )
   return () => {}
 }
 export async function onFileDrop(
   callback: (files: string[]) => void,
 ): Promise<() => void> {
-  if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Events.On('wails:drop', (event) =>
-      callback(event.data as string[]),
+  if (platformKind() === 'wails') {
+    return (await import('@wailsio/runtime')).Events.On(
+      'common:WindowFilesDropped',
+      (event) => {
+        const files = droppedFilesFromEvent(event.data)
+        if (files) callback(files)
+      },
     )
+  }
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -171,8 +196,20 @@ export async function onFileDrop(
   return () => {}
 }
 export async function log(message: string): Promise<void> {
+  // ACCEPTED DEGRADATION: Wails has no file-log sink equivalent to Tauri's
+  // LogDir/modkeeper.log; desktop diagnostics stay on the console.
   if (platformKind() === 'wails') return console.info(message)
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-log')).info(message)
   console.info(message)
+}
+
+function droppedFilesFromEvent(payload: unknown): string[] | null {
+  const parsed = wailsFileDropSchema.safeParse(payload)
+  if (parsed.success) return parsed.data.filenames
+  console.warn(
+    '[platform] ignoring malformed Wails file-drop payload',
+    parsed.error,
+  )
+  return null
 }

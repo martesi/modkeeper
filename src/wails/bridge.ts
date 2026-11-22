@@ -100,3 +100,14 @@ export function cancelInstallTask(
   if (isWails()) return Promise.resolve(wailsApp.CancelTask(taskId, libraryId))
   return Promise.reject(new Error('CancelTask is only available in Wails'))
 }
+
+/**
+ * Opens a file or directory in the OS file manager. Wails has no JavaScript
+ * opener, so this bound Go method replaces the Tauri opener plugin.
+ */
+export function openPathInFileManager(path: string): Promise<void> {
+  const mock = getWailsMock()?.commands?.openPath
+  if (mock) return Promise.resolve(mock(path)).then(() => undefined)
+  if (isWails()) return Promise.resolve(wailsApp.OpenPath(path))
+  return Promise.reject(new Error('OpenPath is only available in Wails'))
+}
