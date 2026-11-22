@@ -1,4 +1,13 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test'
+import { nativeModules } from './native-modules'
 
 const calls: Array<[string, ...unknown[]]> = []
 let tauriDrop: ((event: unknown) => void) | undefined
@@ -24,44 +33,21 @@ const tauriWindow = {
   setDecorations: async (value: boolean) => calls.push(['decorations', value]),
 }
 
-// Module mocks are process-global: test files that run later in the same
-// process import the real bindings, so each factory must expose every export
-// those bindings use. An incomplete mock breaks their ESM link with
-// "Export named 'Call' not found".
-mock.module('@tauri-apps/api/core', () => ({
-  isTauri: () => true,
-  invoke: async () => undefined,
-  transformCallback: () => 1,
-}))
-mock.module('@tauri-apps/plugin-dialog', () => ({
+const tauriDialog = {
   open: async (options: unknown) => {
     calls.push(['dialog', options])
     return '/tmp/file.zip'
   },
-}))
-mock.module('@tauri-apps/plugin-opener', () => ({
+}
+const tauriOpener = {
   openUrl: async (url: string) => calls.push(['url', url]),
   openPath: async (path: string) => calls.push(['path', path]),
-}))
-mock.module('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => tauriWindow,
-}))
-mock.module('@tauri-apps/plugin-log', () => ({
+}
+const tauriWindowModule = { getCurrentWindow: () => tauriWindow }
+const tauriLog = {
   info: async (message: string) => calls.push(['log', message]),
-}))
-mock.module('@wailsio/runtime', () => ({
-  // Everything the generated bindings import at module scope must exist here,
-  // because this mock also covers the files that load them later.
-  Call: {
-    ByName: async () => {
-      throw new Error('Wails Call.ByName is not mocked')
-    },
-    ByID: async (id: number, ...args: unknown[]) => {
-      calls.push(['wails-call', id, ...args])
-    },
-  },
-  CancellablePromise: Promise,
-  Create: { Events: {}, Array: (value: unknown) => value },
+}
+const wailsRuntime = {
   Dialogs: {
     OpenFile: async (options: unknown) => {
       calls.push(['wails-dialog', options])
@@ -69,7 +55,6 @@ mock.module('@wailsio/runtime', () => ({
     },
   },
   Browser: { OpenURL: async (url: string) => calls.push(['wails-url', url]) },
-  System: {},
   Window: {
     Minimise: async () => calls.push(['wails-minimize']),
     ToggleMaximise: async () => calls.push(['wails-maximize']),
@@ -87,7 +72,29 @@ mock.module('@wailsio/runtime', () => ({
       }
     },
   },
-}))
+}
+const appBindings = {
+  openPathWithPlatformOpener: async (path: string) => {
+    calls.push(['wails-call', 0, path])
+  },
+  logToFile: async (message: string) => {
+    calls.push(['wails-call', 0, message])
+  },
+}
+
+// Replace only the loader functions. Module mocks are process-global under
+// Bun, so a test file that runs later would import these fakes; spies are
+// restored in afterEach and never touch another file's module graph.
+beforeEach(() => {
+  spyOn(nativeModules, 'tauriDialog').mockResolvedValue(tauriDialog as never)
+  spyOn(nativeModules, 'tauriOpener').mockResolvedValue(tauriOpener as never)
+  spyOn(nativeModules, 'tauriWindow').mockResolvedValue(
+    tauriWindowModule as never,
+  )
+  spyOn(nativeModules, 'tauriLog').mockResolvedValue(tauriLog as never)
+  spyOn(nativeModules, 'wails').mockResolvedValue(wailsRuntime as never)
+  spyOn(nativeModules, 'appBindings').mockResolvedValue(appBindings as never)
+})
 
 const platform = await import('./index')
 const originalWindow = globalThis.window
@@ -104,6 +111,7 @@ function setWailsBuildFlag(value: string | undefined) {
   else env.WAILS = value
 }
 afterEach(() => {
+  mock.restore()
   calls.length = 0
   tauriDrop = undefined
   wailsListeners.clear()

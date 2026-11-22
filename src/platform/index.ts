@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { nativeModules } from './native-modules'
 import {
   hasNativeRuntime,
   isNativeDesktopShell,
@@ -64,7 +65,7 @@ export async function pickFiles(
 ): Promise<string[]> {
   if (!hasNativeFilePicker()) return []
   if (platformKind() === 'wails') {
-    const { Dialogs } = await import('@wailsio/runtime')
+    const { Dialogs } = await nativeModules.wails()
     const result = await Dialogs.OpenFile({
       CanChooseDirectories: false,
       CanChooseFiles: true,
@@ -79,7 +80,7 @@ export async function pickFiles(
     return (Array.isArray(result) ? result : [result]).filter(Boolean)
   }
   if (platformKind() === 'tauri') {
-    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { open } = await nativeModules.tauriDialog()
     const result = await open(tauriDialogOptions(options))
     return (Array.isArray(result) ? result : result ? [result] : []) as string[]
   }
@@ -91,7 +92,7 @@ export async function pickDirectory(
 ): Promise<string | null> {
   if (!hasNativeFilePicker()) return null
   if (platformKind() === 'wails') {
-    const { Dialogs } = await import('@wailsio/runtime')
+    const { Dialogs } = await nativeModules.wails()
     const result = await Dialogs.OpenFile({
       CanChooseDirectories: true,
       CanChooseFiles: false,
@@ -102,7 +103,7 @@ export async function pickDirectory(
     return typeof result === 'string' && result ? result : null
   }
   if (platformKind() === 'tauri') {
-    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { open } = await nativeModules.tauriDialog()
     const result = await open({
       ...tauriDialogOptions(options),
       directory: true,
@@ -115,9 +116,9 @@ export async function pickDirectory(
 
 export async function openUrl(url: string): Promise<void> {
   if (platformKind() === 'wails' && hasNativeWindowChrome())
-    return (await import('@wailsio/runtime')).Browser.OpenURL(url)
+    return (await nativeModules.wails()).Browser.OpenURL(url)
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/plugin-opener')).openUrl(url)
+    return (await nativeModules.tauriOpener()).openUrl(url)
   // Server and browser pages have no desktop host to open the URL, so use the
   // local tab instead of asking the server to open it.
   window.open(url, '_blank', 'noopener,noreferrer')
@@ -129,17 +130,17 @@ export async function openUrl(url: string): Promise<void> {
 export async function openPath(path: string): Promise<void> {
   if (!canOpenPath()) return
   if (platformKind() === 'wails') {
-    const { openPathWithPlatformOpener } = await import('@/wails')
+    const { openPathWithPlatformOpener } = await nativeModules.appBindings()
     return openPathWithPlatformOpener(path)
   }
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/plugin-opener')).openPath(path)
+    return (await nativeModules.tauriOpener()).openPath(path)
 }
 
 export async function startWindowDrag(): Promise<void> {
   if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
+    return (await nativeModules.tauriWindow())
       .getCurrentWindow()
       .startDragging()
   // Wails starts a drag from the `--wails-draggable: drag` CSS property on the
@@ -149,36 +150,32 @@ export async function startWindowDrag(): Promise<void> {
 export async function minimizeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
-      .getCurrentWindow()
-      .minimize()
+    return (await nativeModules.tauriWindow()).getCurrentWindow().minimize()
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Window.Minimise()
+    return (await nativeModules.wails()).Window.Minimise()
 }
 export async function toggleMaximizeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
+    return (await nativeModules.tauriWindow())
       .getCurrentWindow()
       .toggleMaximize()
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Window.ToggleMaximise()
+    return (await nativeModules.wails()).Window.ToggleMaximise()
 }
 export async function closeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window')).getCurrentWindow().close()
+    return (await nativeModules.tauriWindow()).getCurrentWindow().close()
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Window.Close()
+    return (await nativeModules.wails()).Window.Close()
 }
 export async function isWindowMaximized(): Promise<boolean> {
   if (!hasNativeWindowChrome()) return false
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
-      .getCurrentWindow()
-      .isMaximized()
+    return (await nativeModules.tauriWindow()).getCurrentWindow().isMaximized()
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Window.IsMaximised()
+    return (await nativeModules.wails()).Window.IsMaximised()
   return false
 }
 export async function setWindowChrome(
@@ -186,14 +183,14 @@ export async function setWindowChrome(
 ): Promise<void> {
   if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri') {
-    const win = (await import('@tauri-apps/api/window')).getCurrentWindow()
+    const win = (await nativeModules.tauriWindow()).getCurrentWindow()
     return option === 'overlay'
       ? win.setTitleBarStyle('overlay')
       : win.setDecorations(false)
   }
   if (platformKind() === 'wails') {
     if (option === 'frameless')
-      return (await import('@wailsio/runtime')).Window.SetFrameless(true)
+      return (await nativeModules.wails()).Window.SetFrameless(true)
     // Wails fixes the macOS overlay title bar when it creates the window
     // (MacTitleBarHiddenInsetUnified in main.go) and exposes no runtime setter.
     return
@@ -204,11 +201,11 @@ export async function onWindowResize(
 ): Promise<() => void> {
   if (!hasNativeWindowChrome()) return () => {}
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
+    return (await nativeModules.tauriWindow())
       .getCurrentWindow()
       .onResized(callback)
   if (platformKind() === 'wails')
-    return (await import('@wailsio/runtime')).Events.On(
+    return (await nativeModules.wails()).Events.On(
       'common:WindowDidResize',
       callback,
     )
@@ -219,7 +216,7 @@ export async function onFileDrop(
 ): Promise<() => void> {
   if (!hasNativeWindowChrome()) return () => {}
   if (platformKind() === 'wails') {
-    return (await import('@wailsio/runtime')).Events.On(
+    return (await nativeModules.wails()).Events.On(
       'modkeeper:files-dropped',
       (event) => {
         const files = droppedFilesFromEvent(event.data)
@@ -228,7 +225,7 @@ export async function onFileDrop(
     )
   }
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/api/window'))
+    return (await nativeModules.tauriWindow())
       .getCurrentWindow()
       .onDragDropEvent((event) => {
         if (event.payload.type === 'drop') callback(event.payload.paths)
@@ -237,11 +234,11 @@ export async function onFileDrop(
 }
 export async function log(message: string): Promise<void> {
   if (platformKind() === 'wails') {
-    const { logToFile } = await import('@/wails')
+    const { logToFile } = await nativeModules.appBindings()
     return logToFile(message)
   }
   if (platformKind() === 'tauri')
-    return (await import('@tauri-apps/plugin-log')).info(message)
+    return (await nativeModules.tauriLog()).info(message)
   console.info(message)
 }
 

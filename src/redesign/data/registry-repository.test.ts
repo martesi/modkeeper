@@ -1,12 +1,16 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { getDefaultStore } from 'jotai'
 import { installWailsMock } from '@/wails/mock'
+import { pendingTasksAtom } from '../state/library-state'
+import {
+  registryInstallingMapAtom,
+  registryMatchingMapAtom,
+  registryRateLimitedUntilAtom,
+} from '../state/registry-state'
+import { installLinguiMacroMock } from '../testing/lingui-macro'
+import { clearRegistryInstallTimeout } from './registry-install-task'
 
-// The macro package is a Vite transform and its optional babel peer is not
-// installed for bun test; identity messages keep the i18n modules importable.
-mock.module('@lingui/core/macro', () => ({
-  t: (value: string | { message?: string }) =>
-    typeof value === 'string' ? value : (value.message ?? ''),
-}))
+installLinguiMacroMock()
 
 const repo = await import('./registry-repository')
 const {
@@ -110,6 +114,21 @@ function installBridge() {
 }
 
 afterEach(() => {
+  const store = getDefaultStore()
+  // The install command is fire-and-track: it leaves the busy-map entry and a
+  // ten-minute timeout behind until a workspace event arrives. Tests start the
+  // task but never emit that event, so clear both here.
+  for (const taskId of Object.values(store.get(registryInstallingMapAtom))) {
+    clearRegistryInstallTimeout(taskId)
+  }
+  store.set(registryInstallingMapAtom, {})
+  store.set(registryMatchingMapAtom, {})
+  store.set(registryRateLimitedUntilAtom, null)
+  store.set(pendingTasksAtom, [])
+
+  expect(store.get(registryInstallingMapAtom)).toEqual({})
+  expect(store.get(pendingTasksAtom)).toEqual([])
+
   calls.length = 0
   globalThis.window = originalWindow
 })
