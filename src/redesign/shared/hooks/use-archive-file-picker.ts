@@ -1,9 +1,10 @@
 /*
- * Archive import picker: opens the native archive picker and feeds the selection into the
- * fire-and-track install. The picker and drop zone use the shared archive-format authority.
+ * Archive import picker: opens the native archive picker on desktop shells and the path-entry
+ * dialog elsewhere, then feeds the selection into the fire-and-track install. The picker and drop
+ * zone use the shared archive-format authority.
  */
 import { useCallback } from 'react'
-import { pickFiles, platformKind } from '@/platform'
+import { pickFiles } from '@/platform'
 import { useAtomValue } from 'jotai'
 import {
   activeLibraryIdAtom,
@@ -11,6 +12,7 @@ import {
 } from '../../state/library-state'
 import { installModArchives } from '../../data/library-repository'
 import { SUPPORTED_ARCHIVE_EXTENSIONS } from '../utils/file-filters'
+import { pickWithNativeOrPathEntry } from '../utils/picker-gate'
 import { libraryText } from '../../i18n/library-text'
 import { usePathInputDialog } from './use-path-input-dialog'
 
@@ -34,16 +36,15 @@ export function useArchiveFilePicker(source: PendingTaskSource = 'other') {
 
   const pickAndInstall = useCallback(async () => {
     if (!activeLibraryId) return
-    const paths =
-      platformKind() === 'browser'
-        ? await requestPathInput({
-            mode: 'archives',
-            title: libraryText.archivePathsTitle(),
-            description: libraryText.archivePathsDescription(),
-            label: libraryText.archivePathsLabel(),
-            placeholder: libraryText.archivePathsPlaceholder(),
-          })
-        : await pickModArchives()
+    const paths = await pickWithNativeOrPathEntry(pickModArchives, () =>
+      requestPathInput({
+        mode: 'archives',
+        title: libraryText.archivePathsTitle(),
+        description: libraryText.archivePathsDescription(),
+        label: libraryText.archivePathsLabel(),
+        placeholder: libraryText.archivePathsPlaceholder(),
+      }),
+    )
     if (!paths?.length) return
     await installModArchives({ libraryId: activeLibraryId, paths, source })
   }, [activeLibraryId, requestPathInput, source])

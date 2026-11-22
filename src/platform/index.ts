@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { hasNativeRuntime, isWails, wailsWindow } from '@/wails/runtime'
+import {
+  hasNativeRuntime,
+  isNativeDesktopShell,
+  isWails,
+  wailsWindow,
+} from '@/wails/runtime'
 
 export type PlatformKind = 'wails' | 'tauri' | 'browser'
 export type FileSelectionOptions = {
@@ -22,6 +27,25 @@ export function platformKind(): PlatformKind {
   return 'browser'
 }
 
+/**
+ * A desktop shell owns native file dialogs. The Wails server build compiles the
+ * same frontend as the native app, but it serves a browser page without the
+ * desktop environment marker, so it has no native dialogs either.
+ */
+export function hasNativeFilePicker(): boolean {
+  return isNativeDesktopShell()
+}
+
+/** Minimize, maximize and close need a native window to act on. */
+export function hasNativeWindowChrome(): boolean {
+  return isNativeDesktopShell()
+}
+
+/** Revealing a path hands it to the OS file manager on the desktop host. */
+export function canOpenPath(): boolean {
+  return isNativeDesktopShell()
+}
+
 function tauriDialogOptions(options: FileSelectionOptions) {
   return {
     multiple: options.multiple ?? false,
@@ -38,6 +62,7 @@ function tauriDialogOptions(options: FileSelectionOptions) {
 export async function pickFiles(
   options: FileSelectionOptions = {},
 ): Promise<string[]> {
+  if (!hasNativeFilePicker()) return []
   if (platformKind() === 'wails') {
     const { Dialogs } = await import('@wailsio/runtime')
     const result = await Dialogs.OpenFile({
@@ -64,6 +89,7 @@ export async function pickFiles(
 export async function pickDirectory(
   options: FileSelectionOptions = {},
 ): Promise<string | null> {
+  if (!hasNativeFilePicker()) return null
   if (platformKind() === 'wails') {
     const { Dialogs } = await import('@wailsio/runtime')
     const result = await Dialogs.OpenFile({
@@ -88,10 +114,12 @@ export async function pickDirectory(
 }
 
 export async function openUrl(url: string): Promise<void> {
-  if (platformKind() === 'wails')
+  if (platformKind() === 'wails' && hasNativeWindowChrome())
     return (await import('@wailsio/runtime')).Browser.OpenURL(url)
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-opener')).openUrl(url)
+  // Server and browser pages have no desktop host to open the URL, so use the
+  // local tab instead of asking the server to open it.
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
@@ -99,6 +127,7 @@ export async function openUrl(url: string): Promise<void> {
 // the OS default handler (the Wails OpenPath bound method). Tauri keeps its
 // opener plugin behavior.
 export async function openPath(path: string): Promise<void> {
+  if (!canOpenPath()) return
   if (platformKind() === 'wails') {
     const { openPathWithPlatformOpener } = await import('@/wails')
     return openPathWithPlatformOpener(path)
@@ -108,6 +137,7 @@ export async function openPath(path: string): Promise<void> {
 }
 
 export async function startWindowDrag(): Promise<void> {
+  if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -117,6 +147,7 @@ export async function startWindowDrag(): Promise<void> {
 }
 
 export async function minimizeWindow(): Promise<void> {
+  if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -125,6 +156,7 @@ export async function minimizeWindow(): Promise<void> {
     return (await import('@wailsio/runtime')).Window.Minimise()
 }
 export async function toggleMaximizeWindow(): Promise<void> {
+  if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -133,12 +165,14 @@ export async function toggleMaximizeWindow(): Promise<void> {
     return (await import('@wailsio/runtime')).Window.ToggleMaximise()
 }
 export async function closeWindow(): Promise<void> {
+  if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window')).getCurrentWindow().close()
   if (platformKind() === 'wails')
     return (await import('@wailsio/runtime')).Window.Close()
 }
 export async function isWindowMaximized(): Promise<boolean> {
+  if (!hasNativeWindowChrome()) return false
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -150,6 +184,7 @@ export async function isWindowMaximized(): Promise<boolean> {
 export async function setWindowChrome(
   option: 'overlay' | 'frameless',
 ): Promise<void> {
+  if (!hasNativeWindowChrome()) return
   if (platformKind() === 'tauri') {
     const win = (await import('@tauri-apps/api/window')).getCurrentWindow()
     return option === 'overlay'
@@ -167,6 +202,7 @@ export async function setWindowChrome(
 export async function onWindowResize(
   callback: () => void,
 ): Promise<() => void> {
+  if (!hasNativeWindowChrome()) return () => {}
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/api/window'))
       .getCurrentWindow()
@@ -181,6 +217,7 @@ export async function onWindowResize(
 export async function onFileDrop(
   callback: (files: string[]) => void,
 ): Promise<() => void> {
+  if (!hasNativeWindowChrome()) return () => {}
   if (platformKind() === 'wails') {
     return (await import('@wailsio/runtime')).Events.On(
       'modkeeper:files-dropped',
