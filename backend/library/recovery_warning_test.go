@@ -45,10 +45,8 @@ func TestStartupAndActivationWarnOnInvalidInstallMarkers(t *testing.T) {
 				if err := restarted.Start(); err != nil {
 					t.Fatal(err)
 				}
-				workspace := restarted.Workspace()
-				if workspace.ConfigWarning == nil ||
-					!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
-					t.Fatalf("immediate workspace warning=%v; want startup recovery guidance", workspace.ConfigWarning)
+				if err := restarted.WaitForInitialLoad(); err != nil {
+					t.Fatal(err)
 				}
 				assertRecoveryWarning(t, restarted, markerPath, marker.content)
 			})
@@ -101,8 +99,8 @@ func TestCommittedRecoveryPreservesSnapshotWhenDestinationIsUnavailable(t *testi
 				t.Fatal(err)
 			}
 			l := service.active
-			oldMod := models.Mod{ID: "BrokenMod", Name: "old", Source: models.ModSourceLocal}
-			newMod := models.Mod{ID: oldMod.ID, Name: "new", Source: models.ModSourceForge}
+			oldMod := models.Mod{ID: "BrokenMod", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+			newMod := models.Mod{ID: oldMod.ID, Name: "new", Type: models.ModTypeServer, Source: models.ModSourceForge}
 			l.manifest.Mods[oldMod.ID] = newMod
 			if err := l.Persist(); err != nil {
 				t.Fatal(err)
@@ -151,10 +149,12 @@ func TestCommittedRecoveryPreservesSnapshotWhenDestinationIsUnavailable(t *testi
 				if err := restarted.Start(); err != nil {
 					t.Fatal(err)
 				}
-				workspace := restarted.Workspace()
-				if workspace.ConfigWarning == nil ||
-					!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
-					t.Fatalf("restart %d warning=%v; want repair guidance", restart, workspace.ConfigWarning)
+				if err := restarted.WaitForInitialLoad(); err != nil {
+					t.Fatal(err)
+				}
+				if warning := restarted.TakeStartupWarning(); warning == nil ||
+					!strings.Contains(*warning, "Preserve the library and backups") {
+					t.Fatalf("restart %d warning=%v; want repair guidance", restart, warning)
 				}
 				loaded, err := Load(root)
 				if err != nil {
@@ -204,11 +204,19 @@ func seedInvalidRecoveryState(t *testing.T, l *Library, markerPath, marker strin
 
 func assertRecoveryWarning(t *testing.T, service *Service, markerPath, marker string) {
 	t.Helper()
-	workspace := service.Workspace()
-	if workspace.ConfigWarning == nil ||
-		!strings.Contains(*workspace.ConfigWarning, "Preserve the library and backups") {
-		t.Fatalf("workspace warning=%v; want actionable recovery guidance", workspace.ConfigWarning)
+	warning := service.TakeStartupWarning()
+	if warning == nil ||
+		!strings.Contains(*warning, "Preserve the library and backups") {
+		t.Fatalf("workspace warning=%v; want actionable recovery guidance", warning)
 	}
+	if consumed := service.TakeStartupWarning(); consumed != nil {
+		t.Fatalf("second workspace warning=%q; want it consumed", *consumed)
+	}
+	assertRecoveryState(t, markerPath, marker)
+}
+
+func assertRecoveryState(t *testing.T, markerPath, marker string) {
+	t.Helper()
 	if got, err := os.ReadFile(markerPath); err != nil || string(got) != marker {
 		t.Fatalf("marker changed during failed recovery: %q %v", got, err)
 	}

@@ -118,6 +118,10 @@ type ForgeDownloadVersionInput struct{ /* mirror src-tauri/src/models/forge.rs *
 Extend the existing `models.Mod` (manifest.toml fields) rather than replacing it; keep
 `json:"isActive"` and `json:"type"` and the `source` default of `local`.
 
+Library manifests are decoded strictly like Rust's `LibraryDTO`, and legacy Go manifests that lack
+`repoRoot` are invalid and receive no migration because Rust has required `repo_root` since before
+v0.1.0 and no Wails release shipped.
+
 `backend.Error` becomes `type Error = models.Error` and `failure` delegates to `models.Fail`.
 
 ### `testenv` (WA)

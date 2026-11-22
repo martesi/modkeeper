@@ -31,7 +31,10 @@ func TestConvertedLibraryErrorsUseTheWireContract(t *testing.T) {
 	if err := os.MkdirAll(missingDirRoot, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(missingDirRoot, "manifest.toml"), []byte("id='x'\n"), 0600); err != nil {
+	// The fixture is complete enough to pass the strict manifest reader so the
+	// validation reaches the missing-directory check.
+	manifestFixture := "id='x'\nname='x'\ngameRoot='/tmp'\nrepoRoot='/tmp'\nsptVersion='4.0.11'\nisDirty=false\n\n[mods]\n"
+	if err := os.WriteFile(filepath.Join(missingDirRoot, "manifest.toml"), []byte(manifestFixture), 0600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -39,6 +39,10 @@ func AddModWithMetadata(l *Library, id, name, kind, source string, active bool, 
 	if !ok {
 		m = models.Mod{ID: id, Name: name}
 	}
+	if kind != "" {
+		// The library manifest records the scanned mod type, like Rust's install.
+		m.Type = models.ModType(kind)
+	}
 	m.ApplyInstall(active, nil, time.Now())
 	if metadata != nil && metadata.Forge != nil {
 		m.ApplyInstall(active, metadata.Forge, time.Now())
@@ -82,7 +86,7 @@ func ToggleMod(l *Library, id string, active bool) error {
 	}
 	m.Enabled = active
 	l.Mods[id] = m
-	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, "")
+	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, string(m.Type))
 }
 func NormalizeModFolders(root, serverMods, clientPlugins string, mods map[string]models.Mod) ([][2]string, error) {
 	entries, err := os.ReadDir(root)

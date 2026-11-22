@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/martes/modkeeper/backend/config"
@@ -28,6 +27,7 @@ type manifest struct {
 	ID         string                `toml:"id"`
 	Name       string                `toml:"name"`
 	GameRoot   string                `toml:"gameRoot"`
+	RepoRoot   string                `toml:"repoRoot"`
 	SPTVersion string                `toml:"sptVersion"`
 	Mods       map[string]models.Mod `toml:"mods"`
 	IsDirty    bool                  `toml:"isDirty"`
@@ -42,15 +42,20 @@ type Library struct {
 }
 
 func layout(root string) (manifest, cache, string, string, string, error) {
-	var m manifest
 	var c cache
 	// repo_root *is* the library root (`game/.mod_keeper`), matching Rust's
 	// LibPathRules::new(repo_root).
 	base := root
-	if _, err := toml.DecodeFile(filepath.Join(base, "manifest.toml"), &m); err != nil {
+	manifestPath := filepath.Join(base, "manifest.toml")
+	m, err := readStrictManifest(manifestPath)
+	if err != nil {
 		return m, c, "", "", "", fmt.Errorf("manifest.toml: %w", err)
 	}
-	if _, err := toml.DecodeFile(filepath.Join(base, "cache.toml"), &c); err != nil {
+	cachePath := filepath.Join(base, "cache.toml")
+	if err := readStrictCache(cachePath); err != nil {
+		return m, c, "", "", "", err
+	}
+	if _, err := toml.DecodeFile(cachePath, &c); err != nil {
 		return m, c, "", "", "", fmt.Errorf("cache.toml: %w", err)
 	}
 	return m, c, filepath.Join(base, "mods"), filepath.Join(base, "staging"), filepath.Join(base, "backups"), nil
@@ -101,7 +106,7 @@ func Create(game, root, name string) (*Library, error) {
 			return nil, err
 		}
 	}
-	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, SPTVersion: v, Mods: map[string]models.Mod{}}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
+	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, RepoRoot: root, SPTVersion: v, Mods: map[string]models.Mod{}}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
 	return l, l.Persist()
 }
 func Load(root string) (*Library, error) {
@@ -302,6 +307,7 @@ func isSnapshotTemp(name string) bool {
 func (l *Library) Persist() error {
 	base := l.Root
 	m := l.manifest
+	m.RepoRoot = l.Root
 	rel, err := filepath.Rel(l.GameRoot, l.Root)
 	if err == nil && !strings.HasPrefix(rel, "..") {
 		depth := strings.Count(rel, string(os.PathSeparator)) + 1
@@ -346,6 +352,7 @@ type Service struct {
 	Inspector      process.Inspector
 	active         *Library
 	warning        *string
+	warningMu      sync.Mutex
 	sendProgress   func(models.TaskProgressEvent) error
 	sendWorkspace  func(models.WorkspaceEvent) error
 	tasks          sync.WaitGroup
@@ -379,8 +386,7 @@ func ValidateLibraryStructure(root string) error {
 		}
 		return models.Fail(models.InvalidLibrary, root, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
-	var m manifest
-	if _, err := toml.DecodeFile(filepath.Join(root, "manifest.toml"), &m); err != nil {
+	if _, err := readStrictManifest(filepath.Join(root, "manifest.toml")); err != nil {
 		return models.Fail(models.InvalidLibrary, root, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
 	for _, dir := range []string{"mods", "backups", "staging"} {
@@ -413,23 +419,22 @@ func (s *Service) Start() error {
 	if id := s.Store.Config.AppState.ActiveLibraryID; id != nil {
 		if k := s.Store.Config.FindLibrary(*id); k != nil {
 			go func() {
-				e := func() error {
-					s.libraryMu.Lock()
-					defer s.libraryMu.Unlock()
-					l, err := Load(k.LibraryRoot)
-					if err == nil {
-						err = recoverInterruptedInstall(l)
-					}
-					if err == nil {
-						s.active = l
-						s.warning = nil
-						s.Registry.SetActive(l.manifest.ID, true)
-					} else {
-						s.warning = strPtr(err.Error())
-					}
-					return err
-				}()
-				s.Registry.FinishStartupLoad(e)
+				defer s.Registry.FinishStartupLoad(nil)
+				s.libraryMu.Lock()
+				defer s.libraryMu.Unlock()
+				l, err := Load(k.LibraryRoot)
+				if err != nil {
+					// Rust clears the active id on a load failure so the next
+					// launch does not repeat it, and persists the cleared config.
+					s.clearActiveLibrarySelection()
+					return
+				}
+				if recoveryErr := recoverInterruptedInstall(l); recoveryErr != nil {
+					s.setWarning(recoveryErr.Error())
+					return
+				}
+				s.active = l
+				s.Registry.SetActive(l.manifest.ID, true)
 			}()
 			return nil
 		}
@@ -437,6 +442,53 @@ func (s *Service) Start() error {
 	s.Registry.FinishStartupLoad(nil)
 	return nil
 }
+
+// clearActiveLibrarySelection deselects the library whose load failed and
+// persists the cleared config. Only a save failure is surfaced, matching Rust's
+// startup path; the load error itself stays out of the workspace warning.
+func (s *Service) clearActiveLibrarySelection() {
+	s.Store.Config.AppState.ActiveLibraryID = nil
+	s.active = nil
+	s.Registry.SetActive("", false)
+	if err := s.Store.Save(); err != nil {
+		s.setWarning(err.Error())
+	}
+}
+
+// WaitForInitialLoad blocks on the startup handshake for the commands Rust
+// waits in (get_library_workspace and bulk_update_mods). Other callers assemble
+// immediately.
+func (s *Service) WaitForInitialLoad() error {
+	s.startupMu.Lock()
+	started := s.startupStarted
+	s.startupMu.Unlock()
+	if !started {
+		return nil
+	}
+	if err := s.Registry.WaitForStartupLoad(context.Background()); err != nil {
+		return models.Fail(models.AsyncRuntimeError, err.Error())
+	}
+	return nil
+}
+
+// warningMu guards the warning independently of libraryMu because
+// TakeStartupWarning runs after Workspace releases the read lock.
+func (s *Service) setWarning(message string) {
+	s.warningMu.Lock()
+	s.warning = strPtr(message)
+	s.warningMu.Unlock()
+}
+
+// TakeStartupWarning consumes the pending warning. Only the
+// get_library_workspace command calls it, matching Rust's one-shot handoff.
+func (s *Service) TakeStartupWarning() *string {
+	s.warningMu.Lock()
+	defer s.warningMu.Unlock()
+	warning := s.warning
+	s.warning = nil
+	return warning
+}
+
 func strPtr(s string) *string { return &s }
 func (s *Service) tryBeginLibraryTransition() error {
 	if !s.libraryMu.TryLock() {
@@ -465,48 +517,6 @@ func (s *Service) assertGameOrServerStopped() error {
 	return registry.ProcessGuard{Inspector: s.Inspector}.AssertStopped(paths, models.GameOrServerRunning)
 }
 
-func (s *Service) Workspace() *models.LibraryWorkspace {
-	s.startupMu.Lock()
-	startupStarted := s.startupStarted
-	s.startupMu.Unlock()
-	if startupStarted {
-		ctx, cancel := context.WithTimeout(context.Background(), 9*time.Second)
-		_ = s.Registry.WaitForStartupLoad(ctx)
-		timedOut := ctx.Err() != nil
-		cancel()
-		if timedOut {
-			return &models.LibraryWorkspace{
-				ActiveLibraryID:  s.Store.Config.AppState.ActiveLibraryID,
-				Libraries:        []models.LibraryEntry{},
-				ModsByLibraryID:  map[string][]models.ModSummary{},
-				ToolsByLibraryID: map[string][]models.ToolSummary{},
-				Settings:         s.Store.Config.Settings,
-				ConfigWarning:    strPtr("Initial library recovery did not finish. Preserve the library and backups, then retry after checking the library files."),
-			}
-		}
-	}
-	s.libraryMu.RLock()
-	defer s.libraryMu.RUnlock()
-	w := &models.LibraryWorkspace{ActiveLibraryID: s.Store.Config.AppState.ActiveLibraryID, Libraries: []models.LibraryEntry{}, ModsByLibraryID: map[string][]models.ModSummary{}, ToolsByLibraryID: map[string][]models.ToolSummary{}, Settings: s.Store.Config.Settings, ConfigWarning: s.warning}
-	for _, k := range s.Store.Config.KnownLibraries {
-		m, _, mods, _, _, e := layout(k.LibraryRoot)
-		if e != nil {
-			w.Libraries = append(w.Libraries, models.StubEntry(k.LibraryRoot))
-			continue
-		}
-		game := resolveGameRoot(k.LibraryRoot, m.GameRoot)
-		stamp := time.Now().UTC().Format(time.RFC3339)
-		w.Libraries = append(w.Libraries, models.SummaryEntry(models.LibrarySummary{ID: k.ID, Name: m.Name, GameRoot: game, LibraryRoot: k.LibraryRoot, SPTVersion: &m.SPTVersion, CacheStatus: models.CacheStatus{State: models.CacheStateReady}, DeployStale: m.IsDirty, UpdatedAt: stamp}))
-		rows := []models.ModSummary{}
-		for _, v := range m.Mods {
-			installed := filepath.Join(mods, v.ID)
-			rows = append(rows, models.ModSummary{ID: v.ID, LibraryID: k.ID, Name: v.Name, Type: v.Type, IsEnabled: v.Enabled, InstalledPath: &installed, Source: &v.Source, UpdatedAt: stamp})
-		}
-		w.ModsByLibraryID[k.ID] = rows
-		w.ToolsByLibraryID[k.ID] = []models.ToolSummary{}
-	}
-	return w
-}
 func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	if err := s.tryBeginLibraryTransition(); err != nil {
 		return err
@@ -536,7 +546,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				if loadErr == nil {
 					l := existing
 					if err := recoverInterruptedInstall(l); err != nil {
-						s.warning = strPtr(err.Error())
+						s.setWarning(err.Error())
 						return err
 					}
 					prev := s.Store.Config
@@ -547,7 +557,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						return err
 					}
 					s.active = l
-					s.warning = nil
 					s.Registry.SetActive(l.manifest.ID, true)
 					return nil
 				}
@@ -583,7 +592,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 			}
 			l := existing
 			if err := recoverInterruptedInstall(l); err != nil {
-				s.warning = strPtr(err.Error())
+				s.setWarning(err.Error())
 				return err
 			}
 			prev := s.Store.Config
@@ -594,7 +603,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				return err
 			}
 			s.active = l
-			s.warning = nil
 			s.Registry.SetActive(l.manifest.ID, true)
 			return nil
 		}
@@ -614,7 +622,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 		return e
 	}
 	s.active = l
-	s.warning = nil
 	s.Registry.SetActive(l.manifest.ID, true)
 	return nil
 }
@@ -632,7 +639,7 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	if e = recoverInterruptedInstall(l); e != nil {
-		s.warning = strPtr(e.Error())
+		s.setWarning(e.Error())
 		return e
 	}
 	prev := s.Store.Config
@@ -642,7 +649,6 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	s.active = l
-	s.warning = nil
 	s.Registry.SetActive(id, true)
 	return nil
 }
@@ -655,32 +661,35 @@ func (s *Service) RenameLibrary(id, name string) error {
 	if k == nil {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
-	m, _, _, _, _, e := layout(k.LibraryRoot)
-	if e != nil {
-		return models.Fail(models.InvalidLibrary, k.LibraryRoot, e.Error())
+	// Rust renames the live instance from memory and inactive libraries from
+	// manifest.toml alone; neither path reads cache.toml.
+	if s.active != nil && s.active.manifest.ID == id {
+		s.active.manifest.Name = name
+		return s.active.Persist()
+	}
+	manifestPath := filepath.Join(k.LibraryRoot, "manifest.toml")
+	m, err := readStrictManifest(manifestPath)
+	if err != nil {
+		return models.Fail(models.InvalidLibrary, k.LibraryRoot, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
 	m.Name = name
-	b := filepath.Join(k.LibraryRoot, "manifest.toml")
-	f, e := os.CreateTemp(filepath.Dir(b), ".tmp-*")
-	if e != nil {
-		return e
+	f, err := os.CreateTemp(filepath.Dir(manifestPath), ".tmp-*")
+	if err != nil {
+		return err
 	}
 	tmp := f.Name()
-	e = toml.NewEncoder(f).Encode(m)
-	ce := f.Close()
-	if e == nil {
-		e = ce
+	err = toml.NewEncoder(f).Encode(m)
+	closeErr := f.Close()
+	if err == nil {
+		err = closeErr
 	}
-	if e == nil {
-		e = os.Rename(tmp, b)
+	if err == nil {
+		err = os.Rename(tmp, manifestPath)
 	}
-	if e != nil {
+	if err != nil {
 		_ = os.Remove(tmp)
 	}
-	if e == nil && s.active != nil && s.active.manifest.ID == id {
-		s.active.manifest.Name = name
-	}
-	return e
+	return err
 }
 func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	if err := s.tryBeginLibraryTransition(); err != nil {
@@ -700,21 +709,22 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 			return err
 		}
 		m, _, _, _, _, err := layout(k.LibraryRoot)
-		if err == nil {
-			gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
-			rules, discoverErr := spt.Discover(gameRoot)
-			if discoverErr != nil {
-				return discoverErr
-			}
-			depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
-			if err := deployment.VerifyOwnership(depLayout); err != nil {
-				return err
-			}
-			if err := deployment.ValidatePurge(depLayout); err != nil {
-				return err
-			}
-			mods = sortedMods(m.Mods)
+		if err != nil {
+			return models.Fail(models.InvalidLibrary, k.LibraryRoot, err.Error())
 		}
+		gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
+		rules, discoverErr := spt.Discover(gameRoot)
+		if discoverErr != nil {
+			return discoverErr
+		}
+		depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
+		if err := deployment.VerifyOwnership(depLayout); err != nil {
+			return err
+		}
+		if err := deployment.ValidatePurge(depLayout); err != nil {
+			return err
+		}
+		mods = sortedMods(m.Mods)
 	}
 	prev := s.Store.Config
 	s.Store.Config.RemoveLibrary(k.ID)
