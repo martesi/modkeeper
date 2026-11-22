@@ -12,3 +12,11 @@ export interface ForgeDownloadVersionInput {
   itemId: number
   versionId: number
 }
+
+export interface ForgeMatchInstalledModInput {
+  libraryId: string
+  installedModId: string
+  kind: string
+  itemId: number
+  versionId: number
+}

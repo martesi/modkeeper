@@ -204,97 +204,9 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 					s.finishCancelled(e, in, l.Mods)
 					return ctx.Err()
 				}
-				previous, hadPrevious := l.Mods[item.FS.ID]
-				snapshot := ""
-				var err error
-				if hadPrevious {
-					snapshot, err = s.snapshotMod(item.FS.ID)
-					if err == nil && snapshot == "" {
-						hadPrevious = false
-						delete(l.Mods, item.FS.ID)
-					}
-				} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
-					err = fmt.Errorf("ModIdConflict: untracked directory already exists for %s", item.FS.ID)
-				} else if !os.IsNotExist(statErr) {
-					err = statErr
-				}
-				newMod := previous
-				if !hadPrevious {
-					newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
-				}
-				newMod.ApplyInstall(enable, nil, time.Now())
-				if err == nil {
-					l.Mods[item.FS.ID] = newMod
-				}
-				transaction := installTransaction{
-					Version: 1,
-					ID:      item.FS.ID,
-					Phase:   installPrepared,
-					HadOld:  hadPrevious,
-					NewMod:  newMod,
-				}
-				if hadPrevious {
-					old := previous
-					transaction.OldMod = &old
-				}
-				marker := installMarkerPath(s.active, item.FS.ID)
-				markerPrepared := false
-				if err == nil {
-					err = s.writeInstallMarker(marker, transaction)
-					markerPrepared = err == nil
-					if markerPrepared && s.installTransactionHook != nil {
-						s.installTransactionHook("after-prepared-marker")
-					}
-				}
-				if err == nil {
-					err = modmanager.AddModWithMetadata(&l, item.FS.ID, item.Name, item.FS.ModType, path, enable, nil)
-				}
-				if err == nil {
-					err = s.installModTree(ctx, item.Root, item.FS.ID, func() {
-						e.Progress(models.TaskStageInstallArchiveStage, nil)
-					})
-					if err == nil {
-						// This existing progress boundary is after replacement and
-						// before manifest persistence.
-						e.Progress(models.TaskStageInstallArchiveStage, nil)
-					}
-				}
-				if err != nil && markerPrepared {
-					if recoveryErr := recoverInstallTransaction(
-						s.active,
-						marker,
-						installCommittedMarkerPath(s.active, item.FS.ID),
-						transaction,
-						nil,
-					); recoveryErr != nil {
-						err = fmt.Errorf("%w (recovery failed: %v)", err, recoveryErr)
-					}
-				}
-				_ = stager.CleanUp(item.IsStaging, item.Root)
-				if err != nil {
-					if hadPrevious {
-						l.Mods[item.FS.ID] = previous
-					} else {
-						delete(l.Mods, item.FS.ID)
-					}
-					s.active.manifest.Mods = l.Mods
-					if _, markerErr := os.Stat(marker); os.IsNotExist(markerErr) && snapshot != "" {
-						_ = os.RemoveAll(snapshot)
-					}
-				}
-				if err == nil {
-					committed, finishErr := s.finishInstallTransaction(transaction)
-					if finishErr != nil {
-						err = finishErr
-						restoreErr := recoverInterruptedInstall(s.active)
-						if restoreErr != nil {
-							err = fmt.Errorf("%w (recovery failed: %v)", err, restoreErr)
-						} else if committed {
-							err = nil
-						}
-						l.Mods = s.active.manifest.Mods
-					}
-				}
+				err := s.installStagedMod(ctx, path, item, &l, enable, nil, func(stage models.TaskProgressStage, percent *float64) {
+					e.Progress(stage, percent)
+				})
 				if ctx.Err() != nil {
 					s.finishCancelled(e, in, l.Mods)
 					return ctx.Err()
@@ -322,6 +234,108 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		}
 		return nil
 	}), nil
+}
+
+// installStagedMod applies one staged mod under the caller's library write
+// lock, using the same prepared/committed transaction as archive installs. It
+// owns staging cleanup and restores the mod map on failure.
+func (s *Service) installStagedMod(ctx context.Context, archivePath string, item stager.StagedMod, l *modmanager.Library, enable bool, forgeIdentity *models.ForgeIdentity, progress func(models.TaskProgressStage, *float64)) error {
+	previous, hadPrevious := l.Mods[item.FS.ID]
+	snapshot := ""
+	var err error
+	if hadPrevious {
+		snapshot, err = s.snapshotMod(item.FS.ID)
+		if err == nil && snapshot == "" {
+			hadPrevious = false
+			delete(l.Mods, item.FS.ID)
+		}
+	} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
+		err = fmt.Errorf("ModIdConflict: untracked directory already exists for %s", item.FS.ID)
+	} else if !os.IsNotExist(statErr) {
+		err = statErr
+	}
+	newMod := previous
+	if !hadPrevious {
+		newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
+	}
+	newMod.ApplyInstall(enable, forgeIdentity, time.Now())
+	if err == nil {
+		l.Mods[item.FS.ID] = newMod
+	}
+	transaction := installTransaction{
+		Version: 1,
+		ID:      item.FS.ID,
+		Phase:   installPrepared,
+		HadOld:  hadPrevious,
+		NewMod:  newMod,
+	}
+	if hadPrevious {
+		old := previous
+		transaction.OldMod = &old
+	}
+	marker := installMarkerPath(s.active, item.FS.ID)
+	markerPrepared := false
+	if err == nil {
+		err = s.writeInstallMarker(marker, transaction)
+		markerPrepared = err == nil
+		if markerPrepared && s.installTransactionHook != nil {
+			s.installTransactionHook("after-prepared-marker")
+		}
+	}
+	if err == nil {
+		var metadata *modmanager.Metadata
+		if forgeIdentity != nil {
+			metadata = &modmanager.Metadata{Forge: forgeIdentity}
+		}
+		err = modmanager.AddModWithMetadata(l, item.FS.ID, item.Name, item.FS.ModType, archivePath, enable, metadata)
+	}
+	if err == nil {
+		err = s.installModTree(ctx, item.Root, item.FS.ID, func() {
+			progress(models.TaskStageInstallArchiveStage, nil)
+		})
+		if err == nil {
+			// This existing progress boundary is after replacement and
+			// before manifest persistence.
+			progress(models.TaskStageInstallArchiveStage, nil)
+		}
+	}
+	if err != nil && markerPrepared {
+		if recoveryErr := recoverInstallTransaction(
+			s.active,
+			marker,
+			installCommittedMarkerPath(s.active, item.FS.ID),
+			transaction,
+			nil,
+		); recoveryErr != nil {
+			err = fmt.Errorf("%w (recovery failed: %v)", err, recoveryErr)
+		}
+	}
+	_ = stager.CleanUp(item.IsStaging, item.Root)
+	if err != nil {
+		if hadPrevious {
+			l.Mods[item.FS.ID] = previous
+		} else {
+			delete(l.Mods, item.FS.ID)
+		}
+		s.active.manifest.Mods = l.Mods
+		if _, markerErr := os.Stat(marker); os.IsNotExist(markerErr) && snapshot != "" {
+			_ = os.RemoveAll(snapshot)
+		}
+		return err
+	}
+	committed, finishErr := s.finishInstallTransaction(transaction)
+	if finishErr == nil {
+		return nil
+	}
+	restoreErr := recoverInterruptedInstall(s.active)
+	l.Mods = s.active.manifest.Mods
+	if restoreErr != nil {
+		return fmt.Errorf("%w (recovery failed: %v)", finishErr, restoreErr)
+	}
+	if committed {
+		return nil
+	}
+	return finishErr
 }
 
 func (s *Service) finishCancelled(e *task_progress.Emitter, in models.InstallModArchivesInput, mods map[string]models.Mod) {
