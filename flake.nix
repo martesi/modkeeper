@@ -66,6 +66,7 @@
 
           e2e = pkgs.mkShell {
             packages = basePackages ++ (with pkgs; [
+              chromium
               imagemagick
               xdpyinfo
               xdotool
@@ -73,6 +74,7 @@
             ]);
             shellHook = commonHook + ''
               export PLAYWRIGHT_FIREFOX_EXECUTABLE="''${PLAYWRIGHT_FIREFOX_EXECUTABLE:-${pkgs.firefox}/bin/firefox}"
+              export PLAYWRIGHT_CHROMIUM_EXECUTABLE="''${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-${pkgs.chromium}/bin/chromium}"
               export DISPLAY="''${DISPLAY:-:99}"
               export FONTCONFIG_FILE="''${FONTCONFIG_FILE:-${
                 pkgs.makeFontsConf {
