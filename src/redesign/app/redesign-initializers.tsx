@@ -18,6 +18,7 @@ import {
   deriveSyncOutcome,
 } from '../data/task-outcome'
 import type { TaskOutcome } from '../data/task-outcome'
+import { recordTaskHistory } from '../data/task-history'
 import { useWindowDropZone } from '../shared/hooks/use-window-drop-zone'
 import { setTaskResult } from '../state/library-state'
 import { settingsAtom } from '../state/settings-state'
@@ -41,7 +42,6 @@ export function RedesignInitializers() {
   useWindowDropZone()
 
   useEffect(() => {
-    window.localStorage.removeItem('modkeeper.taskHistory.v1')
     const recoverySequence = beginWorkspaceRecoverySequence()
     const unsubscribe = listenWorkspaceEvent(handleWorkspaceEvent)
     void initWorkspaceEventBus().then((ready) => {
@@ -90,6 +90,7 @@ function handleWorkspaceEvent(
 
 function publishTaskResult(outcome: TaskOutcome): void {
   setTaskResult(outcome)
+  recordTaskHistory(outcome)
 }
 
 /**

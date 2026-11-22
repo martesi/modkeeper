@@ -1,4 +1,4 @@
-import { Provider, createStore } from 'jotai'
+import { getDefaultStore } from 'jotai'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -9,8 +9,10 @@ mock.module('../i18n/library-text', () => ({
   libraryText: new Proxy(
     {},
     {
-      get: (_target, key) => () =>
-        key === 'tasksLabel' ? 'Tasks' : String(key),
+      get: (_target, key) =>
+        key === 'taskLibrary'
+          ? (name: string) => `Library: ${name}`
+          : () => (key === 'tasksLabel' ? 'Tasks' : String(key)),
     },
   ),
 }))
@@ -24,20 +26,28 @@ mock.module('../i18n/error-text', () => ({
   errorText: new Proxy({}, { get: () => () => '' }),
 }))
 mock.module('../i18n/task-history-text', () => ({
-  taskHistoryText: new Proxy(
-    {},
-    {
-      get:
-        (_target, key) =>
-        (...args: unknown[]) =>
-          key === 'title' ? `Recent tasks (${args[0]})` : '',
-    },
-  ),
+  taskHistoryText: {
+    title: () => 'Recent tasks',
+    label: () => 'Recent task history',
+    clear: () => 'Clear all',
+    empty: () => 'No events yet.',
+    operation: (operation: string) =>
+      operation === 'sync'
+        ? 'Sync'
+        : operation === 'forge_install'
+          ? 'Download'
+          : 'Upload',
+    status: () => 'Completed',
+    dismiss: (operation: string, library: string) =>
+      `Dismiss ${operation} for ${library}`,
+    log: () => 'Show log',
+  },
 }))
 mock.module('../i18n/task-progress-text', () => ({
   taskProgressText: new Proxy({}, { get: () => () => '' }),
 }))
 mock.module('../data/library-repository', () => ({
+  syncMods: async () => {},
   retryFailedArchives: async () => {},
 }))
 mock.module('../../wails/bridge', () => ({ cancelInstallTask: async () => {} }))
@@ -67,38 +77,20 @@ for (const [name, value] of Object.entries({
 
 let root: Root | null = null
 let container: HTMLDivElement
+let recordTaskHistory: typeof import('../data/task-history').recordTaskHistory
+let clearTaskHistory: typeof import('../data/task-history').clearTaskHistory
 
 beforeEach(async () => {
   document.body.replaceChildren()
   container = document.createElement('div')
   document.body.append(container)
-  window.localStorage.setItem(
-    'modkeeper.taskHistory.v1',
-    JSON.stringify({
-      version: 1,
-      tasks: [
-        {
-          taskId: 'recent-task',
-          timestamp: '2025-01-01T00:00:00.000Z',
-          operation: 'sync',
-          libraryId: 'test-library',
-          status: 'success',
-          logTail: [],
-        },
-      ],
-    }),
-  )
+  const history = await import('../data/task-history')
+  recordTaskHistory = history.recordTaskHistory
+  clearTaskHistory = history.clearTaskHistory
+  clearTaskHistory()
   const { TaskCenterPanel } = await import('./task-results')
   root = createRoot(container)
-  await act(async () =>
-    root?.render(
-      createElement(
-        Provider,
-        { store: createStore() },
-        createElement(TaskCenterPanel),
-      ),
-    ),
-  )
+  await act(async () => root?.render(createElement(TaskCenterPanel)))
 })
 
 afterEach(async () => {
@@ -116,6 +108,33 @@ afterAll(() => {
   browserWindow.happyDOM.abort()
 })
 
-test('does not render Recent tasks from stored history', () => {
-  expect(container.textContent).not.toContain('Recent tasks')
+test('shows a recorded event and Clear all empties the list', async () => {
+  await act(async () =>
+    recordTaskHistory({
+      kind: 'sync',
+      taskId: 'sync-event-1',
+      libraryId: 'test-library',
+      failures: [],
+      succeeded: true,
+    }),
+  )
+
+  const panel = container.querySelector('[aria-label="Recent task history"]')
+  expect(panel?.textContent).toContain('Sync')
+  expect(panel?.textContent).toContain('Library: test-library')
+  expect(panel?.textContent).toContain('Completed')
+  expect(panel?.querySelectorAll('li')).toHaveLength(1)
+
+  const clearButton = [...(panel?.querySelectorAll('button') ?? [])].find(
+    (button) => button.textContent === 'Clear all',
+  )
+  expect(clearButton).toBeDefined()
+  await act(async () => clearButton?.click())
+  expect(panel?.querySelectorAll('li')).toHaveLength(0)
+  expect(panel?.textContent).toContain('No events yet.')
+  expect(
+    getDefaultStore().get(
+      (await import('../data/task-history')).taskHistoryAtom,
+    ),
+  ).toHaveLength(0)
 })

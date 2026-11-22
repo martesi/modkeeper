@@ -19,9 +19,9 @@ msgstr ""
 #~ msgstr "{count} item(s) failed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:14
-#~ msgid "library.task.history.operation.cacheRebuild"
-#~ msgstr "Cache rebuild"
+#: src/redesign/i18n/library-text.ts:148
+#~ msgid "library.header.subtitleEmpty"
+#~ msgstr "Click to create or activate a library"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-history-text.ts:26
@@ -29,49 +29,14 @@ msgstr ""
 #~ msgstr "Clear history"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:148
-#~ msgid "library.header.subtitleEmpty"
-#~ msgstr "Click to create or activate a library"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:39
-#~ msgid "library.task.history.status.success"
-#~ msgstr "Completed"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:44
-#~ msgid "library.task.history.status.partialFailure"
-#~ msgstr "Completed with errors"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:49
-#~ msgid "library.task.history.status.failure"
-#~ msgstr "Failed"
-
-#. js-lingui-explicit-id
 #: src/redesign/i18n/task-history-text.ts:9
 #~ msgid "library.task.history.operation.forgeInstall"
 #~ msgstr "Forge install"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:7
-#~ msgid "library.task.history.operation.install"
-#~ msgstr "Import"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:28
+#: src/redesign/i18n/task-history-text.ts:33
 #~ msgid "library.task.history.empty"
 #~ msgstr "No completed tasks yet."
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:54
-#~ msgid "library.task.history.status.unknown"
-#~ msgstr "Outcome unknown"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:24
-#~ msgid "library.task.history.label"
-#~ msgstr "Recent task history"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-history-text.ts:22
@@ -79,19 +44,9 @@ msgstr ""
 #~ msgstr "Recent tasks ({count})"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:61
-#~ msgid "library.task.history.log"
-#~ msgstr "Show log ({count})"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:5
-#~ msgid "library.task.history.operation.sync"
-#~ msgstr "Sync"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:31
-#~ msgid "library.task.history.operation.unknown"
-#~ msgstr "Unknown task"
+#: src/redesign/i18n/task-history-text.ts:7
+#~ msgid "library.task.history.operation.install"
+#~ msgstr "Import"
 
 #: src/utils/translation.ts:4
 msgid ", "
@@ -435,6 +390,11 @@ msgid "library.manage.gameRootPathPlaceholder"
 msgstr "C:\\SPT"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:14
+msgid "library.task.history.operation.cacheRebuild"
+msgstr "Cache rebuild"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/task-progress-text.ts:10
 msgid "library.task.operation.cacheRebuild"
 msgstr "Cache rebuild"
@@ -537,6 +497,11 @@ msgid "library.task.stage.syncCleanup"
 msgstr "Cleaning up"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:25
+msgid "library.task.history.clearAll"
+msgstr "Clear all"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:339
 msgid "library.grid.clearFilters"
 msgstr "Clear filters"
@@ -617,6 +582,16 @@ msgstr "Compatible with SPT {version}"
 #: src/redesign/i18n/registry-text.ts:59
 msgid "registry.status.sptCompatible"
 msgstr "Compatible with SPT {version}"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:43
+msgid "library.task.history.status.success"
+msgstr "Completed"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:48
+msgid "library.task.history.status.partialFailure"
+msgstr "Completed with errors"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:458
@@ -804,6 +779,11 @@ msgid "library.toolbar.filterDisabled"
 msgstr "Disabled only"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:27
+msgid "library.task.history.dismiss"
+msgstr "Dismiss {operation} for {library}"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:316
 msgid "registry.status.dismissNotice"
 msgstr "Dismiss notice"
@@ -812,6 +792,11 @@ msgstr "Dismiss notice"
 #: src/redesign/i18n/library-text.ts:82
 msgid "library.taskResult.dismiss"
 msgstr "Dismiss task result"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:9
+msgid "library.task.history.operation.download"
+msgstr "Download"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:260
@@ -942,6 +927,11 @@ msgstr "Extends {parentName}"
 #: src/redesign/i18n/library-text.ts:472
 msgid "library.tools.dialogDescription"
 msgstr "External executable and launch parameters."
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:53
+msgid "library.task.history.status.failure"
+msgstr "Failed"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:99
@@ -1432,6 +1422,11 @@ msgstr "No Active SPT Library"
 #~ msgid "No backups yet"
 #~ msgstr "No backups yet"
 
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:32
+msgid "library.task.history.emptyState"
+msgstr "No events yet."
+
 #: src/modules/mod-list/instance-switcher.tsx:88
 #~ msgid "No Library"
 #~ msgstr "No Library"
@@ -1527,6 +1522,11 @@ msgstr "Open Parent Mod"
 #: src/redesign/i18n/library-text.ts:186
 msgid "library.empty.dropBrowse"
 msgstr "or click to browse local files"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:58
+msgid "library.task.history.status.unknown"
+msgstr "Outcome unknown"
 
 #: src/routes/library.$id.lazy.tsx:168
 #~ msgid "Overview"
@@ -1624,6 +1624,16 @@ msgstr "Rebuild Cache"
 #: src/modules/mod-list/instance-switcher.tsx:171
 #~ msgid "Rebuild Cache"
 #~ msgstr "Rebuild Cache"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:24
+msgid "library.task.history.label"
+msgstr "Recent task history"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:22
+msgid "library.task.history.heading"
+msgstr "Recent tasks"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:277
@@ -1925,6 +1935,11 @@ msgid "registry.empty.showIncompatible"
 msgstr "Show Incompatible Versions"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:65
+msgid "library.task.history.log"
+msgstr "Show log ({count})"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:74
 msgid "library.task.logLabel"
 msgstr "Show task log ({count})"
@@ -1991,6 +2006,11 @@ msgstr "SUPPORTED: .zip, .7z"
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:152
 msgid "library.actions.sync"
+msgstr "Sync"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:5
+msgid "library.task.history.operation.sync"
 msgstr "Sync"
 
 #. js-lingui-explicit-id
@@ -2200,6 +2220,11 @@ msgid "Unknown mod"
 msgstr "Unknown mod"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:35
+msgid "library.task.history.operation.unknown"
+msgstr "Unknown task"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:430
 msgid "library.manage.unreadableLibrary"
 msgstr "Unreadable library"
@@ -2222,6 +2247,11 @@ msgstr "Untested"
 #: src/redesign/i18n/registry-text.ts:93
 msgid "registry.actions.update"
 msgstr "Update to v{version}"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:7
+msgid "library.task.history.operation.upload"
+msgstr "Upload"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/settings-text.ts:41

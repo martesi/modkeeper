@@ -20,6 +20,7 @@ import type {
 import { libraryText } from '../i18n/library-text'
 import { resolveCommandErrorSummary } from '../shared/hooks/use-command-error'
 import { registryText } from '../i18n/registry-text'
+import { TaskHistoryPanel } from './task-history-panel'
 import {
   registrySearchAtom,
   selectedRegistryItemAtom,
@@ -53,7 +54,12 @@ export function TaskCenterPanel() {
   }
 
   if (!outcome) {
-    return <TaskProgressBanner />
+    return (
+      <>
+        <TaskProgressBanner />
+        <TaskHistoryPanel />
+      </>
+    )
   }
 
   const retryAllowed = canRetryFailedArchives(outcome, activeLibraryId, busy)
@@ -105,6 +111,7 @@ export function TaskCenterPanel() {
             </button>
           )}
       </section>
+      <TaskHistoryPanel />
     </>
   )
 }

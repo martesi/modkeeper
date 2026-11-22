@@ -19,14 +19,16 @@ mock.module('../i18n/library-text', () => ({
     emptyActivateTitle: () => 'Activate a library',
     emptyActivateBody: () => 'Create a profile',
     manageLibraries: () => 'Manage libraries',
-    subtitleEmpty: () => 'Click to create or activate a library',
     subtitleModsInstalled: (count: number) => `${count} mods installed`,
   },
 }))
 mock.module('../i18n/common-text', () => ({
   commonText: { close: () => 'Close' },
 }))
-mock.module('../data/library-repository', () => ({ syncMods: async () => {} }))
+mock.module('../data/library-repository', () => ({
+  syncMods: async () => {},
+  retryFailedArchives: async () => {},
+}))
 mock.module('./manage-library/manage-library-dialog', () => ({
   ManageLibraryDialog: () => null,
 }))
