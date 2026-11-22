@@ -97,25 +97,21 @@ func TestBoundForgeReadsReturnOneObjectWithKindAndPage(t *testing.T) {
 	app.Forge.BaseURL = server.URL
 
 	t.Run("search", func(t *testing.T) {
-		body, err := app.ForgeSearch("query", 2, 3, 10)
+		response, err := app.ForgeSearch("query", 2, 3, 10)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var page map[string]any
-		if err := json.Unmarshal(body, &page); err != nil {
-			t.Fatalf("single object expected: %s: %v", body, err)
+		if response.SPTVersion != "4.0.11" {
+			t.Fatalf("sptVersion: %q", response.SPTVersion)
 		}
-		if page["sptVersion"] != "4.0.11" {
-			t.Fatalf("sptVersion: %v", page["sptVersion"])
+		if response.Mods.Stale || response.Addons.Stale {
+			t.Fatalf("stale: mods=%v addons=%v", response.Mods.Stale, response.Addons.Stale)
 		}
-		for _, key := range []string{"mods", "addons"} {
-			items, ok := page[key].(map[string]any)
-			if !ok {
-				t.Fatalf("%s is not an object: %v", key, page[key])
-			}
-			if stale, ok := items["stale"].(bool); !ok || stale {
-				t.Fatalf("%s stale: %v", key, items["stale"])
-			}
+		if len(response.Mods.Items) != 1 || response.Mods.Items[0].ID != 1 || response.Mods.Items[0].Kind != models.ForgeKindMod {
+			t.Fatalf("mods: %+v", response.Mods.Items)
+		}
+		if len(response.Addons.Items) != 1 || response.Addons.Items[0].ID != 2 || response.Addons.Items[0].Kind != models.ForgeKindAddon {
+			t.Fatalf("addons: %+v", response.Addons.Items)
 		}
 		mu.Lock()
 		modPage, addonPage := pages["/mods"], pages["/addons"]
@@ -126,44 +122,38 @@ func TestBoundForgeReadsReturnOneObjectWithKindAndPage(t *testing.T) {
 	})
 
 	t.Run("mod detail", func(t *testing.T) {
-		body, err := app.ForgeModDetail("mod", 7)
+		detail, err := app.ForgeModDetail("mod", 7)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var detail map[string]any
-		if err := json.Unmarshal(body, &detail); err != nil {
-			t.Fatalf("single object expected: %s: %v", body, err)
-		}
-		if detail["kind"] != "mod" || detail["id"] != float64(7) || detail["stale"] != false {
-			t.Fatalf("detail: %v", detail)
+		if detail.Kind != models.ForgeKindMod || detail.ID != 7 || detail.Stale {
+			t.Fatalf("detail: %+v", detail)
 		}
 	})
 
 	t.Run("addon detail", func(t *testing.T) {
-		body, err := app.ForgeModDetail("addon", 9)
+		detail, err := app.ForgeModDetail("addon", 9)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var detail map[string]any
-		if err := json.Unmarshal(body, &detail); err != nil {
-			t.Fatalf("single object expected: %s: %v", body, err)
-		}
-		if detail["kind"] != "addon" || detail["id"] != float64(9) || detail["parentModId"] != float64(7) {
-			t.Fatalf("addon detail: %v", detail)
+		if detail.Kind != models.ForgeKindAddon || detail.ID != 9 || detail.ParentModID == nil || *detail.ParentModID != 7 {
+			t.Fatalf("addon detail: %+v", detail)
 		}
 	})
 
 	t.Run("mod versions", func(t *testing.T) {
-		body, err := app.ForgeModVersions("mod", 7, 2)
+		page, err := app.ForgeModVersions("mod", 7, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var page map[string]any
-		if err := json.Unmarshal(body, &page); err != nil {
-			t.Fatalf("single object expected: %s: %v", body, err)
+		if page.Kind != models.ForgeKindMod || page.ItemID != 7 || page.Stale {
+			t.Fatalf("versions page: %+v", page)
 		}
-		if page["kind"] != "mod" || page["itemId"] != float64(7) || page["stale"] != false {
-			t.Fatalf("versions page: %v", page)
+		if len(page.Versions) != 1 || page.Versions[0].ID != 70 || page.Versions[0].ContentLength != 10 {
+			t.Fatalf("versions: %+v", page.Versions)
+		}
+		if page.Pagination.CurrentPage == nil || *page.Pagination.CurrentPage != 2 {
+			t.Fatalf("pagination: %+v", page.Pagination)
 		}
 		mu.Lock()
 		got := pages["/mod/7/versions"]
@@ -174,16 +164,18 @@ func TestBoundForgeReadsReturnOneObjectWithKindAndPage(t *testing.T) {
 	})
 
 	t.Run("addon versions", func(t *testing.T) {
-		body, err := app.ForgeAddonVersions(9, 3)
+		page, err := app.ForgeAddonVersions(9, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var page map[string]any
-		if err := json.Unmarshal(body, &page); err != nil {
-			t.Fatalf("single object expected: %s: %v", body, err)
+		if page.Kind != models.ForgeKindAddon || page.ItemID != 9 || page.Stale {
+			t.Fatalf("addon versions page: %+v", page)
 		}
-		if page["kind"] != "addon" || page["itemId"] != float64(9) || page["stale"] != false {
-			t.Fatalf("addon versions page: %v", page)
+		if len(page.Versions) != 1 || page.Versions[0].ID != 90 || page.Versions[0].ContentLength != 20 {
+			t.Fatalf("versions: %+v", page.Versions)
+		}
+		if page.Pagination.CurrentPage == nil || *page.Pagination.CurrentPage != 3 {
+			t.Fatalf("pagination: %+v", page.Pagination)
 		}
 		mu.Lock()
 		got := pages["/addon/9/versions"]
@@ -194,6 +186,42 @@ func TestBoundForgeReadsReturnOneObjectWithKindAndPage(t *testing.T) {
 	})
 }
 
+func TestForgeResponseRejectsMalformedBody(t *testing.T) {
+	for _, body := range []string{`{"mods":`, `{"sptVersion":1,"mods":{},"addons":{}}`} {
+		_, err := forgeResponse[models.ForgeSearchResponse](json.RawMessage(body))
+		var coded *models.Error
+		if !errors.As(err, &coded) || coded.Code != models.ParseError {
+			t.Fatalf("%s: expected ParseError, got %v", body, err)
+		}
+	}
+}
+
+func TestBoundForgeReadsSurfaceForgeParseErrors(t *testing.T) {
+	app, _, _, _ := newForgeTestApp(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":`)
+	}))
+	t.Cleanup(server.Close)
+	app.Forge.BaseURL = server.URL
+
+	for _, call := range []struct {
+		name string
+		call func() error
+	}{
+		{"search", func() error { _, err := app.ForgeSearch("", 1, 1, 20); return err }},
+		{"detail", func() error { _, err := app.ForgeModDetail("mod", 7); return err }},
+		{"versions", func() error { _, err := app.ForgeModVersions("mod", 7, 1); return err }},
+		{"addon versions", func() error { _, err := app.ForgeAddonVersions(9, 1); return err }},
+	} {
+		t.Run(call.name, func(t *testing.T) {
+			var coded *models.Error
+			if err := call.call(); !errors.As(err, &coded) || coded.Code != models.ParseError {
+				t.Fatalf("expected ParseError, got %v", err)
+			}
+		})
+	}
+}
+
 func TestBoundForgeReadsFailWithoutActiveLibrary(t *testing.T) {
 	app := NewAppAt(filepath.Join(t.TempDir(), "config.toml"))
 	if app.InitErr != nil {
@@ -201,14 +229,15 @@ func TestBoundForgeReadsFailWithoutActiveLibrary(t *testing.T) {
 	}
 	for _, call := range []struct {
 		name string
-		call func() (json.RawMessage, error)
+		call func() error
 	}{
-		{"search", func() (json.RawMessage, error) { return app.ForgeSearch("", 1, 1, 20) }},
-		{"detail", func() (json.RawMessage, error) { return app.ForgeModDetail("mod", 1) }},
-		{"versions", func() (json.RawMessage, error) { return app.ForgeModVersions("mod", 1, 1) }},
+		{"search", func() error { _, err := app.ForgeSearch("", 1, 1, 20); return err }},
+		{"detail", func() error { _, err := app.ForgeModDetail("mod", 1); return err }},
+		{"versions", func() error { _, err := app.ForgeModVersions("mod", 1, 1); return err }},
+		{"addon versions", func() error { _, err := app.ForgeAddonVersions(1, 1); return err }},
 	} {
 		t.Run(call.name, func(t *testing.T) {
-			_, err := call.call()
+			err := call.call()
 			var coded *models.Error
 			if !errors.As(err, &coded) || coded.Code != models.NoActiveLibrary {
 				t.Fatalf("expected NoActiveLibrary, got %v", err)
@@ -304,8 +333,8 @@ func TestForgeDownloadRunsRealHooksAndCompletesTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(accepted) != `{"accepted":true}` {
-		t.Fatalf("accepted: %s", accepted)
+	if !accepted.Accepted {
+		t.Fatalf("accepted: %+v", accepted)
 	}
 	app.Library.Wait()
 

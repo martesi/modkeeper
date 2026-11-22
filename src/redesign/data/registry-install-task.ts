@@ -1,4 +1,4 @@
-import type { OperationAccepted } from '@gen/bindings'
+import type { OperationAccepted } from '@/wails/contract'
 import { runTrackedCommand } from './runtime-boundary'
 import type { CommandResult } from './runtime-boundary'
 

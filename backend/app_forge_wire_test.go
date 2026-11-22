@@ -56,7 +56,7 @@ func TestBoundForgeFailuresMarshalWithCodedWire(t *testing.T) {
 		if app.InitErr != nil {
 			t.Fatal(app.InitErr)
 		}
-		_, err := app.ForgeModDetail(models.ForgeKind("invalid"), 1)
+		_, err := app.ForgeModDetail("invalid", 1)
 		requireMarshaledForgeError(t, err, models.ParseError)
 	})
 

@@ -37,6 +37,39 @@ export interface DeleteLibraryInput {
   deleteFiles: boolean
 }
 
+export interface ForgeAddonParent {
+  id: number
+  guid: string
+  name: string
+  detailUrl: string | null
+}
+
+export interface ForgeDependency {
+  modId: number | null
+  modGuid: string | null
+  modName: string | null
+  versionConstraint: string | null
+  isOptional: boolean | null
+}
+
+export interface ForgeDetail {
+  kind: ForgeKind
+  id: number
+  guid: string
+  name: string
+  slug: string | null
+  teaser: string | null
+  description: string | null
+  thumbnail: string | null
+  detailUrl: string | null
+  fikaCompatibility: boolean | null
+  parentModId: number | null
+  parent: ForgeAddonParent | null
+  modVersionConstraint: string | null
+  isDetached: boolean | null
+  stale: boolean
+}
+
 export interface ForgeDownloadVersionInput {
   taskId: string
   libraryId: string
@@ -61,6 +94,64 @@ export interface ForgeMatchInstalledModInput {
   kind: ForgeKind
   itemId: number
   versionId: number
+}
+
+export interface ForgePageInfo {
+  currentPage: number | null
+  lastPage: number | null
+  perPage: number | null
+  total: number | null
+}
+
+export interface ForgeSearchItem {
+  kind: ForgeKind
+  id: number
+  guid: string
+  name: string
+  slug: string | null
+  teaser: string | null
+  thumbnail: string | null
+  detailUrl: string | null
+  fikaCompatibility: boolean | null
+  parentModId: number | null
+  parentModGuid: string | null
+  parentModName: string | null
+  parentModDetailUrl: string | null
+  modVersionConstraint: string | null
+  isDetached: boolean | null
+}
+
+export interface ForgeSearchPage {
+  items: ForgeSearchItem[] | null
+  pagination: ForgePageInfo
+  stale: boolean
+}
+
+export interface ForgeSearchResponse {
+  sptVersion: string
+  mods: ForgeSearchPage
+  addons: ForgeSearchPage
+}
+
+export interface ForgeVersion {
+  kind: ForgeKind
+  itemId: number
+  id: number
+  version: string
+  description: string | null
+  link: string
+  contentLength: number
+  sptVersionConstraint: string | null
+  fikaCompatibility: string | null
+  dependencies: ForgeDependency[] | null
+}
+
+export interface ForgeVersionsPage {
+  kind: ForgeKind
+  itemId: number
+  versions: ForgeVersion[] | null
+  pagination: ForgePageInfo
+  stale: boolean
 }
 
 export interface InstallModArchivesInput {

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { ThemeMode } from '@gen/bindings'
+import type { ThemeMode } from '@/wails/contract'
 import { settingsText } from '../i18n/settings-text'
 
 /**
