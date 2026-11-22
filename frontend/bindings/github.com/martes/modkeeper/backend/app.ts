@@ -34,6 +34,12 @@ export function ActivateLibrary(
   return $Call.ByID(2762475955, input)
 }
 
+/**
+ * ApplyWindowEffect is a compatibility no-op. Wails applies the window backdrop
+ * and appearance when it creates the window, and has no runtime setter, so
+ * main.go seeds both from the saved theme at startup. Returning success keeps
+ * the existing frontend call path working when the user changes theme later.
+ */
 export function ApplyWindowEffect(
   isDark: boolean | null,
 ): $CancellablePromise<void> {
@@ -110,6 +116,27 @@ export function InstallModArchives(
   input: models$0.InstallModArchivesInput,
 ): $CancellablePromise<models$0.OperationAccepted | null> {
   return $Call.ByID(1475805379, input)
+}
+
+/**
+ * Log writes a frontend diagnostic through the Wails application logger. The
+ * desktop entrypoint points that logger at a file in the config directory, so
+ * this replaces Tauri's log plugin.
+ */
+export function Log(message: string): $CancellablePromise<void> {
+  return $Call.ByID(2479127961, message)
+}
+
+/**
+ * OpenPath reveals a directory in the OS file manager and opens a file with
+ * the OS default handler. Wails v3 has no JavaScript opener, so the frontend
+ * calls this bound method for "open folder" actions and tool launches.
+ *
+ * The operation is unavailable in the headless server build: there is no user
+ * desktop on the server host to open.
+ */
+export function OpenPath(path: string): $CancellablePromise<void> {
+  return $Call.ByID(1289568346, path)
 }
 
 export function RebuildLibraryCache(

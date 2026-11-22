@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 const calls: Array<[string, ...unknown[]]> = []
 let tauriDrop: ((event: unknown) => void) | undefined
-let wailsDrop: ((event: unknown) => void) | undefined
+const wailsListeners = new Map<string, (event: unknown) => void>()
 
 const tauriWindow = {
   startDragging: async () => calls.push(['drag']),
@@ -31,6 +31,7 @@ const tauriWindow = {
 mock.module('@tauri-apps/api/core', () => ({
   isTauri: () => true,
   invoke: async () => undefined,
+  transformCallback: () => 1,
 }))
 mock.module('@tauri-apps/plugin-dialog', () => ({
   open: async (options: unknown) => {
@@ -55,8 +56,8 @@ mock.module('@wailsio/runtime', () => ({
     ByName: async () => {
       throw new Error('Wails Call.ByName is not mocked')
     },
-    ByID: async () => {
-      throw new Error('Wails Call.ByID is not mocked')
+    ByID: async (id: number, ...args: unknown[]) => {
+      calls.push(['wails-call', id, ...args])
     },
   },
   CancellablePromise: Promise,
@@ -77,10 +78,13 @@ mock.module('@wailsio/runtime', () => ({
     SetFrameless: async (value: boolean) => calls.push(['wails-chrome', value]),
   },
   Events: {
-    On: (_name: string, cb: (event: unknown) => void) => {
-      wailsDrop = cb
-      calls.push(['wails-drop-on'])
-      return () => calls.push(['wails-drop-off'])
+    On: (name: string, cb: (event: unknown) => void) => {
+      wailsListeners.set(name, cb)
+      calls.push(['wails-event-on', name])
+      return () => {
+        wailsListeners.delete(name)
+        calls.push(['wails-event-off', name])
+      }
     },
   },
 }))
@@ -96,7 +100,7 @@ function setWindow(value: Record<string, unknown>) {
 afterEach(() => {
   calls.length = 0
   tauriDrop = undefined
-  wailsDrop = undefined
+  wailsListeners.clear()
   // @ts-expect-error Restore original browser global.
   globalThis.window = originalWindow
   if (globalThis.window) window.open = originalOpen
@@ -141,13 +145,31 @@ describe('platform capability dispatch', () => {
       'maximize',
       'close',
     ])
+    calls.length = 0
     setWindow({ _wails: { environment: {} } })
     await platform.openUrl('https://example.test')
+    await platform.openPath('/tmp/x')
+    await platform.startWindowDrag()
     await platform.minimizeWindow()
     await platform.toggleMaximizeWindow()
     await platform.closeWindow()
     expect(await platform.isWindowMaximized()).toBe(true)
-    expect(calls.map(([name]) => name)).toContain('wails-url')
+    expect(calls.map(([name]) => name)).toEqual([
+      'wails-url',
+      'wails-call',
+      'wails-minimize',
+      'wails-maximize',
+      'wails-close',
+    ])
+    expect(calls).toContainEqual(['wails-call', expect.any(Number), '/tmp/x'])
+  })
+
+  test('selects the Wails window chrome for each titlebar style', async () => {
+    setWindow({ _wails: { environment: {} } })
+    await platform.setWindowChrome('overlay')
+    expect(calls).toEqual([])
+    await platform.setWindowChrome('frameless')
+    expect(calls).toEqual([['wails-chrome', true]])
   })
 
   test('subscribes and unsubscribes file-drop listeners', async () => {
@@ -159,14 +181,48 @@ describe('platform capability dispatch', () => {
     tauriDrop?.({ payload: { type: 'drop', paths: ['/tmp/a'] } })
     tauriDrop?.({ payload: { type: 'over', paths: [] } })
     unlistenTauri()
+    calls.length = 0
     setWindow({ _wails: { environment: {} } })
     const unlistenWails = await platform.onFileDrop((paths) =>
       dropped.push(paths),
     )
-    wailsDrop?.({ data: ['/tmp/b'] })
+    const dropListener = wailsListeners.get('modkeeper:files-dropped')
+    dropListener?.({
+      data: {
+        filenames: ['/tmp/b'],
+        x: 12,
+        y: 34,
+        elementDetails: { id: 'root', classList: [], attributes: {} },
+      },
+    })
+    dropListener?.({ data: { filenames: 'not-an-array' } })
     unlistenWails()
     expect(dropped).toEqual([['/tmp/a'], ['/tmp/b']])
-    expect(calls.map(([name]) => name)).toContain('drop-off')
+    expect(calls).toContainEqual(['wails-event-on', 'modkeeper:files-dropped'])
+    expect(calls).toContainEqual(['wails-event-off', 'modkeeper:files-dropped'])
+  })
+
+  test('re-reads maximize state on Wails window resize', async () => {
+    setWindow({ _wails: { environment: {} } })
+    let resized = 0
+    const unlisten = await platform.onWindowResize(() => {
+      resized += 1
+    })
+    expect(calls).toContainEqual(['wails-event-on', 'common:WindowDidResize'])
+    wailsListeners.get('common:WindowDidResize')?.({})
+    unlisten()
+    expect(resized).toBe(1)
+    expect(calls).toContainEqual(['wails-event-off', 'common:WindowDidResize'])
+  })
+
+  test('writes Wails diagnostics through the bound logger', async () => {
+    setWindow({ _wails: { environment: {} } })
+    await platform.log('wails diagnostic')
+    expect(calls).toContainEqual([
+      'wails-call',
+      expect.any(Number),
+      'wails diagnostic',
+    ])
   })
 
   test('uses browser fallbacks for opening, logging, and window helpers', async () => {
