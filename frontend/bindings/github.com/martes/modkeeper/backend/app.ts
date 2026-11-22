@@ -17,9 +17,6 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as json$0 from '../../../../encoding/json/models.js'
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as config$0 from './config/models.js'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -74,13 +71,13 @@ export function DeleteLibrary(
 export function ForgeAddonVersions(
   id: number,
   page: number,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.ForgeVersionsPage | null> {
   return $Call.ByID(1423140075, id, page)
 }
 
 export function ForgeDownloadVersion(
   input: forge$0.ForgeDownloadVersionInput,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.OperationAccepted | null> {
   return $Call.ByID(2889594628, input)
 }
 
@@ -91,22 +88,22 @@ export function ForgeMatchInstalledMod(
 }
 
 export function ForgeModDetail(
-  kind: models$0.ForgeKind,
+  kind: string,
   id: number,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.ForgeDetail | null> {
   return $Call.ByID(1050554349, kind, id)
 }
 
 export function ForgeModVersions(
-  kind: models$0.ForgeKind,
+  kind: string,
   id: number,
   page: number,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.ForgeVersionsPage | null> {
   return $Call.ByID(1957956409, kind, id, page)
 }
 
 /**
- * ForgeSearch bound methods return the single response object shaped like
+ * ForgeSearch returns the single response object shaped like
  * src-tauri/src/models/forge.rs. Wails packs multiple Go return values into an
  * array, so the stale flag must stay inside each response.
  */
@@ -115,7 +112,7 @@ export function ForgeSearch(
   modPage: number,
   addonPage: number,
   perPage: number,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.ForgeSearchResponse | null> {
   return $Call.ByID(3029807572, query, modPage, addonPage, perPage)
 }
 
