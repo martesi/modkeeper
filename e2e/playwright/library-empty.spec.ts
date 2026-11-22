@@ -1,10 +1,15 @@
 import { expect, test } from '@playwright/test'
-import { bootMockApp } from './boot'
 
 test('empty library card is centered in the main area in both themes', async ({
   page,
 }) => {
-  await bootMockApp(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('mk-e2e-no-active-library', '1')
+  })
+  await page.goto('/')
+  await expect(
+    page.getByRole('navigation', { name: /primary navigation/i }),
+  ).toBeVisible()
   await page.getByRole('link', { name: /library/i }).click()
   await expect(page.getByText('Activate a library')).toBeVisible()
   await expect(
@@ -34,6 +39,7 @@ test('empty library card is centered in the main area in both themes', async ({
         mainY: b.y + b.height / 2,
       }
     })
+    console.log(`${theme} center measurement`, centers)
     expect(
       Math.abs(centers.cardX - centers.mainX),
       `${theme} horizontal center`,
@@ -43,7 +49,7 @@ test('empty library card is centered in the main area in both themes', async ({
       `${theme} vertical center`,
     ).toBeLessThanOrEqual(2)
     await page.screenshot({
-      path: `test-results/library-empty-${theme}.png`,
+      path: `/tmp/opencode/task-library-${theme}.png`,
       fullPage: true,
     })
   }
