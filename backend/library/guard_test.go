@@ -3,12 +3,12 @@ package library
 import (
 	"errors"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/process"
+	"github.com/martes/modkeeper/backend/testenv"
 )
 
 type recordingInspector struct {
@@ -114,7 +114,7 @@ func TestSyncProceedsWhenNothingIsRunning(t *testing.T) {
 }
 
 func TestProcessInspectionFailureIsNotTreatedAsSafe(t *testing.T) {
-	expected := errors.New("Unable to inspect running processes")
+	wantData := "Unable to inspect running processes: access denied"
 	cases := []struct {
 		name string
 		run  func(svc *Service, id string) error
@@ -137,16 +137,10 @@ func TestProcessInspectionFailureIsNotTreatedAsSafe(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, svc := deleteFixture(t)
 			id := svc.active.manifest.ID
-			svc.Inspector = process.Fake{Err: expected}
+			svc.Inspector = process.Fake{Err: errors.New("access denied")}
 
 			err := tc.run(svc, id)
-			if !errors.Is(err, expected) {
-				t.Fatalf("returned %v; want the inspection failure", err)
-			}
-			var coded *models.Error
-			if errors.As(err, &coded) {
-				t.Fatalf("inspection failure collapsed into the guard code %q", coded.Code)
-			}
+			testenv.RequireWireError(t, err, models.IOError, wantData)
 			if tc.name == "delete with files" && !libraryRegistered(svc, id) {
 				t.Fatal("library entry was removed despite the inspection failure")
 			}
@@ -154,11 +148,14 @@ func TestProcessInspectionFailureIsNotTreatedAsSafe(t *testing.T) {
 	}
 }
 
-func TestGuardInspectionErrorMentionsTheOperation(t *testing.T) {
+func TestMissingInspectorIsACodedInspectionFailure(t *testing.T) {
 	_, svc := deleteFixture(t)
-	svc.Inspector = process.Fake{Err: errors.New("access denied")}
-	err := svc.DeleteLibrary(svc.active.manifest.ID, true)
-	if err == nil || !strings.Contains(err.Error(), "inspect running processes") {
-		t.Fatalf("returned %v; want inspection context", err)
+	id := svc.active.manifest.ID
+	svc.Inspector = nil
+
+	err := svc.DeleteLibrary(id, true)
+	testenv.RequireWireError(t, err, models.IOError, "Unable to inspect running processes: process inspection is not configured")
+	if !libraryRegistered(svc, id) {
+		t.Fatal("library entry was removed despite the missing inspector")
 	}
 }

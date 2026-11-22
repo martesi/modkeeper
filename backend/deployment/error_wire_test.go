@@ -1,48 +1,14 @@
 package deployment
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/martes/modkeeper/backend/models"
+	"github.com/martes/modkeeper/backend/testenv"
 )
-
-func requireWireError(t *testing.T, err error, code string, wantData any) {
-	t.Helper()
-	var coded *models.Error
-	if !errors.As(err, &coded) {
-		t.Fatalf("got %T (%v); want *models.Error with code %s", err, err, code)
-	}
-	raw, marshalErr := json.Marshal(coded)
-	if marshalErr != nil {
-		t.Fatalf("marshal %v: %v", coded, marshalErr)
-	}
-	var wire map[string]json.RawMessage
-	if unmarshalErr := json.Unmarshal(raw, &wire); unmarshalErr != nil {
-		t.Fatalf("unmarshal %s: %v", raw, unmarshalErr)
-	}
-	if len(wire) != 2 {
-		t.Fatalf("wire shape %s must carry exactly code and data", raw)
-	}
-	if got := string(wire["code"]); got != `"`+code+`"` {
-		t.Fatalf("wire code %s; want %q (payload %s)", got, code, raw)
-	}
-	data, ok := wire["data"]
-	if !ok {
-		t.Fatalf("payload %s omits data; the bridge requires the key", raw)
-	}
-	want, marshalErr := json.Marshal(wantData)
-	if marshalErr != nil {
-		t.Fatalf("marshal want data: %v", marshalErr)
-	}
-	if string(data) != string(want) {
-		t.Fatalf("wire data %s; want %s", data, want)
-	}
-}
 
 func TestDeploymentErrorsUseTheWireContract(t *testing.T) {
 	l := fixture(t)
@@ -87,7 +53,7 @@ func TestDeploymentErrorsUseTheWireContract(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected an error")
 			}
-			requireWireError(t, err, tc.code, tc.data)
+			testenv.RequireWireError(t, err, tc.code, tc.data)
 		})
 	}
 
@@ -96,17 +62,6 @@ func TestDeploymentErrorsUseTheWireContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := LoadState(l)
-		var coded *models.Error
-		if !errors.As(err, &coded) || coded.Code != models.InvalidLibrary {
-			t.Fatalf("got %T (%v); want InvalidLibrary", err, err)
-		}
-		pair, ok := coded.Data.([]any)
-		if !ok || len(pair) != 2 || pair[0] != l.LibraryRoot {
-			t.Fatalf("data %#v; want [root reason]", coded.Data)
-		}
-		reason, _ := pair[1].(string)
-		if !strings.HasPrefix(reason, "deployment.toml: ") {
-			t.Fatalf("reason %q; want deployment.toml prefix", reason)
-		}
+		testenv.RequireInvalidLibraryPrefix(t, err, l.LibraryRoot, "deployment.toml: ")
 	})
 }

@@ -454,9 +454,6 @@ func (s *Service) assertGameOrServerStopped() error {
 		// check instead.
 		return nil
 	}
-	if s.Inspector == nil {
-		return fmt.Errorf("inspect running processes: process inspection is not configured")
-	}
 	rules, err := spt.Discover(s.active.GameRoot)
 	if err != nil {
 		return err

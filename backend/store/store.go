@@ -20,7 +20,7 @@ type AppConfigStore struct {
 func ConfigPath(debug bool) (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return "", models.Fail(models.IOError, "Unable to determine config directory")
+		return "", models.Fail(models.IOError, fmt.Sprintf("Unable to determine config directory: %v", err))
 	}
 	name := "config.toml"
 	if debug {

@@ -22,6 +22,13 @@ func init() {
 // embedded assets and event wiring cannot drift between the two. Callers add
 // mode-specific services and options, then pass the result to application.New.
 func appOptions(appBackend *backend.App) application.Options {
+	// Wails serializes the concrete error value unless a service marshaler is
+	// set, so an uncoded error becomes "{}" and the bridge reports a transport
+	// failure. The backend keeps every command failure on the {code, data}
+	// wire contract. ServiceOptions cannot be passed through NewService without
+	// hiding the call from the bindings generator, so use the documented
+	// default instead.
+	application.DefaultServiceOptions.MarshalError = backend.MarshalError
 	return application.Options{
 		Name:        "Modkeeper",
 		Description: "Game mod management and development",

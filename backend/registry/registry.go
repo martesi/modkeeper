@@ -142,9 +142,12 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 type ProcessGuard struct{ Inspector process.Inspector }
 
 func (g ProcessGuard) AssertStopped(paths []string, code string) error {
+	if g.Inspector == nil {
+		return models.Fail(models.IOError, "Unable to inspect running processes: process inspection is not configured")
+	}
 	running, err := g.Inspector.IsRunning(paths)
 	if err != nil {
-		return fmt.Errorf("inspect running processes: %w", err)
+		return models.Fail(models.IOError, fmt.Sprintf("Unable to inspect running processes: %v", err))
 	}
 	if running {
 		return models.Fail(code)

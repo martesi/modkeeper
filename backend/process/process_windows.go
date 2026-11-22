@@ -5,6 +5,7 @@ package process
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
@@ -21,12 +22,17 @@ func defaultInspector() Inspector { return Windows{} }
 func (Windows) IsRunning(paths []string) (bool, error) {
 	targets := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
-		absolute, err := filepath.Abs(path)
+		canonical, exists, err := canonicalWindowsPath(path)
 		if err != nil {
-			return false, fmt.Errorf("canonicalize executable %q: %w", path, err)
+			return false, err
 		}
-		// Windows paths compare case-insensitively.
-		targets[strings.ToLower(filepath.Clean(absolute))] = struct{}{}
+		if !exists {
+			// A target that does not exist cannot be running. This keeps a
+			// broken library deletable instead of turning a missing file into
+			// an inspection failure.
+			continue
+		}
+		targets[canonical] = struct{}{}
 	}
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
@@ -45,7 +51,15 @@ func (Windows) IsRunning(paths []string) (bool, error) {
 			}
 			return false, imageErr
 		}
-		if _, running := targets[strings.ToLower(filepath.Clean(image))]; running {
+		// A junctioned game root means the running image and the configured
+		// path reach the same executable through different names.
+		canonical, exists, canonicalErr := canonicalWindowsPath(image)
+		if canonicalErr != nil || !exists {
+			// The image vanished or cannot be resolved; it cannot match a
+			// target that resolved successfully.
+			continue
+		}
+		if _, running := targets[canonical]; running {
 			return true, nil
 		}
 	}
@@ -53,6 +67,24 @@ func (Windows) IsRunning(paths []string) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("enumerate processes: %w", err)
+}
+
+// canonicalWindowsPath resolves junctions and case-folds the path for the
+// case-insensitive comparison Windows uses. A missing path is reported as
+// absent rather than as an inspection failure.
+func canonicalWindowsPath(path string) (string, bool, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if os.IsNotExist(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("canonicalize executable %q: %w", path, err)
+	}
+	absolute, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", false, fmt.Errorf("canonicalize executable %q: %w", path, err)
+	}
+	return strings.ToLower(filepath.Clean(absolute)), true, nil
 }
 
 func processImage(pid uint32) (string, error) {
