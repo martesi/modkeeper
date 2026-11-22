@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -65,44 +64,48 @@ func (s *Service) workspaceManifest(known config.KnownLibrary) (manifest, bool) 
 	if s.active != nil && s.active.manifest.ID == known.ID {
 		return s.active.manifest, true
 	}
-	return readWorkspaceManifest(filepath.Join(known.LibraryRoot, "manifest.toml"))
+	m, err := readStrictManifest(filepath.Join(known.LibraryRoot, "manifest.toml"))
+	return m, err == nil
 }
 
-// readWorkspaceManifest applies the field requirements of Rust's LibraryDTO and
+// readStrictManifest applies the field requirements of Rust's LibraryDTO and
 // Mod. TOML decoding alone fills missing values with zeroes, which would turn a
-// manifest Rust rejects into a plausible summary.
-func readWorkspaceManifest(path string) (manifest, bool) {
+// manifest Rust rejects into a plausible library.
+func readStrictManifest(path string) (manifest, error) {
 	var raw map[string]any
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
-		return manifest{}, false
+		return manifest{}, err
 	}
-	if missingFields(raw, manifestFields) != nil {
-		return manifest{}, false
+	if err := missingFields(raw, manifestFields); err != nil {
+		return manifest{}, err
 	}
 	mods, ok := raw["mods"].(map[string]any)
 	if !ok {
-		return manifest{}, false
+		return manifest{}, fmt.Errorf("missing required field %q", "mods")
 	}
-	for _, value := range mods {
+	for id, value := range mods {
 		entry, ok := value.(map[string]any)
-		if !ok || missingFields(entry, modFields) != nil {
-			return manifest{}, false
+		if !ok {
+			return manifest{}, fmt.Errorf("mod %q is not a table", id)
+		}
+		if err := missingFields(entry, modFields); err != nil {
+			return manifest{}, fmt.Errorf("mod %q: %w", id, err)
 		}
 		if !validModType(entry["type"]) {
-			return manifest{}, false
+			return manifest{}, fmt.Errorf("mod %q: invalid type", id)
 		}
-		if kind, present := entry["forgeKind"]; present && !oneOf(kind, "mod", "addon") {
-			return manifest{}, false
+		if kind, present := entry["forgeKind"]; present && !validForgeKind(kind) {
+			return manifest{}, fmt.Errorf("mod %q: invalid forgeKind", id)
 		}
-		if source, present := entry["source"]; present && !oneOf(source, "local", "forge") {
-			return manifest{}, false
+		if source, present := entry["source"]; present && !validModSource(source) {
+			return manifest{}, fmt.Errorf("mod %q: invalid source", id)
 		}
 	}
 	var m manifest
 	if _, err := toml.DecodeFile(path, &m); err != nil {
-		return manifest{}, false
+		return manifest{}, err
 	}
-	return m, true
+	return m, nil
 }
 
 // workspaceCacheStatus mirrors Rust's per-library cache probe. The active
@@ -111,7 +114,7 @@ func readWorkspaceManifest(path string) (manifest, bool) {
 func (s *Service) workspaceCacheStatus(known config.KnownLibrary) models.CacheStatus {
 	cachePath := filepath.Join(known.LibraryRoot, "cache.toml")
 	if s.active == nil || s.active.manifest.ID != known.ID {
-		if err := readWorkspaceCache(cachePath); err != nil {
+		if err := readStrictCache(cachePath); err != nil {
 			message := err.Error()
 			return models.CacheStatus{State: models.CacheStateFailed, Message: &message}
 		}
@@ -120,13 +123,13 @@ func (s *Service) workspaceCacheStatus(known config.KnownLibrary) models.CacheSt
 	return models.CacheStatus{State: models.CacheStateReady, LastRebuiltAt: &rebuilt}
 }
 
-// readWorkspaceCache applies the field requirements of Rust's LibraryCache and
+// readStrictCache applies the field requirements of Rust's LibraryCache and
 // ModFS: `mods` is mandatory and every entry needs id, modType, files and
 // executables with the expected types.
-func readWorkspaceCache(path string) error {
+func readStrictCache(path string) error {
 	var raw map[string]any
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
-		return err
+		return fmt.Errorf("cache.toml: %w", err)
 	}
 	mods, ok := raw["mods"].(map[string]any)
 	if !ok {
@@ -155,7 +158,7 @@ func readWorkspaceCache(path string) error {
 		} `toml:"mods"`
 	}
 	if _, err := toml.DecodeFile(path, &typed); err != nil {
-		return err
+		return fmt.Errorf("cache.toml: %w", err)
 	}
 	return nil
 }
@@ -169,19 +172,28 @@ func missingFields(table map[string]any, fields []string) error {
 	return nil
 }
 
-func validModType(value any) bool { return oneOf(value, "client", "server", "both", "unknown") }
-
-func oneOf(value any, allowed ...string) bool {
+// validModType accepts Rust's exact lowercase values and the named aliases from
+// its serde attributes; arbitrary casing is not accepted.
+func validModType(value any) bool {
 	text, ok := value.(string)
 	if !ok {
 		return false
 	}
-	for _, candidate := range allowed {
-		if strings.EqualFold(text, candidate) {
-			return true
-		}
+	switch text {
+	case "client", "server", "both", "unknown", "Client", "Server", "Both", "Unknown":
+		return true
 	}
 	return false
+}
+
+func validForgeKind(value any) bool {
+	text, ok := value.(string)
+	return ok && (text == "mod" || text == "addon")
+}
+
+func validModSource(value any) bool {
+	text, ok := value.(string)
+	return ok && (text == "local" || text == "forge")
 }
 
 func modSummary(libraryID, installed, libraryUpdatedAt string, m models.Mod) models.ModSummary {

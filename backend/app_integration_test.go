@@ -638,8 +638,8 @@ func TestStartRecoversInterruptedInstallArtifacts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Source: models.ModSourceLocal}
-	newMod := models.Mod{ID: "RecoverMe", Name: "new", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: "RecoverMe", Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	var diskManifest struct {
 		ID         string                `toml:"id"`
 		Name       string                `toml:"name"`

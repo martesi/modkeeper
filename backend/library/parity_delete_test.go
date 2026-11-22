@@ -52,7 +52,7 @@ func deployedFixture(t *testing.T) (*testenv.Env, *Service, deployment.Layout, m
 	if err := os.Rename(modDir, finalDir); err != nil {
 		t.Fatal(err)
 	}
-	m := models.Mod{ID: fs.ID, Name: "Example", Enabled: true, Type: models.ModTypeServer}
+	m := models.Mod{ID: fs.ID, Name: "Example", Enabled: true, Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	rules, err := spt.Discover(env.GameRoot)
 	if err != nil {
 		t.Fatal(err)

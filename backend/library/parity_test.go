@@ -25,7 +25,7 @@ func TestTestDefaultLibraryRootMovesToAVersionedRootAfterAnSptMajorChange(t *tes
 
 func TestTestValidateLibraryStructureValid(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "manifest.toml"), []byte("id = 'test'\nname = 'Test'\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "manifest.toml"), []byte(validLibraryManifest()), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"mods", "backups", "staging"} {
@@ -47,12 +47,37 @@ func TestTestValidateLibraryStructureMissingManifest(t *testing.T) {
 
 func TestTestValidateLibraryStructureMissingDirectory(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "manifest.toml"), []byte("id = 'test'\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "manifest.toml"), []byte(validLibraryManifest()), 0600); err != nil {
 		t.Fatal(err)
 	}
 	err := ValidateLibraryStructure(root)
 	if err == nil || !strings.Contains(err.Error(), "InvalidLibrary") || !strings.Contains(err.Error(), "mods") {
 		t.Fatalf("expected InvalidLibrary missing mods error, got %v", err)
+	}
+}
+
+// validLibraryManifest carries every field Rust's LibraryDTO requires.
+func validLibraryManifest() string {
+	return `id = 'test'
+name = 'Test'
+gameRoot = 'C:/game'
+repoRoot = 'C:/game/.mod_keeper'
+sptVersion = '4.0.11'
+isDirty = false
+
+[mods]
+`
+}
+
+func TestTestValidateLibraryStructureRequiresRepoRoot(t *testing.T) {
+	root := t.TempDir()
+	manifest := strings.Replace(validLibraryManifest(), "repoRoot = 'C:/game/.mod_keeper'\n", "", 1)
+	if err := os.WriteFile(filepath.Join(root, "manifest.toml"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateLibraryStructure(root)
+	if err == nil || !strings.Contains(err.Error(), "InvalidLibrary") || !strings.Contains(err.Error(), "repoRoot") {
+		t.Fatalf("expected InvalidLibrary naming repoRoot, got %v", err)
 	}
 }
 

@@ -40,6 +40,10 @@ func AddModWithMetadata(l *Library, id, name, kind, source string, active bool, 
 	if !ok {
 		m = models.Mod{ID: id, Name: name}
 	}
+	if kind != "" {
+		// The library manifest records the scanned mod type, like Rust's install.
+		m.Type = models.ModType(kind)
+	}
 	m.ApplyInstall(active, nil, time.Now())
 	if metadata != nil && metadata.Forge != nil {
 		m.ApplyInstall(active, metadata.Forge, time.Now())

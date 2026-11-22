@@ -194,8 +194,11 @@ func TestTestWorkspaceModSummaryMirrorsManifestAndFileMetadata(t *testing.T) {
 	if _, ok := cache["lastRebuiltAt"]; !ok {
 		t.Fatalf("cacheStatus.lastRebuiltAt missing from wire: %s", encoded)
 	}
+	if _, ok := wire.Libraries[0]["updatedAt"]; !ok {
+		t.Fatalf("updatedAt missing from wire library summary: %s", encoded)
+	}
 	wireMod := wire.ModsByLibraryID[libraryID][0]
-	for _, field := range []string{"installedAt", "forgeVersionId", "forgeGuid", "version"} {
+	for _, field := range []string{"installedAt", "forgeVersionId", "forgeGuid", "version", "libraryId", "isEnabled", "type"} {
 		if _, ok := wireMod[field]; !ok {
 			t.Fatalf("%s missing from wire mod summary: %s", field, encoded)
 		}
@@ -271,6 +274,7 @@ func TestTestWorkspaceCacheStatusRejectsCacheRustCannotRead(t *testing.T) {
 	}{
 		{name: "empty", content: ""},
 		{name: "mod-entry-is-not-a-table", content: "mods = { a = 5 }\n"},
+		{name: "mod-type-uppercase", content: "mods = { a = { id = 'a', modType = 'SERVER', files = [], executables = [] } }\n"},
 		{name: "mod-entry-missing-fields", content: "mods = { a = { id = 'a' } }\n"},
 	}
 	for _, tc := range cases {
@@ -324,6 +328,105 @@ func TestTestWorkspaceStubsModWithoutType(t *testing.T) {
 		delete(mod, "type")
 	})
 	assertStub(t, mustWorkspace(t, s), l.Root)
+}
+
+func TestTestLoadRejectsManifestWithoutRepoRoot(t *testing.T) {
+	s, env := newParityService(t)
+	l := createParityLibrary(t, s, env)
+	rewriteTOML(t, filepath.Join(l.Root, "manifest.toml"), func(m map[string]any) {
+		delete(m, "repoRoot")
+	})
+	if _, err := Load(l.Root); err == nil ||
+		!strings.Contains(err.Error(), "InvalidLibrary") ||
+		!strings.Contains(err.Error(), "repoRoot") {
+		t.Fatalf("Load error = %v; want InvalidLibrary naming repoRoot", err)
+	}
+}
+
+func TestTestInactiveManifestWithoutRepoRootStaysStub(t *testing.T) {
+	s, env := newParityService(t)
+	active := createParityLibrary(t, s, env)
+	root := filepath.Join(env.Root, "no-repo-root-library")
+	inactive := addInactiveLibrary(t, s, env.GameRoot, root)
+	rewriteTOML(t, filepath.Join(root, "manifest.toml"), func(m map[string]any) {
+		delete(m, "repoRoot")
+	})
+	workspace := mustWorkspace(t, s)
+	if len(workspace.Libraries) != 2 {
+		t.Fatalf("libraries = %+v; want active summary and inactive stub", workspace.Libraries)
+	}
+	if workspace.Libraries[0].Summary == nil || workspace.Libraries[0].Summary.ID != active.manifest.ID {
+		t.Fatalf("active entry = %+v; want a summary", workspace.Libraries[0])
+	}
+	if workspace.Libraries[1].Stub == nil || workspace.Libraries[1].Stub.Path != inactive.Root {
+		t.Fatalf("inactive entry = %+v; want a stub", workspace.Libraries[1])
+	}
+}
+
+func TestTestStartupLoadFailsWhenActiveManifestLacksRepoRoot(t *testing.T) {
+	s, env := newParityService(t)
+	l := createParityLibrary(t, s, env)
+	configPath := s.Store.Path
+	rewriteTOML(t, filepath.Join(l.Root, "manifest.toml"), func(m map[string]any) {
+		delete(m, "repoRoot")
+	})
+
+	restarted, err := New(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.WaitForInitialLoad(); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.Store.Config.AppState.ActiveLibraryID != nil {
+		t.Fatalf("active library = %q; want cleared", *restarted.Store.Config.AppState.ActiveLibraryID)
+	}
+	persisted, err := store.LoadFrom(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.AppState.ActiveLibraryID != nil {
+		t.Fatalf("persisted active library = %q; want cleared", *persisted.AppState.ActiveLibraryID)
+	}
+	assertStub(t, restarted.Workspace(), l.Root)
+	if warning := restarted.TakeStartupWarning(); warning != nil {
+		t.Fatalf("startup warning = %q; want none", *warning)
+	}
+}
+
+func TestTestWorkspaceRejectsNonRustEnums(t *testing.T) {
+	cases := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "mod-type-uppercase", key: "type", value: "SERVER"},
+		{name: "mod-source-titlecase", key: "source", value: "Local"},
+		{name: "forge-kind-uppercase", key: "forgeKind", value: "MOD"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, env := newParityService(t)
+			root := filepath.Join(env.Root, "enum-library")
+			l := addInactiveLibrary(t, s, env.GameRoot, root)
+			kind := models.ForgeKindMod
+			l.manifest.Mods["mod-a"] = models.Mod{
+				ID: "mod-a", Name: "Alpha", Type: models.ModTypeServer,
+				Source: models.ModSourceLocal, ForgeKind: &kind,
+			}
+			if err := l.Persist(); err != nil {
+				t.Fatal(err)
+			}
+			rewriteTOML(t, filepath.Join(root, "manifest.toml"), func(m map[string]any) {
+				mods := m["mods"].(map[string]any)
+				mods["mod-a"].(map[string]any)[tc.key] = tc.value
+			})
+			assertStub(t, mustWorkspace(t, s), l.Root)
+		})
+	}
 }
 
 // Workspace assembly never consumes the startup warning; only the

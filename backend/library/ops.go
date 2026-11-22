@@ -231,6 +231,9 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 				if !hadPrevious {
 					newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
 				}
+				if item.FS.ModType != "" {
+					newMod.Type = models.ModType(item.FS.ModType)
+				}
 				newMod.ApplyInstall(enable, nil, time.Now())
 				if err == nil {
 					l.Mods[item.FS.ID] = newMod

@@ -210,7 +210,7 @@ func TestCrashDuringInstallRecoveryCleanupIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mod := models.Mod{ID: "CleanupMod", Name: "new", Source: models.ModSourceLocal}
+	mod := models.Mod{ID: "CleanupMod", Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	tree := filepath.Join(l.ModsDir, mod.ID)
 	snapshot := installSnapshotPath(l, mod.ID)
 	for path, body := range map[string]string{

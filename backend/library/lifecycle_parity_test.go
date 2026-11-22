@@ -113,7 +113,7 @@ func TestTestToDtoUsesHashId(t *testing.T) {
 func TestTestPersistenceCycle(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["persist-id"] = models.Mod{ID: "persist-id", Name: "Persist", Enabled: true}
+	l.manifest.Mods["persist-id"] = models.Mod{ID: "persist-id", Name: "Persist", Enabled: true, Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTestModIdCaseNormalization(t *testing.T) {
 	// manifest retains the exact supplied ID; verify load does not alter it.
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["CaseID"] = models.Mod{ID: "CaseID"}
+	l.manifest.Mods["CaseID"] = models.Mod{ID: "CaseID", Name: "CaseID", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
@@ -220,8 +220,8 @@ func TestActivateInactiveLibraryRecoversInterruptedInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldMod := models.Mod{ID: "RecoverOnActivate", Name: "old", Source: models.ModSourceLocal}
-	newMod := models.Mod{ID: oldMod.ID, Name: "new", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "RecoverOnActivate", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: oldMod.ID, Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	destination := filepath.Join(inactive.ModsDir, oldMod.ID)
 	snapshot := installSnapshotPath(inactive, oldMod.ID)
 	for path, content := range map[string]string{
@@ -286,7 +286,7 @@ func TestActivationIsBusyWhileInstallHasPreparedMarker(t *testing.T) {
 	if err := s.Store.Save(); err != nil {
 		t.Fatal(err)
 	}
-	oldMod := models.Mod{ID: "KeepExisting", Name: "keep", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "KeepExisting", Name: "keep", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	inactive.manifest.Mods[oldMod.ID] = oldMod
 	if err := inactive.Persist(); err != nil {
 		t.Fatal(err)
@@ -508,7 +508,7 @@ func TestTestDeleteLibraryUnregisteredIdFails(t *testing.T) {
 func TestTestBulkUpdateSetsStaleAndNeverDeploys(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func TestTestBulkUpdateRejectsNonActiveLibrary(t *testing.T) {
 func TestTestBulkUpdateDeleteRemovesMod(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +545,7 @@ func TestTestBulkUpdateDeleteRemovesMod(t *testing.T) {
 func TestTestOverlappingModWritesSettleToARequestedState(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -588,7 +588,7 @@ func TestTestAssemblyReportsModsAndDeployStale(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
 	l.manifest.IsDirty = true
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "Example"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "Example", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}

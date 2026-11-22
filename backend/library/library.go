@@ -41,15 +41,20 @@ type Library struct {
 }
 
 func layout(root string) (manifest, cache, string, string, string, error) {
-	var m manifest
 	var c cache
 	// repo_root *is* the library root (`game/.mod_keeper`), matching Rust's
 	// LibPathRules::new(repo_root).
 	base := root
-	if _, err := toml.DecodeFile(filepath.Join(base, "manifest.toml"), &m); err != nil {
+	manifestPath := filepath.Join(base, "manifest.toml")
+	m, err := readStrictManifest(manifestPath)
+	if err != nil {
+		return m, c, "", "", "", fmt.Errorf("manifest.toml: %w", err)
+	}
+	cachePath := filepath.Join(base, "cache.toml")
+	if err := readStrictCache(cachePath); err != nil {
 		return m, c, "", "", "", err
 	}
-	if _, err := toml.DecodeFile(filepath.Join(base, "cache.toml"), &c); err != nil {
+	if _, err := toml.DecodeFile(cachePath, &c); err != nil {
 		return m, c, "", "", "", err
 	}
 	return m, c, filepath.Join(base, "mods"), filepath.Join(base, "staging"), filepath.Join(base, "backups"), nil
@@ -373,8 +378,7 @@ func ValidateLibraryStructure(root string) error {
 		}
 		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
 	}
-	var m manifest
-	if _, err := toml.DecodeFile(filepath.Join(root, "manifest.toml"), &m); err != nil {
+	if _, err := readStrictManifest(filepath.Join(root, "manifest.toml")); err != nil {
 		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
 	}
 	for _, dir := range []string{"mods", "backups", "staging"} {
@@ -422,7 +426,6 @@ func (s *Service) Start() error {
 					return
 				}
 				s.active = l
-				s.clearWarning()
 				s.Registry.SetActive(l.manifest.ID, true)
 			}()
 			return nil
@@ -465,12 +468,6 @@ func (s *Service) WaitForInitialLoad() error {
 func (s *Service) setWarning(message string) {
 	s.warningMu.Lock()
 	s.warning = strPtr(message)
-	s.warningMu.Unlock()
-}
-
-func (s *Service) clearWarning() {
-	s.warningMu.Lock()
-	s.warning = nil
 	s.warningMu.Unlock()
 }
 
@@ -532,7 +529,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						return err
 					}
 					s.active = l
-					s.clearWarning()
 					s.Registry.SetActive(l.manifest.ID, true)
 					return nil
 				}
@@ -579,7 +575,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				return err
 			}
 			s.active = l
-			s.clearWarning()
 			s.Registry.SetActive(l.manifest.ID, true)
 			return nil
 		}
@@ -599,7 +594,6 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 		return e
 	}
 	s.active = l
-	s.clearWarning()
 	s.Registry.SetActive(l.manifest.ID, true)
 	return nil
 }
@@ -627,7 +621,6 @@ func (s *Service) ActivateLibrary(id string) error {
 		return e
 	}
 	s.active = l
-	s.clearWarning()
 	s.Registry.SetActive(id, true)
 	return nil
 }

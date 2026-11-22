@@ -99,8 +99,8 @@ func TestCommittedRecoveryPreservesSnapshotWhenDestinationIsUnavailable(t *testi
 				t.Fatal(err)
 			}
 			l := service.active
-			oldMod := models.Mod{ID: "BrokenMod", Name: "old", Source: models.ModSourceLocal}
-			newMod := models.Mod{ID: oldMod.ID, Name: "new", Source: models.ModSourceForge}
+			oldMod := models.Mod{ID: "BrokenMod", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+			newMod := models.Mod{ID: oldMod.ID, Name: "new", Type: models.ModTypeServer, Source: models.ModSourceForge}
 			l.manifest.Mods[oldMod.ID] = newMod
 			if err := l.Persist(); err != nil {
 				t.Fatal(err)

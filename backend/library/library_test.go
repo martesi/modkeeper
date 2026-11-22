@@ -18,8 +18,8 @@ func TestRecoverInterruptedInstallArtifactsUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Source: models.ModSourceLocal}
-	newMod := models.Mod{ID: "RecoverMe", Name: "new", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: "RecoverMe", Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	oldTree := filepath.Join(l.ModsDir, oldMod.ID)
 	snapshot := installSnapshotPath(l, oldMod.ID)
 	if err := os.MkdirAll(oldTree, 0700); err != nil {
@@ -96,7 +96,7 @@ func TestRecoverInterruptedInstallArtifactsUnit(t *testing.T) {
 
 	// A prepared fresh import is rolled back even if the new manifest was
 	// already persisted. It must not leave a listed mod with no files.
-	fresh := models.Mod{ID: "FreshMod", Name: "fresh", Source: models.ModSourceLocal}
+	fresh := models.Mod{ID: "FreshMod", Name: "fresh", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	freshTree := filepath.Join(l.ModsDir, fresh.ID)
 	if err := os.MkdirAll(freshTree, 0700); err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestRecoverInterruptedInstallArtifactsUnit(t *testing.T) {
 	}
 
 	// A committed marker keeps a replacement and reconciles its manifest entry.
-	committed := models.Mod{ID: "CommittedMod", Name: "committed", Source: models.ModSourceLocal}
+	committed := models.Mod{ID: "CommittedMod", Name: "committed", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	committedTree := filepath.Join(l.ModsDir, committed.ID)
 	if err := os.MkdirAll(committedTree, 0700); err != nil {
 		t.Fatal(err)
