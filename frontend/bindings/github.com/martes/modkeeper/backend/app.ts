@@ -88,14 +88,14 @@ export function ForgeMatchInstalledMod(
 }
 
 export function ForgeModDetail(
-  kind: string,
+  kind: models$0.ForgeKind,
   id: number,
 ): $CancellablePromise<models$0.ForgeDetail | null> {
   return $Call.ByID(1050554349, kind, id)
 }
 
 export function ForgeModVersions(
-  kind: string,
+  kind: models$0.ForgeKind,
   id: number,
   page: number,
 ): $CancellablePromise<models$0.ForgeVersionsPage | null> {

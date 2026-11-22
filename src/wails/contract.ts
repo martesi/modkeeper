@@ -248,6 +248,9 @@ export type SError =
   | { code: 'ModIdConflict'; data: [string, string] }
   | { code: 'ConfigSaveFailed'; data: string }
   | { code: 'TaskIdInUse'; data: string }
+  | { code: 'TaskNotFound'; data: string }
+  | { code: 'TaskAlreadyCancelled'; data: string }
+  | { code: 'TaskNotCancellable'; data: string }
   | { code: 'LibraryBusy' }
 
 export type Result<T, E = SError> =

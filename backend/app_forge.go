@@ -31,21 +31,21 @@ func (a *App) ForgeSearch(query string, modPage, addonPage, perPage int) (*model
 	}
 	return forgeResponse[models.ForgeSearchResponse](body)
 }
-func (a *App) ForgeModDetail(kind string, id uint32) (*models.ForgeDetail, error) {
+func (a *App) ForgeModDetail(kind models.ForgeKind, id uint32) (*models.ForgeDetail, error) {
 	if a.Forge == nil {
 		return nil, a.initFailure()
 	}
-	body, err := a.Forge.Detail(kind, id)
+	body, err := a.Forge.Detail(string(kind), id)
 	if err != nil {
 		return nil, err
 	}
 	return forgeResponse[models.ForgeDetail](body)
 }
-func (a *App) ForgeModVersions(kind string, id uint32, page int) (*models.ForgeVersionsPage, error) {
+func (a *App) ForgeModVersions(kind models.ForgeKind, id uint32, page int) (*models.ForgeVersionsPage, error) {
 	if a.Forge == nil {
 		return nil, a.initFailure()
 	}
-	body, err := a.Forge.Versions(kind, id, page)
+	body, err := a.Forge.Versions(string(kind), id, page)
 	if err != nil {
 		return nil, err
 	}

@@ -71,7 +71,11 @@ export function dispatchCommand(
               : Promise.reject(error),
           ),
       )
-  return Promise.resolve(tauri())
+  return Promise.resolve(tauri()).then((value) =>
+    value && typeof value === 'object' && 'status' in value
+      ? value
+      : { status: 'ok', data: value },
+  )
 }
 
 /**
