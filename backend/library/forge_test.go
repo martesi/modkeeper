@@ -14,6 +14,11 @@ func TestForgeVersionMatchesUsesRustRequirementSyntax(t *testing.T) {
 		constraint string
 		want       bool
 	}{
+		// Rust fixture: a bare version is a caret requirement.
+		{"1.21.0", "1.21", true},
+		{"1.20.9", "1.21", false},
+		{"1.22.0", "1.21", true},
+		{"1.99.0", "1.21", true},
 		{"1.5.0", "^1.0", true},
 		{"2.0.0", "^1.0", false},
 		{"1.2.9", "~1.2", true},
@@ -26,8 +31,11 @@ func TestForgeVersionMatchesUsesRustRequirementSyntax(t *testing.T) {
 			t.Errorf("%s <= %s: got %v, %v", test.version, test.constraint, got, err)
 		}
 	}
-	if _, err := forgeVersionMatches("1.0.0", "not a requirement"); err == nil {
-		t.Fatal("invalid constraint accepted")
+	for _, constraint := range []string{"||", "1.0 - 2.0", ">=1.0 <2.0"} {
+		var coded *models.Error
+		if _, err := forgeVersionMatches("1.0.0", constraint); !errors.As(err, &coded) || coded.Code != models.ParseError {
+			t.Errorf("Rust-rejected constraint %q: %v", constraint, err)
+		}
 	}
 	var coded *models.Error
 	if _, err := forgeVersionMatches("one", "^1"); !errors.As(err, &coded) || coded.Code != models.ParseError {

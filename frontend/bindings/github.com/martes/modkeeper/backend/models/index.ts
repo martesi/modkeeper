@@ -17,6 +17,8 @@ export type {
   BulkUpdateModsInput,
   CreateLibraryInput,
   DeleteLibraryInput,
+  ForgeDownloadVersionInput,
+  ForgeMatchInstalledModInput,
   InstallModArchivesInput,
   LibraryEntry,
   LibraryWorkspace,

@@ -14,22 +14,10 @@ import (
 	"github.com/martes/modkeeper/backend/task_progress"
 )
 
-// These inputs are temporary local mirrors of models/forge.rs. Integration
-// should alias them to foundation models once that branch is merged.
-type ForgeDownloadVersionInput struct {
-	TaskID    string `json:"taskId"`
-	LibraryID string `json:"libraryId"`
-	Kind      string `json:"kind"`
-	ItemID    uint64 `json:"itemId"`
-	VersionID uint64 `json:"versionId"`
-}
-type ForgeMatchInstalledModInput struct {
-	LibraryID      string `json:"libraryId"`
-	InstalledModID string `json:"installedModId"`
-	Kind           string `json:"kind"`
-	ItemID         uint64 `json:"itemId"`
-	VersionID      uint64 `json:"versionId"`
-}
+// Forge command inputs are aliases of the shared durable models so Wails
+// bindings expose the same ForgeKind enum as the Tauri commands.
+type ForgeDownloadVersionInput = models.ForgeDownloadVersionInput
+type ForgeMatchInstalledModInput = models.ForgeMatchInstalledModInput
 type InstallMetadata struct {
 	Kind      string
 	ForgeID   uint64
@@ -55,7 +43,7 @@ type Progress func(models.TaskProgressStage, *float64)
 type InstallHooks struct {
 	Admit         func(ForgeDownloadVersionInput) (sptVersion, stageRoot string, err error)
 	Install       func(ForgeDownloadVersionInput, string, InstallMetadata, *AddonConstraint, Progress) error
-	Match         func(ForgeMatchInstalledModInput, InstallMetadata, *AddonConstraint) (json.RawMessage, error)
+	Match         func(ForgeMatchInstalledModInput, InstallMetadata, *AddonConstraint) (*models.LibraryWorkspace, error)
 	AssertLibrary func(string) error
 	SendProgress  func(models.TaskProgressEvent) error
 	Complete      func(ForgeDownloadVersionInput, error)
@@ -69,7 +57,7 @@ func validKind(kind string) error {
 	return nil
 }
 func (s *Service) DownloadVersion(input ForgeDownloadVersionInput) (json.RawMessage, error) {
-	if err := validKind(input.Kind); err != nil {
+	if err := validKind(string(input.Kind)); err != nil {
 		return nil, err
 	}
 	if s.Hooks.Admit == nil {
@@ -133,7 +121,7 @@ func installMetadata(kind string, id uint64, r, v object) (InstallMetadata, *Add
 	return m, c
 }
 func (s *Service) downloadAndInstall(input ForgeDownloadVersionInput, spt, root string, progress Progress) error {
-	r, v, err := s.metadata(input.Kind, input.ItemID, input.VersionID, spt, "installing", progress)
+	r, v, err := s.metadata(string(input.Kind), input.ItemID, input.VersionID, spt, "installing", progress)
 	if err != nil {
 		return err
 	}
@@ -143,11 +131,11 @@ func (s *Service) downloadAndInstall(input ForgeDownloadVersionInput, spt, root 
 		return err
 	}
 	defer os.Remove(archive) // Only the generated download, never an input archive.
-	m, c := installMetadata(input.Kind, input.ItemID, r, v)
+	m, c := installMetadata(string(input.Kind), input.ItemID, r, v)
 	return s.Hooks.Install(input, archive, m, c, progress)
 }
-func (s *Service) MatchInstalledMod(input ForgeMatchInstalledModInput) (json.RawMessage, error) {
-	if err := validKind(input.Kind); err != nil {
+func (s *Service) MatchInstalledMod(input ForgeMatchInstalledModInput) (*models.LibraryWorkspace, error) {
+	if err := validKind(string(input.Kind)); err != nil {
 		return nil, err
 	}
 	if s.Hooks.AssertLibrary == nil {
@@ -160,14 +148,14 @@ func (s *Service) MatchInstalledMod(input ForgeMatchInstalledModInput) (json.Raw
 	if err != nil {
 		return nil, err
 	}
-	r, v, err := s.metadata(input.Kind, input.ItemID, input.VersionID, spt, "matching", func(models.TaskProgressStage, *float64) {})
+	r, v, err := s.metadata(string(input.Kind), input.ItemID, input.VersionID, spt, "matching", func(models.TaskProgressStage, *float64) {})
 	if err != nil {
 		return nil, err
 	}
 	if s.Hooks.Match == nil {
 		return nil, fail("Unexpected", "Forge match hook is not initialized")
 	}
-	m, c := installMetadata(input.Kind, input.ItemID, r, v)
+	m, c := installMetadata(string(input.Kind), input.ItemID, r, v)
 	return s.Hooks.Match(input, m, c)
 }
 func supportedArchiveExtension(name string) string {

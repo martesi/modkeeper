@@ -37,7 +37,8 @@ func newForgeTestApp(t *testing.T) (*App, *testenv.Env, string, string) {
 }
 
 // persistedMods reads the library manifest because the workspace projection is
-// owned by another change that has not landed on this branch yet.
+// owned by the wails-workspace change. After that branch merges, assert Forge
+// identity on the returned workspace instead.
 func persistedMods(t *testing.T, libraryRoot string) map[string]models.Mod {
 	t.Helper()
 	var manifest struct {
@@ -354,6 +355,9 @@ func TestForgeDownloadRunsRealHooksAndCompletesTask(t *testing.T) {
 
 	sawForgeStage := false
 	for _, progress := range sink.progress {
+		if progress.Stage == models.TaskStageInstallArchiveStage {
+			t.Fatal("Forge install emitted a generic archive stage")
+		}
 		if progress.Stage == models.TaskStageForgeDownload {
 			sawForgeStage = true
 		}
@@ -416,7 +420,7 @@ func TestForgeDownloadFailureCarriesArchiveFailure(t *testing.T) {
 	if !ok || len(failures) != 1 {
 		t.Fatalf("failures: %#v", sink.workspaces[0].Failures)
 	}
-	if failures[0].ArchivePath != "forge:mod:1:2" || failures[0].Error.Code != "ParseError" {
+	if failures[0].ArchivePath != "forge:Mod:1:2" || failures[0].Error.Code != "ParseError" {
 		t.Fatalf("failure: %+v", failures[0])
 	}
 }

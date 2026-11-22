@@ -2,14 +2,13 @@ package library
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/martes/modkeeper/backend/forge"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modmanager"
+	"github.com/martes/modkeeper/backend/semverreq"
 	"github.com/martes/modkeeper/backend/stager"
 )
 
@@ -76,7 +75,7 @@ func (s *Service) completeForgeInstall(input forge.ForgeDownloadVersionInput, in
 	failures := []models.ArchiveFailure{}
 	if installErr != nil {
 		failures = append(failures, models.ArchiveFailure{
-			ArchivePath: fmt.Sprintf("forge:%s:%d:%d", input.Kind, input.ItemID, input.VersionID),
+			ArchivePath: fmt.Sprintf("forge:%s:%d:%d", forgeKindDebug(input.Kind), input.ItemID, input.VersionID),
 			Error:       forgeWireError(installErr),
 		})
 	}
@@ -102,6 +101,17 @@ func forgeWireError(err error) models.Error {
 		return models.Error{Code: forgeErr.Code, Data: forgeErr.Data}
 	}
 	return models.Error{Code: models.Unexpected, Data: err.Error()}
+}
+
+func forgeKindDebug(kind models.ForgeKind) string {
+	switch kind {
+	case models.ForgeKindMod:
+		return "Mod"
+	case models.ForgeKindAddon:
+		return "Addon"
+	default:
+		return string(kind)
+	}
 }
 
 func (s *Service) assertForgeLibrary(libraryID string) error {
@@ -143,7 +153,7 @@ func (s *Service) installForgeArchive(input forge.ForgeDownloadVersionInput, arc
 		return models.Fail(models.ParseError, fmt.Sprintf("Forge archive produced %d installable entries; expected exactly one", len(staged)))
 	}
 	item := staged[0]
-	if input.Kind == "addon" {
+	if input.Kind == models.ForgeKindAddon {
 		progress(models.TaskStageForgeParentValidation, nil)
 		if err := s.validateForgeAddonParent(constraint); err != nil {
 			_ = stager.CleanUp(item.IsStaging, item.Root)
@@ -153,7 +163,7 @@ func (s *Service) installForgeArchive(input forge.ForgeDownloadVersionInput, arc
 	progress(models.TaskStageForgeInstall, nil)
 	l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
 	enable := s.Store.Config.Settings.EnableModsOnInstall
-	return s.installStagedMod(context.Background(), archive, item, &l, enable, forgeIdentity(metadata), progress)
+	return s.installStagedMod(context.Background(), archive, item, &l, enable, forgeIdentity(metadata), nil)
 }
 
 func forgeIdentity(metadata forge.InstallMetadata) *models.ForgeIdentity {
@@ -169,11 +179,11 @@ func forgeIdentity(metadata forge.InstallMetadata) *models.ForgeIdentity {
 
 // matchForgeMetadata links an existing local install to a Forge identity and
 // returns the refreshed workspace, matching forge_match_installed_mod.
-func (s *Service) matchForgeMetadata(input forge.ForgeMatchInstalledModInput, metadata forge.InstallMetadata, constraint *forge.AddonConstraint) (json.RawMessage, error) {
+func (s *Service) matchForgeMetadata(input forge.ForgeMatchInstalledModInput, metadata forge.InstallMetadata, constraint *forge.AddonConstraint) (*models.LibraryWorkspace, error) {
 	if err := s.applyForgeMatch(input, metadata, constraint); err != nil {
 		return nil, err
 	}
-	return json.Marshal(s.Workspace())
+	return s.Workspace(), nil
 }
 
 func (s *Service) applyForgeMatch(input forge.ForgeMatchInstalledModInput, metadata forge.InstallMetadata, constraint *forge.AddonConstraint) error {
@@ -184,7 +194,7 @@ func (s *Service) applyForgeMatch(input forge.ForgeMatchInstalledModInput, metad
 	if err := s.assertActiveLibraryLocked(input.LibraryID); err != nil {
 		return err
 	}
-	if input.Kind == "addon" {
+	if input.Kind == models.ForgeKindAddon {
 		if err := s.validateForgeAddonParent(constraint); err != nil {
 			return err
 		}
@@ -244,15 +254,15 @@ func (s *Service) validateForgeAddonParent(constraint *forge.AddonConstraint) er
 }
 
 // forgeVersionMatches evaluates the addon parent constraint with the Rust
-// semver requirement syntax used by library_service::forge_version_matches.
+// semver requirement grammar used by library_service::forge_version_matches.
 func forgeVersionMatches(version, constraint string) (bool, error) {
-	requirement, err := semver.NewConstraint(constraint)
+	requirement, err := semverreq.ParseRequirement(constraint)
 	if err != nil {
 		return false, models.Fail(models.ParseError, "Invalid Forge addon parent constraint: "+err.Error())
 	}
-	parsed, err := semver.NewVersion(version)
+	parsed, err := semverreq.ParseVersion(version)
 	if err != nil {
 		return false, models.Fail(models.ParseError, "Installed Forge parent version cannot be evaluated: "+err.Error())
 	}
-	return requirement.Check(parsed), nil
+	return requirement.Matches(parsed), nil
 }

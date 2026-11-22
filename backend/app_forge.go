@@ -44,13 +44,5 @@ func (a *App) ForgeMatchInstalledMod(input forge.ForgeMatchInstalledModInput) (*
 	if a.Forge == nil {
 		return nil, a.initFailure()
 	}
-	body, err := a.Forge.MatchInstalledMod(input)
-	if err != nil {
-		return nil, err
-	}
-	var workspace models.LibraryWorkspace
-	if err := json.Unmarshal(body, &workspace); err != nil {
-		return nil, err
-	}
-	return &workspace, nil
+	return a.Forge.MatchInstalledMod(input)
 }

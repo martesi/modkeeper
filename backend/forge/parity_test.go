@@ -96,11 +96,11 @@ func TestMatchInstalledModPassesSelectedIdentityAndAddonConstraint(t *testing.T)
 		}
 		return nil
 	}
-	s.Hooks.Match = func(input ForgeMatchInstalledModInput, m InstallMetadata, c *AddonConstraint) (json.RawMessage, error) {
+	s.Hooks.Match = func(input ForgeMatchInstalledModInput, m InstallMetadata, c *AddonConstraint) (*models.LibraryWorkspace, error) {
 		if input.InstalledModID != "local" || m.ForgeGUID != "a" || m.Version != "1.2.0" || c == nil || *c.ParentForgeID != 3 || *c.ParentGUID != "p" || *c.VersionConstraint != "^1.0" {
 			t.Fatal(input, m, c)
 		}
-		return json.RawMessage(`{"workspace":true}`), nil
+		return &models.LibraryWorkspace{}, nil
 	}
 	_, err := s.MatchInstalledMod(ForgeMatchInstalledModInput{LibraryID: "l", InstalledModID: "local", Kind: "addon", ItemID: 1, VersionID: 2})
 	if err != nil {

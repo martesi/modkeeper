@@ -291,9 +291,11 @@ func (s *Service) installStagedMod(ctx context.Context, archivePath string, item
 	}
 	if err == nil {
 		err = s.installModTree(ctx, item.Root, item.FS.ID, func() {
-			progress(models.TaskStageInstallArchiveStage, nil)
+			if progress != nil {
+				progress(models.TaskStageInstallArchiveStage, nil)
+			}
 		})
-		if err == nil {
+		if err == nil && progress != nil {
 			// This existing progress boundary is after replacement and
 			// before manifest persistence.
 			progress(models.TaskStageInstallArchiveStage, nil)
