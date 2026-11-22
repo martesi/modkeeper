@@ -129,6 +129,7 @@ test('shows a recorded event and Clear all empties the list', async () => {
     (button) => button.textContent === 'Clear all',
   )
   expect(clearButton).toBeDefined()
+  expect(clearButton?.getAttribute('data-variant')).toBe('primary')
   await act(async () => clearButton?.click())
   expect(panel?.querySelectorAll('li')).toHaveLength(0)
   expect(panel?.textContent).toContain('No events yet.')

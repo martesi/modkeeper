@@ -26,7 +26,7 @@ export function TaskHistoryPanel() {
         {history.length > 0 && (
           <FidelityButton
             size="sm"
-            variant="outline"
+            variant="primary"
             onClick={() => clearTaskHistory()}
           >
             {taskHistoryText.clear()}
