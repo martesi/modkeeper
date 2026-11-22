@@ -633,33 +633,35 @@ func (s *Service) RenameLibrary(id, name string) error {
 	if k == nil {
 		return fmt.Errorf("InvalidLibrary: Library not registered")
 	}
-	m, _, _, _, _, e := layout(k.LibraryRoot)
-	if e != nil {
-		return e
+	// Rust renames the live instance from memory and inactive libraries from
+	// manifest.toml alone; neither path reads cache.toml.
+	if s.active != nil && s.active.manifest.ID == id {
+		s.active.manifest.Name = name
+		return s.active.Persist()
+	}
+	manifestPath := filepath.Join(k.LibraryRoot, "manifest.toml")
+	m, err := readStrictManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", k.LibraryRoot, err)
 	}
 	m.Name = name
-	m.RepoRoot = k.LibraryRoot
-	b := filepath.Join(k.LibraryRoot, "manifest.toml")
-	f, e := os.CreateTemp(filepath.Dir(b), ".tmp-*")
-	if e != nil {
-		return e
+	f, err := os.CreateTemp(filepath.Dir(manifestPath), ".tmp-*")
+	if err != nil {
+		return err
 	}
 	tmp := f.Name()
-	e = toml.NewEncoder(f).Encode(m)
-	ce := f.Close()
-	if e == nil {
-		e = ce
+	err = toml.NewEncoder(f).Encode(m)
+	closeErr := f.Close()
+	if err == nil {
+		err = closeErr
 	}
-	if e == nil {
-		e = os.Rename(tmp, b)
+	if err == nil {
+		err = os.Rename(tmp, manifestPath)
 	}
-	if e != nil {
+	if err != nil {
 		_ = os.Remove(tmp)
 	}
-	if e == nil && s.active != nil && s.active.manifest.ID == id {
-		s.active.manifest.Name = name
-	}
-	return e
+	return err
 }
 func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	if err := s.tryBeginLibraryTransition(); err != nil {
@@ -676,21 +678,22 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	var mods []models.Mod
 	if deleteFiles {
 		m, _, _, _, _, err := layout(k.LibraryRoot)
-		if err == nil {
-			gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
-			rules, discoverErr := spt.Discover(gameRoot)
-			if discoverErr != nil {
-				return discoverErr
-			}
-			depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
-			if err := deployment.VerifyOwnership(depLayout); err != nil {
-				return err
-			}
-			if err := deployment.ValidatePurge(depLayout); err != nil {
-				return err
-			}
-			mods = sortedMods(m.Mods)
+		if err != nil {
+			return fmt.Errorf("InvalidLibrary: %s: %w", k.LibraryRoot, err)
 		}
+		gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
+		rules, discoverErr := spt.Discover(gameRoot)
+		if discoverErr != nil {
+			return discoverErr
+		}
+		depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
+		if err := deployment.VerifyOwnership(depLayout); err != nil {
+			return err
+		}
+		if err := deployment.ValidatePurge(depLayout); err != nil {
+			return err
+		}
+		mods = sortedMods(m.Mods)
 	}
 	prev := s.Store.Config
 	s.Store.Config.RemoveLibrary(k.ID)

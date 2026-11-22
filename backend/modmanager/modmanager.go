@@ -87,7 +87,7 @@ func ToggleMod(l *Library, id string, active bool) error {
 	}
 	m.Enabled = active
 	l.Mods[id] = m
-	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, "")
+	return writeManifest(filepath.Join(l.Root, id, "manifest.toml"), m, string(m.Type))
 }
 func NormalizeModFolders(root, serverMods, clientPlugins string, mods map[string]models.Mod) ([][2]string, error) {
 	entries, err := os.ReadDir(root)

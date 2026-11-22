@@ -603,3 +603,74 @@ func TestTestAssemblyReportsModsAndDeployStale(t *testing.T) {
 		t.Fatal("mod summary missing")
 	}
 }
+
+// Rust's rename reads only manifest.toml for inactive libraries and persists
+// the active instance from memory; neither path reads cache.toml.
+func TestTestRenameLibraryIgnoresCorruptCache(t *testing.T) {
+	s, env := newParityService(t)
+	l := addInactiveLibrary(t, s, env.GameRoot, filepath.Join(env.Root, "rename-corrupt-cache"))
+	cachePath := filepath.Join(l.Root, "cache.toml")
+	corrupt := []byte("mods = [")
+	if err := os.WriteFile(cachePath, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RenameLibrary(l.manifest.ID, "Renamed"); err != nil {
+		t.Fatalf("rename failed on a corrupt cache: %v", err)
+	}
+	m, err := readStrictManifest(filepath.Join(l.Root, "manifest.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Name != "Renamed" {
+		t.Fatalf("manifest name = %q; want Renamed", m.Name)
+	}
+	if got, err := os.ReadFile(cachePath); err != nil || string(got) != string(corrupt) {
+		t.Fatalf("inactive rename rewrote the cache: %q %v", got, err)
+	}
+}
+
+// Destructive delete loads cleanup state before any config or disk mutation;
+// a corrupt cache must abort with InvalidLibrary and change nothing.
+func TestTestDestructiveDeleteRejectsCorruptCacheBeforeMutation(t *testing.T) {
+	s, env := newParityService(t)
+	l := createParityLibrary(t, s, env)
+	cachePath := filepath.Join(l.Root, "cache.toml")
+	corrupt := []byte("mods = [")
+	if err := os.WriteFile(cachePath, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	configBefore, err := os.ReadFile(s.Store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.DeleteLibrary(l.manifest.ID, true)
+	if err == nil || !strings.Contains(err.Error(), "InvalidLibrary") || !strings.Contains(err.Error(), "cache.toml") {
+		t.Fatalf("delete error = %v; want InvalidLibrary naming cache.toml", err)
+	}
+	if s.Store.Config.FindLibrary(l.manifest.ID) == nil {
+		t.Fatal("library entry removed from memory")
+	}
+	if s.active == nil || s.active.manifest.ID != l.manifest.ID {
+		t.Fatal("active library changed")
+	}
+	configAfter, err := os.ReadFile(s.Store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(configBefore) != string(configAfter) {
+		t.Fatal("persisted config changed")
+	}
+	for _, path := range []string{
+		filepath.Join(l.Root, "manifest.toml"),
+		cachePath,
+		l.ModsDir,
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s changed before validation: %v", path, err)
+		}
+	}
+	if got, err := os.ReadFile(cachePath); err != nil || string(got) != string(corrupt) {
+		t.Fatalf("cache changed before validation: %q %v", got, err)
+	}
+}
