@@ -119,9 +119,18 @@ export function InstallModArchives(
 }
 
 /**
- * OpenPath reveals a file or directory in the OS file manager. Wails v3 has no
- * JavaScript path opener, so the frontend calls this bound method for "open
- * folder" actions and tool launches.
+ * Log writes a frontend diagnostic through the Wails application logger. The
+ * desktop entrypoint points that logger at a file in the config directory, so
+ * this replaces Tauri's log plugin.
+ */
+export function Log(message: string): $CancellablePromise<void> {
+  return $Call.ByID(2479127961, message)
+}
+
+/**
+ * OpenPath reveals a directory in the OS file manager and opens a file with
+ * the OS default handler. Wails v3 has no JavaScript opener, so the frontend
+ * calls this bound method for "open folder" actions and tool launches.
  *
  * The operation is unavailable in the headless server build: there is no user
  * desktop on the server host to open.

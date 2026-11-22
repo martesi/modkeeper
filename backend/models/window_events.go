@@ -1,7 +1,7 @@
 package models
 
 // WindowFilesDroppedEvent is the payload the desktop window forwards to the
-// frontend on `common:WindowFilesDropped`. It mirrors Wails' native file-drop
+// frontend on `modkeeper:files-dropped`. It mirrors Wails' native file-drop
 // payload so the renderer can read the dropped paths and the hovered element.
 type WindowFilesDroppedEvent struct {
 	Filenames      []string                 `json:"filenames"`

@@ -9,6 +9,11 @@ import type {} from '../github.com/wailsapp/wails/v3/internal/eventdata.js'
 import '../github.com/wailsapp/wails/v3/internal/eventcreate.js'
 
 /**
+ * Name of the custom event "modkeeper:files-dropped".
+ */
+export const ModkeeperFilesDropped = 'modkeeper:files-dropped'
+
+/**
  * Name of the custom event "native-smoke-event".
  */
 export const NativeSmokeEvent = 'native-smoke-event'

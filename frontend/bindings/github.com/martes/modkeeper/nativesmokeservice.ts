@@ -25,6 +25,10 @@ export function ReleaseInstall(): $CancellablePromise<void> {
   return $Call.ByID(2856926513)
 }
 
+export function ReportDropFiles(value: string): $CancellablePromise<void> {
+  return $Call.ByID(4042471001, value)
+}
+
 export function ReportEvent(value: string): $CancellablePromise<void> {
   return $Call.ByID(484600653, value)
 }

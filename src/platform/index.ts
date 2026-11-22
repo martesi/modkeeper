@@ -95,6 +95,9 @@ export async function openUrl(url: string): Promise<void> {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+// openPath reveals a directory in the OS file manager and opens a file with
+// the OS default handler (the Wails OpenPath bound method). Tauri keeps its
+// opener plugin behavior.
 export async function openPath(path: string): Promise<void> {
   if (platformKind() === 'wails') {
     const { openPathInFileManager } = await import('@/wails')
@@ -180,7 +183,7 @@ export async function onFileDrop(
 ): Promise<() => void> {
   if (platformKind() === 'wails') {
     return (await import('@wailsio/runtime')).Events.On(
-      'common:WindowFilesDropped',
+      'modkeeper:files-dropped',
       (event) => {
         const files = droppedFilesFromEvent(event.data)
         if (files) callback(files)
@@ -196,9 +199,10 @@ export async function onFileDrop(
   return () => {}
 }
 export async function log(message: string): Promise<void> {
-  // ACCEPTED DEGRADATION: Wails has no file-log sink equivalent to Tauri's
-  // LogDir/modkeeper.log; desktop diagnostics stay on the console.
-  if (platformKind() === 'wails') return console.info(message)
+  if (platformKind() === 'wails') {
+    const { logToFile } = await import('@/wails')
+    return logToFile(message)
+  }
   if (platformKind() === 'tauri')
     return (await import('@tauri-apps/plugin-log')).info(message)
   console.info(message)

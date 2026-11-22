@@ -4,6 +4,6 @@ package backend
 
 import "github.com/martes/modkeeper/backend/models"
 
-func openPathInFileManager(string) error {
+var openPathTarget = func(string, bool) error {
 	return models.Fail(models.Unexpected, "openPath is unavailable in server mode")
 }

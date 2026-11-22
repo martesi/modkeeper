@@ -28,4 +28,6 @@ export type {
   TaskProgressEvent,
   TaskProgressLog,
   ToolSummary,
+  WindowDropElementDetails,
+  WindowFilesDroppedEvent,
 } from './models.js'

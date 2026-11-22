@@ -36,14 +36,17 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `forgeModVersions` | `ForgeModVersions(modID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeAddonVersions` | `ForgeAddonVersions(addonID uint32) (json.RawMessage, bool, error)` | WB |
 | `forgeDownloadVersion` | `ForgeDownloadVersion(input models.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
-| `openPath` | `OpenPath(path string) error` | WX (bound Go method over `Env.OpenFileManager`) |
+| `openPath` | `OpenPath(path string) error` | WX (directories: `Env.OpenFileManager`; files: `Browser.OpenFile`) |
+| `log` | `Log(message string) error` | WX (Wails logger file sink) |
 | `selectFiles` | `SelectFiles() ([]string, error)` | Wails runtime limitation; no-op fallback |
 | `setWindowEffect` | `SetWindowEffect(effect string) error` | WX |
 | `getVersion` | `GetVersion() string` | WA |
 
 Wails derives the JS name by lowercasing the first letter of the exported method, so Go names must
 match the TS names exactly. `ApplyWindowEffect` remains a bound method but is a compatibility no-op;
-the effect is seeded from the saved theme when the window is created.
+the effect is seeded from the saved theme when the window is created. `OpenPath` sends directories
+to `Env.OpenFileManager` and files to `Browser.OpenFile`. `Log` writes through the Wails application
+logger, which the desktop entrypoint points at `modkeeper.log` in the config directory.
 
 ## Wire contract (`backend/models`)
 
@@ -300,9 +303,14 @@ added SPT layout and metadata inspection; `wails/wg-frontend` added the Wails br
 
 Remaining gaps: Windows junction behavior is not proven equivalent; inspecting a real SPT
 installation remains opt-in; the server build has no user desktop, so `OpenPath` returns a typed
-error there; Wails applies the window backdrop and appearance when it creates the window, so later
-theme changes do not re-apply the native effect; frontend file logging stays on the console because
-Wails has no Tauri-style file log sink.
+error there. Wails applies the Windows backdrop when it creates the window, so later theme changes
+do not re-apply it.
+
+macOS backdrop decision: the macOS backdrop/translucency is intentionally omitted and the window
+keeps a solid background. Wails v3.1.0 needs `-tags private_mac_apis` for webview transparency
+(`mac_public_api_darwin.go` makes the transparency call a no-op without it), no build path passes
+that tag, and the effect cannot be verified on macOS hardware here. Keep the solid background until
+a tagged macOS build is proven end to end.
 
 ## Work protocol
 

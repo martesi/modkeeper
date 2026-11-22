@@ -13,9 +13,14 @@ import (
 //go:embed all:dist
 var frontend embed.FS
 
+// fileDropEvent carries native window drops to the renderer. The name stays
+// outside the framework's reserved `common:` namespace.
+const fileDropEvent = "modkeeper:files-dropped"
+
 func init() {
 	application.RegisterEvent[models.TaskProgressEvent]("task_progress")
 	application.RegisterEvent[any]("workspace-event")
+	application.RegisterEvent[models.WindowFilesDroppedEvent](fileDropEvent)
 }
 
 // appOptions builds the application.Options shared by the desktop entrypoint
@@ -49,24 +54,34 @@ func startBackend(app *application.App, appBackend *backend.App) {
 	}
 }
 
+// dropPayload maps Wails' native drop context to the renderer event payload.
+func dropPayload(files []string, target *application.DropTargetDetails) models.WindowFilesDroppedEvent {
+	payload := models.WindowFilesDroppedEvent{Filenames: files}
+	if target == nil {
+		return payload
+	}
+	payload.X = target.X
+	payload.Y = target.Y
+	payload.ElementDetails = models.WindowDropElementDetails{
+		ID:         target.ElementID,
+		ClassList:  target.ClassList,
+		Attributes: target.Attributes,
+	}
+	return payload
+}
+
 // forwardWindowFileDrops re-emits Wails' window file-drop event on the JS
 // event bus. Wails delivers `common:WindowFilesDropped` to Go window listeners
 // only, so the renderer cannot subscribe to it directly.
-func forwardWindowFileDrops(app *application.App, window *application.WebviewWindow) {
+func forwardWindowFileDrops(window *application.WebviewWindow) {
 	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
-		payload := models.WindowFilesDroppedEvent{
-			Filenames: event.Context().DroppedFiles(),
+		files := event.Context().DroppedFiles()
+		target := event.Context().DropTargetDetails()
+		// Emit from this window instead of the application bus so the event
+		// carries the source window.
+		if window.EmitEvent(fileDropEvent, dropPayload(files, target)) {
+			log.Printf("modkeeper: file-drop event was cancelled")
 		}
-		if details := event.Context().DropTargetDetails(); details != nil {
-			payload.X = details.X
-			payload.Y = details.Y
-			payload.ElementDetails = models.WindowDropElementDetails{
-				ID:         details.ElementID,
-				ClassList:  details.ClassList,
-				Attributes: details.Attributes,
-			}
-		}
-		app.Event.Emit("common:WindowFilesDropped", payload)
 	})
 }
 

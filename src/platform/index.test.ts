@@ -31,6 +31,7 @@ const tauriWindow = {
 mock.module('@tauri-apps/api/core', () => ({
   isTauri: () => true,
   invoke: async () => undefined,
+  transformCallback: () => 1,
 }))
 mock.module('@tauri-apps/plugin-dialog', () => ({
   open: async (options: unknown) => {
@@ -185,7 +186,7 @@ describe('platform capability dispatch', () => {
     const unlistenWails = await platform.onFileDrop((paths) =>
       dropped.push(paths),
     )
-    const dropListener = wailsListeners.get('common:WindowFilesDropped')
+    const dropListener = wailsListeners.get('modkeeper:files-dropped')
     dropListener?.({
       data: {
         filenames: ['/tmp/b'],
@@ -197,14 +198,8 @@ describe('platform capability dispatch', () => {
     dropListener?.({ data: { filenames: 'not-an-array' } })
     unlistenWails()
     expect(dropped).toEqual([['/tmp/a'], ['/tmp/b']])
-    expect(calls).toContainEqual([
-      'wails-event-on',
-      'common:WindowFilesDropped',
-    ])
-    expect(calls).toContainEqual([
-      'wails-event-off',
-      'common:WindowFilesDropped',
-    ])
+    expect(calls).toContainEqual(['wails-event-on', 'modkeeper:files-dropped'])
+    expect(calls).toContainEqual(['wails-event-off', 'modkeeper:files-dropped'])
   })
 
   test('re-reads maximize state on Wails window resize', async () => {
@@ -218,6 +213,16 @@ describe('platform capability dispatch', () => {
     unlisten()
     expect(resized).toBe(1)
     expect(calls).toContainEqual(['wails-event-off', 'common:WindowDidResize'])
+  })
+
+  test('writes Wails diagnostics through the bound logger', async () => {
+    setWindow({ _wails: { environment: {} } })
+    await platform.log('wails diagnostic')
+    expect(calls).toContainEqual([
+      'wails-call',
+      expect.any(Number),
+      'wails diagnostic',
+    ])
   })
 
   test('uses browser fallbacks for opening, logging, and window helpers', async () => {

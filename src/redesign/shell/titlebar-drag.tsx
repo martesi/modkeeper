@@ -12,3 +12,14 @@ export function titlebarDragStyle(
   if (platform !== 'wails') return undefined
   return { '--wails-draggable': 'drag' } as CSSProperties
 }
+
+export function TitleBarDragRegion({ platform }: { platform: PlatformKind }) {
+  return (
+    <div
+      aria-hidden
+      data-tauri-drag-region
+      style={titlebarDragStyle(platform)}
+      className="absolute inset-0"
+    />
+  )
+}

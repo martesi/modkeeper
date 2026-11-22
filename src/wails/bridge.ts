@@ -102,12 +102,20 @@ export function cancelInstallTask(
 }
 
 /**
- * Opens a file or directory in the OS file manager. Wails has no JavaScript
- * opener, so this bound Go method replaces the Tauri opener plugin.
+ * Opens a file or directory with the platform opener. Wails has no JavaScript
+ * opener, so this bound Go method replaces the Tauri opener plugin. The browser
+ * mock never reaches this path because `platformKind()` stays `browser`.
  */
 export function openPathInFileManager(path: string): Promise<void> {
-  const mock = getWailsMock()?.commands?.openPath
-  if (mock) return Promise.resolve(mock(path)).then(() => undefined)
   if (isWails()) return Promise.resolve(wailsApp.OpenPath(path))
   return Promise.reject(new Error('OpenPath is only available in Wails'))
+}
+
+/**
+ * Writes a frontend diagnostic through the Wails application logger. main.go
+ * points that logger at the config directory, replacing Tauri's log plugin.
+ */
+export function logToFile(message: string): Promise<void> {
+  if (isWails()) return Promise.resolve(wailsApp.Log(message))
+  return Promise.reject(new Error('Log is only available in Wails'))
 }

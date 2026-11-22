@@ -218,3 +218,25 @@ export interface ToolSummary {
   launchArgs?: string | null
   updatedAt: string
 }
+
+/**
+ * WindowDropElementDetails identifies the drop target element reported by
+ * Wails. It is empty when the drop did not land on a marked element.
+ */
+export interface WindowDropElementDetails {
+  id: string
+  classList: string[] | null
+  attributes: { [_ in string]?: string } | null
+}
+
+/**
+ * WindowFilesDroppedEvent is the payload the desktop window forwards to the
+ * frontend on `modkeeper:files-dropped`. It mirrors Wails' native file-drop
+ * payload so the renderer can read the dropped paths and the hovered element.
+ */
+export interface WindowFilesDroppedEvent {
+  filenames: string[] | null
+  x: number
+  y: number
+  elementDetails: WindowDropElementDetails
+}

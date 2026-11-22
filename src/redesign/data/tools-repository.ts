@@ -81,9 +81,11 @@ export function deleteTool(input: {
 }
 
 /**
- * Launch via the opener plugin (executes the file with the OS default handler). Launch arguments
- * cannot be passed through the opener — that too needs the backend tool command (§7d); they are
- * stored but unused, and the UI labels them accordingly.
+ * Launch the file with the OS default handler through the platform opener.
+ * This is the same handoff Tauri's opener plugin performs; whether the OS
+ * executes a given file depends on its registered handler. Launch arguments
+ * cannot be passed through the opener, so they are stored but unused, and the
+ * UI labels them accordingly.
  */
 export async function launchTool(tool: ToolSummary): Promise<void> {
   toast.info(libraryText.launchingTool(tool.name))
