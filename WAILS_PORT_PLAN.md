@@ -31,11 +31,12 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `rebuildLibraryCache` | `RebuildLibraryCache(models.RebuildLibraryCacheInput) (*models.OperationAccepted, error)` | WD |
 | `getSettings` | `GetSettings() (config.AppSettings, error)` | WC |
 | `saveSettings` | `SaveSettings(config.AppSettings) (config.AppSettings, error)` | WC |
-| `forgeSearch` | `ForgeSearch(query string, modPage, addonPage, perPage int) (json.RawMessage, bool, error)` | WB |
-| `forgeModDetail` | `ForgeModDetail(modID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeModVersions` | `ForgeModVersions(modID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeAddonVersions` | `ForgeAddonVersions(addonID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeDownloadVersion` | `ForgeDownloadVersion(input models.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
+| `forgeSearch` | `ForgeSearch(query string, modPage, addonPage, perPage int) (json.RawMessage, error)` | WB |
+| `forgeModDetail` | `ForgeModDetail(kind models.ForgeKind, id uint32) (json.RawMessage, error)` | WB |
+| `forgeModVersions` | `ForgeModVersions(kind models.ForgeKind, id uint32, page int) (json.RawMessage, error)` | WB |
+| `forgeAddonVersions` | `ForgeAddonVersions(id uint32, page int) (json.RawMessage, error)` | WB |
+| `forgeDownloadVersion` | `ForgeDownloadVersion(input forge.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
+| `forgeMatchInstalledMod` | `ForgeMatchInstalledMod(input forge.ForgeMatchInstalledModInput) (*models.LibraryWorkspace, error)` | WB |
 | `openPath` | `OpenPath(path string) error` | WX (directories: `Env.OpenFileManager`; files: `Browser.OpenFile`) |
 | `log` | `Log(message string) error` | WX (Wails logger file sink) |
 | `selectFiles` | `SelectFiles() ([]string, error)` | Wails runtime limitation; no-op fallback |
@@ -49,6 +50,9 @@ to `Env.OpenFileManager` and files to `Browser.OpenFile`. `Log` writes through t
 logger, which the desktop entrypoint points at `modkeeper.log` in the config directory. The log file
 is append-only and does not rotate, matching Tauri's default `KeepAll` rotation policy; it grows
 across runs.
+
+The Forge read methods each return one JSON object matching the Rust response model, with the
+`stale` flag inside that object. `ForgeMatchInstalledMod` returns the refreshed workspace directly.
 
 ## Wire contract (`backend/models`)
 
@@ -118,7 +122,8 @@ type BulkUpdateModsInput struct{ LibraryID string; ModIDs []string; Action BulkA
 type SyncModsInput struct{ TaskID, LibraryID string }
 type InstallModArchivesInput struct{ TaskID, LibraryID string; ArchivePaths []string }
 type RebuildLibraryCacheInput struct{ TaskID, LibraryID string }
-type ForgeDownloadVersionInput struct{ /* mirror src-tauri/src/models/forge.rs */ }
+type ForgeDownloadVersionInput struct{ TaskID, LibraryID string; Kind ForgeKind; ItemID, VersionID uint64 }
+type ForgeMatchInstalledModInput struct{ LibraryID, InstalledModID string; Kind ForgeKind; ItemID, VersionID uint64 }
 ```
 
 Extend the existing `models.Mod` (manifest.toml fields) rather than replacing it; keep
@@ -189,8 +194,8 @@ func (s *Service) Start() error   // startup recovery + background load; never b
 
 ### `forge` (WB)
 
-Extend the existing client; add a `Service` with the five command methods above plus
-`MatchInstalledMod` if needed by library ops (WD may call `forge.Service.DownloadVersion` directly).
+Extend the existing client; add a `Service` with the six command methods above, including
+`MatchInstalledMod` (WD may call `forge.Service.DownloadVersion` directly).
 
 ## Rust test parity groups
 

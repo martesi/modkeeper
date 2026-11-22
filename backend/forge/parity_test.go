@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -35,8 +36,8 @@ func TestModDetailWireUsesCamelCaseAndExplicitNulls(t *testing.T) {
 	s := testService(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"data":{"id":1,"guid":"g","name":"n","detail_url":"url","fika_compatibility":true}}`)
 	})
-	body, stale, err := s.ModDetail(1)
-	if err != nil || stale {
+	body, err := s.Detail("mod", 1)
+	if err != nil {
 		t.Fatal(err)
 	}
 	for _, field := range []string{`"detailUrl":"url"`, `"fikaCompatibility":true`, `"parent":null`, `"description":null`, `"stale":false`} {
@@ -95,11 +96,11 @@ func TestMatchInstalledModPassesSelectedIdentityAndAddonConstraint(t *testing.T)
 		}
 		return nil
 	}
-	s.Hooks.Match = func(input ForgeMatchInstalledModInput, m InstallMetadata, c *AddonConstraint) (json.RawMessage, error) {
+	s.Hooks.Match = func(input ForgeMatchInstalledModInput, m InstallMetadata, c *AddonConstraint) (*models.LibraryWorkspace, error) {
 		if input.InstalledModID != "local" || m.ForgeGUID != "a" || m.Version != "1.2.0" || c == nil || *c.ParentForgeID != 3 || *c.ParentGUID != "p" || *c.VersionConstraint != "^1.0" {
 			t.Fatal(input, m, c)
 		}
-		return json.RawMessage(`{"workspace":true}`), nil
+		return &models.LibraryWorkspace{}, nil
 	}
 	_, err := s.MatchInstalledMod(ForgeMatchInstalledModInput{LibraryID: "l", InstalledModID: "local", Kind: "addon", ItemID: 1, VersionID: 2})
 	if err != nil {
@@ -153,5 +154,48 @@ func TestRedirectDoesNotDowngradeHTTPS(t *testing.T) {
 	to, _ := http.NewRequest(http.MethodGet, "http://example.test/end", nil)
 	if err := c.HTTP.CheckRedirect(to, []*http.Request{from}); err != http.ErrUseLastResponse {
 		t.Fatalf("expected HTTPS downgrade to be refused, got %v", err)
+	}
+}
+
+func TestSingleResponseObjectsEmbedStale(t *testing.T) {
+	s := testService(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
+	expired := time.Now().Add(-2 * cacheTTL)
+	prime := func(path string, params map[string]string, body string) {
+		t.Helper()
+		u, err := url.Parse(s.BaseURL + "/" + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := u.Query()
+		for key, value := range params {
+			q.Set(key, value)
+		}
+		u.RawQuery = q.Encode()
+		s.Client.cache[u.String()] = CachedResponse{StoredAt: expired, Body: json.RawMessage(body)}
+	}
+	prime("mods", map[string]string{"filter[spt_version]": "4.0.11", "page": "1", "per_page": "20"}, `{"data":[{"id":1,"guid":"g","name":"n"}]}`)
+	prime("addons", map[string]string{"include": "mod", "page": "1", "per_page": "20"}, `{"data":[{"id":2,"guid":"a","name":"a"}]}`)
+	prime("mod/1", nil, `{"data":{"id":1,"guid":"g","name":"n"}}`)
+	prime("addon/2", map[string]string{"include": "mod"}, `{"data":{"id":2,"guid":"a","name":"a","mod_id":1}}`)
+	prime("mod/1/versions", map[string]string{"filter[spt_version]": "4.0.11", "include": "dependencies", "page": "2", "per_page": "50"}, `{"data":[{"id":9,"version":"1","link":"url","content_length":0}]}`)
+	prime("addon/2/versions", map[string]string{"filter[spt_version]": "4.0.11", "include": "dependencies", "page": "3", "per_page": "50"}, `{"data":[{"id":8,"version":"1","link":"url","content_length":0}]}`)
+
+	calls := map[string]func() (json.RawMessage, error){
+		"search":         func() (json.RawMessage, error) { return s.Search("", 1, 1, 20) },
+		"mod detail":     func() (json.RawMessage, error) { return s.Detail("mod", 1) },
+		"addon detail":   func() (json.RawMessage, error) { return s.Detail("addon", 2) },
+		"mod versions":   func() (json.RawMessage, error) { return s.Versions("mod", 1, 2) },
+		"addon versions": func() (json.RawMessage, error) { return s.Versions("addon", 2, 3) },
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			body, err := call()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(body), `"stale":true`) {
+				t.Fatalf("stale flag missing: %s", body)
+			}
+		})
 	}
 }

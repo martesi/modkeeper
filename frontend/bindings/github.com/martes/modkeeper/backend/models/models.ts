@@ -37,6 +37,14 @@ export interface DeleteLibraryInput {
   deleteFiles: boolean
 }
 
+export interface ForgeDownloadVersionInput {
+  taskId: string
+  libraryId: string
+  kind: ForgeKind
+  itemId: number
+  versionId: number
+}
+
 export enum ForgeKind {
   /**
    * The Go zero value for the underlying type of the enum.
@@ -45,6 +53,14 @@ export enum ForgeKind {
 
   ForgeKindMod = 'mod',
   ForgeKindAddon = 'addon',
+}
+
+export interface ForgeMatchInstalledModInput {
+  libraryId: string
+  installedModId: string
+  kind: ForgeKind
+  itemId: number
+  versionId: number
 }
 
 export interface InstallModArchivesInput {

@@ -55,9 +55,9 @@ func TestAddonSearchOmitsUnsupportedSptFilter(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"data":[{"id":1,"guid":"g","name":"n"}],"meta":{"current_page":1}}`)
 	})
-	body, stale, err := s.Search("  query  ", 0, 0, 100)
-	if err != nil || stale || !strings.Contains(string(body), `"sptVersion":"4.0.11"`) {
-		t.Fatalf("%s %v %v", body, stale, err)
+	body, err := s.Search("  query  ", 0, 0, 100)
+	if err != nil || !strings.Contains(string(body), `"sptVersion":"4.0.11"`) {
+		t.Fatalf("%s %v", body, err)
 	}
 }
 func TestSupportedDownloadExtensionsAreExplicit(t *testing.T) {
@@ -95,7 +95,7 @@ func TestRetryAfterAcceptsSecondsAndHttpDate(t *testing.T) {
 	}
 }
 func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
-	for _, command := range []string{"Search", "ModDetail", "ModVersions", "AddonVersions", "DownloadVersion"} {
+	for _, command := range []string{"Search", "Detail", "Versions", "AddonVersions", "DownloadVersion"} {
 		for _, bad := range []string{"json", "http", "shape"} {
 			t.Run(command+"/"+bad, func(t *testing.T) {
 				s := testService(t, func(w http.ResponseWriter, r *http.Request) {
@@ -111,13 +111,13 @@ func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
 				var err error
 				switch command {
 				case "Search":
-					_, _, err = s.Search("", 1, 1, 20)
-				case "ModDetail":
-					_, _, err = s.ModDetail(1)
-				case "ModVersions":
-					_, _, err = s.ModVersions(1)
+					_, err = s.Search("", 1, 1, 20)
+				case "Detail":
+					_, err = s.Detail("mod", 1)
+				case "Versions":
+					_, err = s.Versions("mod", 1, 1)
 				case "AddonVersions":
-					_, _, err = s.AddonVersions(1)
+					_, err = s.Versions("addon", 1, 1)
 				case "DownloadVersion":
 					done := make(chan error, 1)
 					s.Hooks = InstallHooks{Admit: func(ForgeDownloadVersionInput) (string, string, error) { return "4.0.11", t.TempDir(), nil }, Install: func(ForgeDownloadVersionInput, string, InstallMetadata, *AddonConstraint, Progress) error { return nil }, Complete: func(_ ForgeDownloadVersionInput, e error) { done <- e }, Release: func(string) {}}
@@ -141,8 +141,8 @@ func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
 }
 func TestCommandsRequireActiveLibrary(t *testing.T) {
 	s := NewService(nil, nil)
-	for _, call := range []func() (json.RawMessage, bool, error){func() (json.RawMessage, bool, error) { return s.Search("", 1, 1, 1) }, func() (json.RawMessage, bool, error) { return s.ModDetail(1) }, func() (json.RawMessage, bool, error) { return s.ModVersions(1) }, func() (json.RawMessage, bool, error) { return s.AddonVersions(1) }} {
-		_, _, err := call()
+	for _, call := range []func() (json.RawMessage, error){func() (json.RawMessage, error) { return s.Search("", 1, 1, 1) }, func() (json.RawMessage, error) { return s.Detail("mod", 1) }, func() (json.RawMessage, error) { return s.Versions("mod", 1, 1) }, func() (json.RawMessage, error) { return s.Versions("addon", 1, 1) }} {
+		_, err := call()
 		assertCode(t, err, "NoActiveLibrary")
 	}
 	_, err := s.DownloadVersion(ForgeDownloadVersionInput{Kind: "mod"})
@@ -156,9 +156,9 @@ func TestVersionsPaginationParams(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"data":[{"id":2,"version":"1","link":"https://example.test/a.zip","content_length":3}]}`)
 	})
-	for _, call := range []func(uint32) (json.RawMessage, bool, error){s.ModVersions, s.AddonVersions} {
-		body, stale, err := call(1)
-		if err != nil || stale || !strings.Contains(string(body), `"contentLength":3`) {
+	for _, kind := range []string{"mod", "addon"} {
+		body, err := s.Versions(kind, 1, 1)
+		if err != nil || !strings.Contains(string(body), `"contentLength":3`) {
 			t.Fatalf("%s %v", body, err)
 		}
 	}

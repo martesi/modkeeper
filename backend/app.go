@@ -3,6 +3,7 @@ package backend
 import (
 	"os"
 
+	"github.com/martes/modkeeper/backend/forge"
 	"github.com/martes/modkeeper/backend/library"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/store"
@@ -13,6 +14,7 @@ import (
 // wait for Wails to be ready (recovery, background library load).
 type App struct {
 	Library    *library.Service
+	Forge      *forge.Service
 	ConfigPath string
 	// Sink receives progress and workspace events once Start runs. It is a
 	// struct field, not a bound method, because Wails cannot serialize function
@@ -44,7 +46,9 @@ func NewAppAt(path string) *App {
 	if err != nil {
 		return &App{ConfigPath: path, InitErr: err}
 	}
-	return &App{Library: service, ConfigPath: path}
+	forgeService := forge.NewService(nil, service.ActiveSPTVersion)
+	forgeService.Hooks = service.ForgeInstallHooks()
+	return &App{Library: service, Forge: forgeService, ConfigPath: path}
 }
 
 // Start runs startup recovery and kicks the background active-library load. It

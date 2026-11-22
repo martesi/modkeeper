@@ -72,9 +72,10 @@ export function DeleteLibrary(
 }
 
 export function ForgeAddonVersions(
-  addonID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1423140075, addonID)
+  id: number,
+  page: number,
+): $CancellablePromise<json$0.RawMessage> {
+  return $Call.ByID(1423140075, id, page)
 }
 
 export function ForgeDownloadVersion(
@@ -83,24 +84,38 @@ export function ForgeDownloadVersion(
   return $Call.ByID(2889594628, input)
 }
 
+export function ForgeMatchInstalledMod(
+  input: forge$0.ForgeMatchInstalledModInput,
+): $CancellablePromise<models$0.LibraryWorkspace | null> {
+  return $Call.ByID(3570687643, input)
+}
+
 export function ForgeModDetail(
-  modID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1050554349, modID)
+  kind: models$0.ForgeKind,
+  id: number,
+): $CancellablePromise<json$0.RawMessage> {
+  return $Call.ByID(1050554349, kind, id)
 }
 
 export function ForgeModVersions(
-  modID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1957956409, modID)
+  kind: models$0.ForgeKind,
+  id: number,
+  page: number,
+): $CancellablePromise<json$0.RawMessage> {
+  return $Call.ByID(1957956409, kind, id, page)
 }
 
+/**
+ * ForgeSearch bound methods return the single response object shaped like
+ * src-tauri/src/models/forge.rs. Wails packs multiple Go return values into an
+ * array, so the stale flag must stay inside each response.
+ */
 export function ForgeSearch(
   query: string,
   modPage: number,
   addonPage: number,
   perPage: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
+): $CancellablePromise<json$0.RawMessage> {
   return $Call.ByID(3029807572, query, modPage, addonPage, perPage)
 }
 
