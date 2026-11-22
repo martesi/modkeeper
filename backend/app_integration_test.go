@@ -860,7 +860,7 @@ func TestPurgeProcessT2CrashAfterQuarantine(t *testing.T) {
 		t.Fatal(err)
 	}
 	retryErr := restarted.Library.DeleteLibrary(libraryID, true)
-	var purgeError *deployment.Error
+	var purgeError *models.Error
 	if !errors.As(retryErr, &purgeError) || purgeError.Code != "InvalidLibrary" ||
 		!strings.Contains(retryErr.Error(), "Purge recovery is pending; explicit recovery is required before retrying") {
 		t.Fatalf("restarted app purge retry error=%v; want retained-journal refusal", retryErr)

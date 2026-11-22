@@ -78,7 +78,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 				return err
 			}
 			if !utf8.ValidString(path) {
-				return &Error{"Unexpected", nil}
+				return models.Fail(models.Unexpected)
 			}
 			if d.IsDir() {
 				return nil

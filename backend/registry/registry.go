@@ -54,7 +54,7 @@ func (r *TaskRegistry) AssertActiveLibrary(id string) error {
 		return models.Fail(models.NoActiveLibrary)
 	}
 	if r.activeID != id {
-		return models.Fail(models.InvalidLibrary, id)
+		return models.Fail(models.InvalidLibrary, id, "not the active library")
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func (r *TaskRegistry) CancelTask(id, libraryID string) error {
 	}
 	if entry.libraryID != libraryID {
 		r.mu.Unlock()
-		return models.Fail(models.InvalidLibrary, libraryID)
+		return models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	if !entry.cancellable {
 		r.mu.Unlock()
@@ -142,9 +142,12 @@ func (r *TaskRegistry) WaitForStartupLoad(ctx context.Context) error {
 type ProcessGuard struct{ Inspector process.Inspector }
 
 func (g ProcessGuard) AssertStopped(paths []string, code string) error {
+	if g.Inspector == nil {
+		return models.Fail(models.IOError, "Unable to inspect running processes: process inspection is not configured")
+	}
 	running, err := g.Inspector.IsRunning(paths)
 	if err != nil {
-		return fmt.Errorf("inspect running processes: %w", err)
+		return models.Fail(models.IOError, fmt.Sprintf("Unable to inspect running processes: %v", err))
 	}
 	if running {
 		return models.Fail(code)

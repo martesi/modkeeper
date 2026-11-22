@@ -17,6 +17,7 @@ import (
 	"github.com/martes/modkeeper/backend/config"
 	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
+	"github.com/martes/modkeeper/backend/process"
 	"github.com/martes/modkeeper/backend/registry"
 	"github.com/martes/modkeeper/backend/security"
 	"github.com/martes/modkeeper/backend/spt"
@@ -47,10 +48,10 @@ func layout(root string) (manifest, cache, string, string, string, error) {
 	// LibPathRules::new(repo_root).
 	base := root
 	if _, err := toml.DecodeFile(filepath.Join(base, "manifest.toml"), &m); err != nil {
-		return m, c, "", "", "", err
+		return m, c, "", "", "", fmt.Errorf("manifest.toml: %w", err)
 	}
 	if _, err := toml.DecodeFile(filepath.Join(base, "cache.toml"), &c); err != nil {
-		return m, c, "", "", "", err
+		return m, c, "", "", "", fmt.Errorf("cache.toml: %w", err)
 	}
 	return m, c, filepath.Join(base, "mods"), filepath.Join(base, "staging"), filepath.Join(base, "backups"), nil
 }
@@ -106,7 +107,7 @@ func Create(game, root, name string) (*Library, error) {
 func Load(root string) (*Library, error) {
 	m, _, mods, staging, backups, err := layout(root)
 	if err != nil {
-		return nil, fmt.Errorf("InvalidLibrary: %s: %w", root, err)
+		return nil, models.Fail(models.InvalidLibrary, root, err.Error())
 	}
 	game := resolveGameRoot(root, m.GameRoot)
 	current, err := versionOf(game)
@@ -115,7 +116,7 @@ func Load(root string) (*Library, error) {
 	}
 	major := func(v string) string { return strings.Split(v, ".")[0] }
 	if major(current) != major(m.SPTVersion) {
-		return nil, fmt.Errorf("InvalidLibrary: SPT major version changed from %s to %s", m.SPTVersion, current)
+		return nil, models.Fail(models.InvalidLibrary, root, fmt.Sprintf("SPT major version changed from %s to %s; create a new library for the new major version", m.SPTVersion, current))
 	}
 	if m.Mods == nil {
 		m.Mods = map[string]models.Mod{}
@@ -272,10 +273,14 @@ func sameInstallTransaction(prepared, committed installTransaction) bool {
 }
 
 func invalidInstallMarker(path string, cause error) error {
-	return fmt.Errorf(
-		"InvalidLibrary: install recovery marker %q is invalid or uses an older format; no install files were changed. Preserve the library and backups, then restore a consistent mod tree and manifest from a trusted backup before removing this marker: %w",
+	return models.Fail(
+		models.InvalidLibrary,
 		path,
-		cause,
+		fmt.Sprintf(
+			"install recovery marker %q is invalid or uses an older format; no install files were changed. Preserve the library and backups, then restore a consistent mod tree and manifest from a trusted backup before removing this marker: %v",
+			path,
+			cause,
+		),
 	)
 }
 
@@ -334,8 +339,11 @@ func (l *Library) DTO() models.LibraryDTO {
 }
 
 type Service struct {
-	Store          *store.AppConfigStore
-	Registry       *registry.TaskRegistry
+	Store    *store.AppConfigStore
+	Registry *registry.TaskRegistry
+	// Inspector reports whether the game or server executables are running.
+	// New installs the platform inspector; tests inject process.Fake.
+	Inspector      process.Inspector
 	active         *Library
 	warning        *string
 	sendProgress   func(models.TaskProgressEvent) error
@@ -367,25 +375,25 @@ func DeriveLibraryRootForSPT(gameRoot, version string) string {
 func ValidateLibraryStructure(root string) error {
 	if _, err := os.Stat(filepath.Join(root, "manifest.toml")); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("InvalidLibrary: %s: manifest.toml is missing", root)
+			return models.Fail(models.InvalidLibrary, root, "manifest.toml is missing")
 		}
-		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
+		return models.Fail(models.InvalidLibrary, root, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
 	var m manifest
 	if _, err := toml.DecodeFile(filepath.Join(root, "manifest.toml"), &m); err != nil {
-		return fmt.Errorf("InvalidLibrary: %s: manifest.toml is invalid or unreadable: %w", root, err)
+		return models.Fail(models.InvalidLibrary, root, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
 	for _, dir := range []string{"mods", "backups", "staging"} {
 		path := filepath.Join(root, dir)
 		info, err := os.Stat(path)
 		if os.IsNotExist(err) {
-			return fmt.Errorf("InvalidLibrary: %s: missing required directory: %s", root, dir)
+			return models.Fail(models.InvalidLibrary, root, "missing required directory: "+dir)
 		}
 		if err != nil {
-			return fmt.Errorf("InvalidLibrary: %s: %w", root, err)
+			return models.Fail(models.InvalidLibrary, root, err.Error())
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("InvalidLibrary: %s: expected directory but found file: %s", root, dir)
+			return models.Fail(models.InvalidLibrary, root, "expected directory but found file: "+dir)
 		}
 	}
 	return nil
@@ -396,7 +404,7 @@ func New(path string) (*Service, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Service{Store: &store.AppConfigStore{Path: path, Config: c}, Registry: registry.NewTaskRegistry()}, nil
+	return &Service{Store: &store.AppConfigStore{Path: path, Config: c}, Registry: registry.NewTaskRegistry(), Inspector: process.Default()}, nil
 }
 func (s *Service) Start() error {
 	s.startupMu.Lock()
@@ -435,6 +443,26 @@ func (s *Service) tryBeginLibraryTransition() error {
 		return models.Fail(models.LibraryBusy)
 	}
 	return nil
+}
+
+// assertGameOrServerStopped blocks destructive work while the game or server
+// runs, mirroring the Rust command guards. Callers hold libraryMu.
+func (s *Service) assertGameOrServerStopped() error {
+	if s.active == nil {
+		// Without an active library the Rust shell cannot resolve canonical
+		// executable paths, so the command reaches its own NoActiveLibrary
+		// check instead.
+		return nil
+	}
+	rules, err := spt.Discover(s.active.GameRoot)
+	if err != nil {
+		return err
+	}
+	paths := []string{
+		filepath.Join(s.active.GameRoot, rules.ClientExe),
+		filepath.Join(s.active.GameRoot, rules.ServerExe),
+	}
+	return registry.ProcessGuard{Inspector: s.Inspector}.AssertStopped(paths, models.GameOrServerRunning)
 }
 
 func (s *Service) Workspace() *models.LibraryWorkspace {
@@ -523,7 +551,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 					s.Registry.SetActive(l.manifest.ID, true)
 					return nil
 				}
-				return fmt.Errorf("InvalidLibrary: %s: %w", root, loadErr)
+				return loadErr
 			} else if !os.IsNotExist(versionedErr) {
 				return versionedErr
 			}
@@ -551,7 +579,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 		}
 		if statErr == nil {
 			if loadErr != nil {
-				return fmt.Errorf("InvalidLibrary: %s: %w", root, loadErr)
+				return loadErr
 			}
 			l := existing
 			if err := recoverInterruptedInstall(l); err != nil {
@@ -597,7 +625,7 @@ func (s *Service) ActivateLibrary(id string) error {
 	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibrary(id)
 	if k == nil {
-		return fmt.Errorf("InvalidLibrary: Library not registered")
+		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	l, e := Load(k.LibraryRoot)
 	if e != nil {
@@ -625,11 +653,11 @@ func (s *Service) RenameLibrary(id, name string) error {
 	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibrary(id)
 	if k == nil {
-		return fmt.Errorf("InvalidLibrary: Library not registered")
+		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	m, _, _, _, _, e := layout(k.LibraryRoot)
 	if e != nil {
-		return e
+		return models.Fail(models.InvalidLibrary, k.LibraryRoot, e.Error())
 	}
 	m.Name = name
 	b := filepath.Join(k.LibraryRoot, "manifest.toml")
@@ -661,13 +689,16 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	defer s.libraryMu.Unlock()
 	k := s.Store.Config.FindLibraryByHandle(id)
 	if k == nil {
-		return fmt.Errorf("InvalidLibrary: Library not registered")
+		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	// Validate the purge and every recorded deployment artifact BEFORE touching
 	// config or disk, matching the Rust delete ordering.
 	var depLayout deployment.Layout
 	var mods []models.Mod
 	if deleteFiles {
+		if err := s.assertGameOrServerStopped(); err != nil {
+			return err
+		}
 		m, _, _, _, _, err := layout(k.LibraryRoot)
 		if err == nil {
 			gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
@@ -777,7 +808,7 @@ func (s *Service) snapshotMod(id string) (string, error) {
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("ModIdConflict: installed mod path is not a directory: %s", source)
+		return "", models.Fail(models.ModIdConflict, id, source)
 	}
 	snapshot := filepath.Join(s.active.BackupsDir, id+".snapshot")
 	tmp, err := os.MkdirTemp(s.active.BackupsDir, ".modkeeper-snapshot-tmp-")
