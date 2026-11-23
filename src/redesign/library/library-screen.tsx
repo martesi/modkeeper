@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useAtomValue } from 'jotai'
+import { useLayoutEffect, useState } from 'react'
+import { useAtomValue, useStore } from 'jotai'
 import { Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -7,6 +7,8 @@ import {
   activeLibraryIdAtom,
   libraryBusyAtom,
   modListAtom,
+  libraryScreenInstanceAtom,
+  libraryRevealModIdAtom,
   pendingTasksAtom,
 } from '../state/library-state'
 import { syncMods } from '../data/library-repository'
@@ -23,23 +25,35 @@ import { LibraryActionIconButton } from './library-action-icon-button'
  * Library screen with named library actions and the active workspace content.
  */
 export function LibraryScreen() {
+  const store = useStore()
+  useLayoutEffect(() => {
+    const instance = {}
+    store.set(libraryScreenInstanceAtom, instance)
+    return () => {
+      if (store.get(libraryScreenInstanceAtom) === instance) {
+        store.set(libraryScreenInstanceAtom, null)
+        store.set(libraryRevealModIdAtom, null)
+      }
+    }
+  }, [store])
   const activeLibrary = useAtomValue(activeLibraryAtom)
   const mods = useAtomValue(modListAtom)
   const [manageOpen, setManageOpen] = useState(false)
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <div
+      className={
+        activeLibrary ? 'flex flex-col gap-3' : 'flex h-full min-h-0 flex-col'
+      }
+    >
+      {activeLibrary && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-[13px] text-muted-foreground">
-            {activeLibrary
-              ? libraryText.subtitleModsInstalled(mods.length)
-              : libraryText.subtitleEmpty()}
+            {libraryText.subtitleModsInstalled(mods.length)}
           </p>
+          <LibraryHeaderToolbar onManageLibraries={() => setManageOpen(true)} />
         </div>
-
-        <LibraryHeaderToolbar onManageLibraries={() => setManageOpen(true)} />
-      </div>
+      )}
 
       {activeLibrary ? (
         mods.length === 0 ? (
@@ -51,9 +65,11 @@ export function LibraryScreen() {
           </div>
         )
       ) : (
-        <LibraryActivateEmptyState
-          onManageLibraries={() => setManageOpen(true)}
-        />
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <LibraryActivateEmptyState
+            onManageLibraries={() => setManageOpen(true)}
+          />
+        </div>
       )}
 
       <ManageLibraryDialog open={manageOpen} onOpenChange={setManageOpen} />

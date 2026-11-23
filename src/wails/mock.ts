@@ -3,6 +3,7 @@
  * Event names are exactly `task_progress` and `workspace-event`.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { ForgeKind, ForgeVersionsPage } from './contract'
 export type WailsMock = {
   commands?: Record<string, (...args: unknown[]) => unknown>
   events?: {
@@ -30,11 +31,54 @@ export function installWailsMock(mock: WailsMock): () => void {
   }
 }
 
+function createForgeVersionsPage(
+  kind: ForgeKind,
+  itemId: number,
+  page: number,
+): ForgeVersionsPage {
+  return {
+    kind,
+    itemId,
+    versions: [
+      {
+        kind,
+        itemId,
+        id: itemId * 100 + 2,
+        version: '2.0.0',
+        description: null,
+        link: '#',
+        contentLength: 1_024,
+        sptVersionConstraint: '^4.0.0',
+        fikaCompatibility: null,
+        dependencies: [],
+      },
+      {
+        kind,
+        itemId,
+        id: itemId * 100 + 1,
+        version: '1.0.0',
+        description: null,
+        link: '#',
+        contentLength: 1_024,
+        sptVersionConstraint: '^3.0.0',
+        fikaCompatibility: null,
+        dependencies: [],
+      },
+    ],
+    pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 2 },
+    stale: false,
+  }
+}
+
 /** In-memory bus for serve-mode/browser E2E: listeners + emit without a native runtime. */
 export function createInMemoryWailsMock(): WailsMock {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   const workspace: any = {
-    activeLibraryId: 'mock-library',
+    activeLibraryId:
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('mk-e2e-no-active-library') === '1'
+        ? null
+        : 'mock-library',
     libraries: [
       {
         id: 'mock-library',
@@ -71,11 +115,17 @@ export function createInMemoryWailsMock(): WailsMock {
     settings: (() => {
       try {
         return (
-          JSON.parse(localStorage.getItem('mk-e2e-settings') ?? 'null') ?? {
+          JSON.parse(
+            (typeof localStorage !== 'undefined'
+              ? localStorage.getItem('mk-e2e-settings')
+              : null) ?? 'null',
+          ) ?? {
             theme: 'system',
             accentColor: '#6750a4',
             language: 'en-US',
             enableModsOnInstall: true,
+            warnIncompatibleForgeInstall: true,
+            forgeEndpoint: '',
           }
         )
       } catch {
@@ -84,6 +134,8 @@ export function createInMemoryWailsMock(): WailsMock {
           accentColor: '#6750a4',
           language: 'en-US',
           enableModsOnInstall: true,
+          warnIncompatibleForgeInstall: true,
+          forgeEndpoint: '',
         }
       }
     })(),
@@ -170,28 +222,100 @@ export function createInMemoryWailsMock(): WailsMock {
         )
       return workspace.settings
     },
-    forgeSearch: async (query: string) =>
-      query.trim()
-        ? {
-            mods: [
-              { id: 1, name: `Mock ${query}`, summary: 'Mock Forge result' },
-            ],
-            addons: [],
-            pagination: {},
-          }
-        : { mods: [], addons: [], pagination: {} },
-    forgeModDetail: async (_kind: string, id: number) => ({
+    forgeSearch: async (
+      query: string,
+      modPage: number,
+      addonPage: number,
+      perPage: number,
+    ) => {
+      const matching = query.trim()
+      const mods = matching
+        ? [
+            {
+              kind: 'mod',
+              id: 1,
+              guid: 'mock.mod',
+              name: `Mock ${matching} Zulu`,
+              slug: null,
+              teaser: 'Mock Forge result',
+              thumbnail: null,
+              detailUrl: null,
+              fikaCompatibility: null,
+              parentModId: null,
+              parentModGuid: null,
+              parentModName: null,
+              parentModDetailUrl: null,
+              modVersionConstraint: null,
+              isDetached: null,
+            },
+            {
+              kind: 'mod',
+              id: 2,
+              guid: 'mock.mod.alpha',
+              name: `Mock ${matching} Alpha`,
+              slug: null,
+              teaser: 'Mock Forge result',
+              thumbnail: null,
+              detailUrl: null,
+              fikaCompatibility: null,
+              parentModId: null,
+              parentModGuid: null,
+              parentModName: null,
+              parentModDetailUrl: null,
+              modVersionConstraint: null,
+              isDetached: null,
+            },
+          ]
+        : []
+      const addons: unknown[] = []
+      const page = (items: unknown[], currentPage: number) => {
+        const pageSize = Math.max(1, perPage)
+        return {
+          items: items.slice(
+            (currentPage - 1) * pageSize,
+            currentPage * pageSize,
+          ),
+          pagination: {
+            currentPage,
+            lastPage: Math.max(1, Math.ceil(items.length / pageSize)),
+            perPage,
+            total: items.length,
+          },
+          stale: false,
+        }
+      }
+      return {
+        sptVersion: '3.9.0',
+        mods: page(mods, modPage),
+        addons: page(addons, addonPage),
+      }
+    },
+    forgeModDetail: async (kind: string, id: number) => ({
+      kind,
       id,
-      name: `Mock mod ${id}`,
+      guid: `mock.${kind}.${id}`,
+      name: `Mock ${kind} ${id}`,
+      slug: null,
+      teaser: 'Mock Forge result',
+      description: 'Mock Forge description',
+      thumbnail: null,
+      detailUrl: null,
+      fikaCompatibility: null,
+      parentModId: null,
+      parent: null,
+      modVersionConstraint: null,
+      isDetached: null,
+      stale: false,
     }),
-    forgeModVersions: async (_kind: string, id: number) => ({
-      data: [{ id, name: '1.0.0' }],
-      pagination: {},
-    }),
-    forgeAddonVersions: async (id: number) => ({
-      data: [{ id, name: '1.0.0' }],
-      pagination: {},
-    }),
+    forgeModVersions: async (
+      kind: ForgeKind,
+      id: number,
+      page: number,
+    ): Promise<ForgeVersionsPage> => createForgeVersionsPage(kind, id, page),
+    forgeAddonVersions: async (
+      id: number,
+      page: number,
+    ): Promise<ForgeVersionsPage> => createForgeVersionsPage('addon', id, page),
     forgeDownloadVersion: async () => ({ accepted: true }),
     forgeMatchInstalledMod: () => structuredClone(workspace),
     applyWindowEffect: () => undefined,

@@ -54,4 +54,6 @@ export const commonText = {
     }),
   cancel: () => t({ id: 'common.action.cancel', message: 'Cancel' }),
   close: () => t({ id: 'common.action.close', message: 'Close' }),
+  closeWithEscape: () =>
+    t({ id: 'common.action.closeWithEscape', message: 'Close (Esc)' }),
 }

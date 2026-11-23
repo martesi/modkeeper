@@ -79,6 +79,7 @@ export type AppSettings_Deserialize = {
 	accentColor?: string,
 	language?: string,
 	enableModsOnInstall?: boolean,
+	forgeEndpoint?: string,
 };
 
 export type AppSettings_Serialize = {
@@ -86,6 +87,7 @@ export type AppSettings_Serialize = {
 	accentColor: string,
 	language: string,
 	enableModsOnInstall: boolean,
+	forgeEndpoint: string,
 };
 
 export type ArchiveFailure = {

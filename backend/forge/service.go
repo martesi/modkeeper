@@ -12,6 +12,7 @@ import (
 type Service struct {
 	Client        *Client
 	BaseURL       string
+	Endpoint      func() string
 	ActiveVersion func() (string, error)
 	Hooks         InstallHooks
 }
@@ -22,6 +23,18 @@ func NewService(client *Client, activeVersion func() (string, error)) *Service {
 	}
 	return &Service{Client: client, BaseURL: APIBase, ActiveVersion: activeVersion}
 }
+func (s *Service) endpoint() string {
+	baseURL := s.BaseURL
+	if s.Endpoint != nil {
+		if configured := strings.TrimSpace(s.Endpoint()); configured != "" {
+			baseURL = configured
+		}
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		return APIBase
+	}
+	return baseURL
+}
 func (s *Service) active() (string, error) {
 	if s.ActiveVersion == nil {
 		return "", &Error{Code: "NoActiveLibrary"}
@@ -29,7 +42,7 @@ func (s *Service) active() (string, error) {
 	return s.ActiveVersion()
 }
 func (s *Service) get(path string, params map[string]string) (json.RawMessage, bool, error) {
-	u, err := url.Parse(strings.TrimRight(s.BaseURL, "/") + "/" + path)
+	u, err := url.Parse(strings.TrimRight(s.endpoint(), "/") + "/" + path)
 	if err != nil {
 		return nil, false, fail("ParseError", "Invalid Forge API URL: "+err.Error())
 	}

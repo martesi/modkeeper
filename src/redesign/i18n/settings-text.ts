@@ -21,6 +21,17 @@ export const settingsText = {
       message:
         'Newly installed mods are enabled automatically. Sync the library to deploy them.',
     }),
+  warnIncompatibleForgeInstall: () =>
+    t({
+      id: 'settings.registry.warnIncompatible.label',
+      message: 'Warn before installing incompatible Forge versions',
+    }),
+  warnIncompatibleForgeInstallDescription: () =>
+    t({
+      id: 'settings.registry.warnIncompatible.description',
+      message:
+        'Show a warning when a version does not support this library’s SPT version.',
+    }),
   appearance: () =>
     t({ id: 'settings.appearance.label', message: 'App Theme' }),
   appearanceDescription: () =>
