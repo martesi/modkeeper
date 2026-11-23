@@ -84,6 +84,7 @@ export function createInMemoryWailsMock(): WailsMock {
             accentColor: '#6750a4',
             language: 'en-US',
             enableModsOnInstall: true,
+            warnIncompatibleForgeInstall: true,
             forgeEndpoint: '',
           }
         )
@@ -93,6 +94,7 @@ export function createInMemoryWailsMock(): WailsMock {
           accentColor: '#6750a4',
           language: 'en-US',
           enableModsOnInstall: true,
+          warnIncompatibleForgeInstall: true,
           forgeEndpoint: '',
         }
       }

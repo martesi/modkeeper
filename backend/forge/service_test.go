@@ -60,6 +60,38 @@ func TestAddonSearchOmitsUnsupportedSptFilter(t *testing.T) {
 		t.Fatalf("%s %v", body, err)
 	}
 }
+
+func TestSearchUsesEndpointForEachRequestAndEmptyUsesDefault(t *testing.T) {
+	var hosts []string
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, "first")
+		fmt.Fprint(w, `{"data":[],"meta":{"current_page":1}}`)
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, "second")
+		fmt.Fprint(w, `{"data":[],"meta":{"current_page":1}}`)
+	}))
+	defer second.Close()
+
+	s := NewService(NewClient(), func() (string, error) { return "4.0.11", nil })
+	endpoint := first.URL
+	s.Endpoint = func() string { return endpoint }
+	if _, err := s.Search("first", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	endpoint = second.URL
+	if _, err := s.Search("second", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 4 || hosts[0] != "first" || hosts[1] != "first" || hosts[2] != "second" || hosts[3] != "second" {
+		t.Fatalf("requests did not use endpoint per call: %v", hosts)
+	}
+	s.Endpoint = func() string { return "" }
+	if got := s.endpoint(); got != APIBase {
+		t.Fatalf("empty endpoint fallback: %q", got)
+	}
+}
 func TestSupportedDownloadExtensionsAreExplicit(t *testing.T) {
 	for name, want := range map[string]string{"mod.zip": "zip", "mod.7z": "7z", "mod.rar": "", "MOD.ZIP": "zip"} {
 		if got := supportedArchiveExtension(name); got != want {

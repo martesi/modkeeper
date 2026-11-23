@@ -23,6 +23,7 @@ import type {
 } from '@/wails/contract'
 import {
   addPendingTask,
+  activeLibraryIdAtom,
   isLibraryTaskPending,
   removePendingTask,
   setWorkspace,
@@ -369,7 +370,9 @@ export async function installForgeVersion({
     isTauri: platformKind() !== 'browser',
     ensureReady: ensureWorkspaceEventBus,
     onNotReady: () => toast.error(libraryText.taskUpdatesUnavailable()),
-    canStart: () => !isLibraryTaskPending(libraryId),
+    canStart: () =>
+      store.get(activeLibraryIdAtom) === libraryId &&
+      !isLibraryTaskPending(libraryId),
     onBusy: () => toast.error(libraryText.libraryBusy()),
     createTaskId: () => crypto.randomUUID(),
     registerPending: (taskId) => {

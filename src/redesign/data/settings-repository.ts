@@ -1,11 +1,9 @@
 /*
  * Settings repository (consolidated-spec.md §10).
  *
- * Settings are backend-owned in App Config (T1): the initial value rides the workspace from
- * `get_library_workspace`, and every mutation goes through `saveSettings`, which returns the FULL
- * object — the atom is replaced wholesale, never patched. The appliers (`applyTheme` side of theme
- * lives with next-themes in the initializers; accent/language live here) turn the saved value into
- * visible effect.
+ * Settings are backend-owned in App Config (T1). Mutations accept partial patches and serialize
+ * them against the latest atom value before sending the full settings object to the backend.
+ * Returned settings replace the atom wholesale. Appliers turn that saved value into visible effects.
  */
 import { toast } from 'sonner'
 import { i18n } from '@lingui/core'

@@ -95,7 +95,7 @@ const connectTaskProgressEvents = createRetryableConnection((error) => {
 })
 
 /**
- * Dispatch a completion event — from the real Tauri listener OR the mock emitter, identically.
+ * Dispatch a completion event from the Wails event bridge or mock emitter, identically.
  * Clears the in-flight task (drops library-busy) first, then fans out to subscribers.
  */
 function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
@@ -120,7 +120,7 @@ export function listenWorkspaceEvent(
 }
 
 /**
- * Connect the real Tauri event source into the bus, once. Called by redesign-initializers. In the
+ * Connect the native Wails event source into the bus, once. Called by redesign-initializers. In the
  * browser prototype there is no source — the mock emitter feeds `dispatchWorkspaceEvent` directly.
  */
 export function ensureWorkspaceEventBus(): Promise<boolean> {

@@ -41,7 +41,7 @@ func TestLibraryEntryWireShapes(t *testing.T) {
 }
 func TestExistingCompletionEventPayloadsKeepTheirWireShapes(t *testing.T) {
 	workspace := LibraryWorkspace{Libraries: []LibraryEntry{}, ModsByLibraryID: map[string][]ModSummary{}, ToolsByLibraryID: map[string][]ToolSummary{}, Settings: config.DefaultSettings()}
-	const wire = `{"libraries":[],"modsByLibraryId":{},"toolsByLibraryId":{},"settings":{"theme":"system","accentColor":"default","language":"en-US","enableModsOnInstall":true,"forgeEndpoint":""}}`
+	const wire = `{"libraries":[],"modsByLibraryId":{},"toolsByLibraryId":{},"settings":{"theme":"system","accentColor":"default","language":"en-US","enableModsOnInstall":true,"warnIncompatibleForgeInstall":true,"forgeEndpoint":""}}`
 	for _, kind := range []string{WorkspaceEventSyncCompleted, WorkspaceEventModInstallCompleted, WorkspaceEventCacheRebuildCompleted} {
 		event := WorkspaceEvent{Type: kind, TaskID: "task", LibraryID: "library", Workspace: workspace}
 		middle := `"failures":[],`

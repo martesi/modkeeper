@@ -50,6 +50,7 @@ beforeEach(async () => {
     accentColor: 'default',
     language: 'en-US',
     enableModsOnInstall: true,
+    warnIncompatibleForgeInstall: true,
     forgeEndpoint: '',
   })
   document.body.replaceChildren()

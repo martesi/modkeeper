@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/martes/modkeeper/backend/config"
+
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/testenv"
 )
@@ -16,6 +17,7 @@ func TestConcurrentSettingsReadsAndWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	env := testenv.New(t)
 
 	const workers = 8
@@ -37,6 +39,7 @@ func TestConcurrentSettingsReadsAndWrites(t *testing.T) {
 			}
 		}(worker)
 	}
+
 	group.Add(1)
 	go func() {
 		defer group.Done()
@@ -48,15 +51,18 @@ func TestConcurrentSettingsReadsAndWrites(t *testing.T) {
 			errors <- err
 		}
 	}()
+
 	group.Wait()
 	close(errors)
 	for err := range errors {
 		t.Error(err)
 	}
+
 	if endpoint := service.GetSettings().ForgeEndpoint; endpoint == "" {
 		t.Fatal("settings save was lost during library creation")
 	}
 	if service.Store.Config.FindLibraryByHandle(filepath.Join(env.Root, "concurrent-library")) == nil {
 		t.Fatal("library transition was lost during settings save")
 	}
+
 }

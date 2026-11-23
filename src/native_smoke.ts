@@ -17,6 +17,7 @@ const expectedSettings = {
   accentColor: 'default',
   language: 'en-US',
   enableModsOnInstall: true,
+  warnIncompatibleForgeInstall: true,
   forgeEndpoint: '',
 }
 

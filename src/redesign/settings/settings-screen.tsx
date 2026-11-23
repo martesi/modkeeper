@@ -17,6 +17,7 @@ const FALLBACK_SETTINGS: AppSettings = {
   accentColor: DEFAULT_ACCENT,
   language: 'en-US',
   enableModsOnInstall: true,
+  warnIncompatibleForgeInstall: true,
   forgeEndpoint: '',
 }
 
@@ -63,6 +64,20 @@ export function SettingsScreen() {
           checked={settings.enableModsOnInstall}
           onCheckedChange={(enableModsOnInstall) =>
             save({ enableModsOnInstall })
+          }
+        />
+      ),
+    },
+    {
+      key: 'warn-incompatible-forge-install',
+      label: settingsText.warnIncompatibleForgeInstall(),
+      description: settingsText.warnIncompatibleForgeInstallDescription(),
+      control: (
+        <FidelitySwitch
+          aria-label={settingsText.warnIncompatibleForgeInstall()}
+          checked={settings.warnIncompatibleForgeInstall}
+          onCheckedChange={(warnIncompatibleForgeInstall) =>
+            save({ warnIncompatibleForgeInstall })
           }
         />
       ),
