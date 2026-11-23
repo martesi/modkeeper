@@ -27,3 +27,63 @@ export async function bootMockApp(page: Page): Promise<void> {
   await expect(page.getByRole('link', { name: /library/i })).toBeVisible()
   await expect.poll(() => consoleErrors).toEqual([])
 }
+
+export async function bootEmptyLibraryMockApp(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type MockWindow = Window & {
+      __MK_WAILS_MOCK__?: {
+        commands: Record<string, (...args: unknown[]) => unknown>
+        events: {
+          on: (
+            name: string,
+            callback: (...args: unknown[]) => void,
+          ) => () => void
+          emit: (name: string, ...args: unknown[]) => void
+        }
+      }
+    }
+    const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
+    const library = {
+      id: 'fixture-library',
+      name: 'Fixture Library',
+      gameRoot: '/games/spt',
+      libraryRoot: '/games/spt/.mod_keeper',
+      sptVersion: '3.9.0',
+      cacheStatus: { state: 'ready' },
+      deployStale: false,
+      updatedAt: new Date().toISOString(),
+    }
+    ;(window as MockWindow).__MK_WAILS_MOCK__ = {
+      commands: {
+        getLibraryWorkspace: () => ({
+          activeLibraryId: null,
+          libraries: [library],
+          modsByLibraryId: { [library.id]: [] },
+          toolsByLibraryId: { [library.id]: [] },
+          settings: {
+            theme: 'system',
+            accentColor: '#6750a4',
+            language: 'en-US',
+            enableModsOnInstall: true,
+          },
+        }),
+      },
+      events: {
+        on: (name, callback) => {
+          const callbacks = listeners.get(name) ?? new Set()
+          callbacks.add(callback)
+          listeners.set(name, callbacks)
+          return () => callbacks.delete(callback)
+        },
+        emit: (name, ...args) => {
+          for (const callback of listeners.get(name) ?? []) callback(...args)
+        },
+      },
+    }
+  })
+  await page.goto('/')
+  await expect(
+    page.getByRole('navigation', { name: /primary navigation/i }),
+  ).toBeVisible()
+  await expect(page.getByRole('link', { name: /library/i })).toBeVisible()
+}

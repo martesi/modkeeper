@@ -3,7 +3,6 @@ import type { TaskOperation, TaskProgressLog } from './redesign-types'
 import type { TaskOutcome } from './task-outcome'
 import { pendingTasksAtom } from '../state/library-state'
 
-export const TASK_HISTORY_KEY = 'modkeeper.taskHistory.v1'
 export const TASK_HISTORY_LIMIT = 50
 export const TASK_HISTORY_LOG_LIMIT = 20
 
@@ -17,13 +16,6 @@ export type TaskHistoryEntry = {
   libraryId: string
   status: TaskHistoryStatus
   logTail: TaskProgressLog[]
-}
-
-type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
-
-type HistoryEnvelope = {
-  version: 1
-  tasks: TaskHistoryEntry[]
 }
 
 const SAFE_HISTORY_LOGS: Record<string, TaskProgressLog> = {
@@ -65,35 +57,11 @@ function rememberPendingProgress(): void {
   }
 }
 
+// Retain task operation and safe progress logs until the completion event is recorded.
 rememberPendingProgress()
 store.sub(pendingTasksAtom, rememberPendingProgress)
 
-export function loadTaskHistory(
-  storage = localStorageOrNull(),
-): TaskHistoryEntry[] {
-  if (!storage) return []
-  try {
-    const raw = storage.getItem(TASK_HISTORY_KEY)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (
-      !isRecord(parsed) ||
-      parsed.version !== 1 ||
-      !Array.isArray(parsed.tasks)
-    ) {
-      return []
-    }
-    return parsed.tasks
-      .map(normalizeEntry)
-      .filter((entry): entry is TaskHistoryEntry => entry !== null)
-      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
-      .slice(0, TASK_HISTORY_LIMIT)
-  } catch {
-    return []
-  }
-}
-
-export const taskHistoryAtom = atom<TaskHistoryEntry[]>(loadTaskHistory())
+export const taskHistoryAtom = atom<TaskHistoryEntry[]>([])
 
 export function makeTaskHistoryEntry(
   outcome: TaskOutcome,
@@ -137,24 +105,6 @@ export function appendTaskHistory(
     .slice(0, TASK_HISTORY_LIMIT)
 }
 
-export function persistTaskHistory(
-  entries: readonly TaskHistoryEntry[],
-  storage = localStorageOrNull(),
-): void {
-  if (!storage) return
-  try {
-    const tasks = entries
-      .map(normalizeEntry)
-      .filter((entry): entry is TaskHistoryEntry => entry !== null)
-      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
-      .slice(0, TASK_HISTORY_LIMIT)
-    const envelope: HistoryEnvelope = { version: 1, tasks }
-    storage.setItem(TASK_HISTORY_KEY, JSON.stringify(envelope))
-  } catch {
-    // Storage can be disabled or full; history remains available for this session.
-  }
-}
-
 export function recordTaskHistory(
   outcome: TaskOutcome,
   input?: {
@@ -175,16 +125,17 @@ export function recordTaskHistory(
   )
   progressByTaskId.delete(outcome.taskId)
   store.set(taskHistoryAtom, next)
-  persistTaskHistory(next)
 }
 
-export function clearTaskHistory(storage = localStorageOrNull()): void {
-  try {
-    storage?.removeItem(TASK_HISTORY_KEY)
-  } catch {
-    // Keep the in-memory control usable when storage is unavailable.
-  }
+export function clearTaskHistory(): void {
   store.set(taskHistoryAtom, [])
+}
+
+export function dismissTaskHistory(taskId: string): void {
+  const remaining = store
+    .get(taskHistoryAtom)
+    .filter((entry) => entry.taskId !== taskId)
+  store.set(taskHistoryAtom, remaining)
 }
 
 function normalizeEntry(value: unknown): TaskHistoryEntry | null {
@@ -232,14 +183,6 @@ function operationForOutcome(outcome: TaskOutcome): TaskOperation {
   if (outcome.kind === 'sync') return 'sync'
   if (outcome.kind === 'install') return 'install'
   return 'cache_rebuild'
-}
-
-function localStorageOrNull(): StorageLike | null {
-  try {
-    return typeof window === 'undefined' ? null : window.localStorage
-  } catch {
-    return null
-  }
 }
 
 function safeIdentifier(value: unknown): string | null {
