@@ -65,6 +65,7 @@ export function emptyWorkspace(): LibraryWorkspace {
       accentColor: DEFAULT_ACCENT,
       language: 'en-US',
       enableModsOnInstall: true,
+      warnIncompatibleForgeInstall: true,
     },
   }
 }
@@ -104,6 +105,7 @@ function seedWorkspace(): LibraryWorkspace {
       accentColor: DEFAULT_ACCENT,
       language: 'en-US',
       enableModsOnInstall: true,
+      warnIncompatibleForgeInstall: true,
     },
   }
 }

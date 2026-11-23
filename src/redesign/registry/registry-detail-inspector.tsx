@@ -15,7 +15,18 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openUrl } from '@/platform'
-import semver from 'semver'
+import { settingsAtom } from '../state/settings-state'
+import { saveSettings } from '../data/settings-repository'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { ForgeDetail, ForgeVersionsPage } from '@/wails/contract'
 import {
   Select,
@@ -44,6 +55,7 @@ import {
   matchInstalledMod,
 } from '../data/registry-repository'
 import { registryText } from '../i18n/registry-text'
+import { commonText } from '../i18n/common-text'
 import { LibraryActionIconButton } from '../library/library-action-icon-button'
 import { RegistryThumbnail } from './registry-thumbnail'
 import {
@@ -54,6 +66,11 @@ import {
   ParentStatusBadge,
   ParentLinkBadge,
 } from './registry-item-badges'
+import {
+  filterForgeVersions,
+  isForgeVersionIncompatible,
+  shouldWarnForIncompatibleForgeVersion,
+} from './forge-version-compatibility'
 
 function formatBytes(bytes: number | null): string {
   if (!bytes || bytes <= 0) return '—'
@@ -83,6 +100,14 @@ export function RegistryDetailInspector({
   const rateLimitSecondsRemaining = isRateLimited
     ? Math.max(1, Math.ceil((rateLimitedUntil - currentEpoch) / 1000))
     : 0
+  const settings = useAtomValue(settingsAtom)
+  const [compatibleOnly, setCompatibleOnly] = useState(false)
+  const [incompatibleInstall, setIncompatibleInstall] = useState<{
+    version: ForgeVersionsPage['versions'][number]
+    spt: string
+  } | null>(null)
+  const [disableIncompatibleWarning, setDisableIncompatibleWarning] =
+    useState(false)
   const matchableMods = activeLibrary
     ? installedMods.filter((mod) => mod.libraryId === activeLibrary.id)
     : []
@@ -268,6 +293,23 @@ export function RegistryDetailInspector({
     parentStatus.status === 'unverified'
   const isDetailStale = Boolean(detail?.stale || versionsPage?.stale)
   const installDisabledOffline = isOffline || isDetailStale || isRateLimited
+  const visibleVersions = filterForgeVersions(
+    versionsPage?.versions ?? [],
+    activeLibrary?.sptVersion,
+    compatibleOnly,
+  )
+
+  function startInstall(version: (typeof visibleVersions)[number]) {
+    if (!activeLibrary) return
+    void installForgeVersion({
+      libraryId: activeLibrary.id,
+      kind: version.kind,
+      itemId: version.itemId,
+      versionId: version.id,
+    }).catch((error: unknown) => {
+      console.error('[registry] install request failed', error)
+    })
+  }
 
   return (
     <aside
@@ -313,6 +355,60 @@ export function RegistryDetailInspector({
           <span>{registryText.staleCacheNotice()}</span>
         </div>
       )}
+      <AlertDialog
+        open={incompatibleInstall !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIncompatibleInstall(null)
+            setDisableIncompatibleWarning(false)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {registryText.incompatibleInstallTitle()}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {incompatibleInstall &&
+                registryText.incompatibleInstallDescription(
+                  incompatibleInstall.version.version,
+                  incompatibleInstall.spt,
+                )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={disableIncompatibleWarning}
+              onChange={(event) =>
+                setDisableIncompatibleWarning(event.currentTarget.checked)
+              }
+            />
+            {registryText.dontShowIncompatibleWarning()}
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{commonText.cancel()}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const version = incompatibleInstall
+                if (!version) return
+                if (settings && disableIncompatibleWarning) {
+                  void saveSettings({
+                    ...settings,
+                    warnIncompatibleForgeInstall: false,
+                  })
+                }
+                setDisableIncompatibleWarning(false)
+                setIncompatibleInstall(null)
+                startInstall(version.version)
+              }}
+            >
+              {registryText.installAnyway()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="mk-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-4">
         {isRateLimited && !detail ? (
@@ -503,21 +599,27 @@ export function RegistryDetailInspector({
                 )}
               </div>
 
-              {versionsPage && versionsPage.versions.length > 0 ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={compatibleOnly}
+                  onChange={(event) =>
+                    setCompatibleOnly(event.currentTarget.checked)
+                  }
+                />
+                {registryText.compatibleVersionsOnly()}
+              </label>
+
+              {versionsPage && visibleVersions.length > 0 ? (
                 <div className="divide-y divide-border rounded-md border border-border bg-background/30">
-                  {versionsPage.versions.map((ver, idx) => {
+                  {visibleVersions.map((ver, idx) => {
                     const installKey = `${ver.kind}:${ver.itemId}:${ver.id}`
                     const isBusy = Boolean(installingMap[installKey])
                     const sptConstraint = ver.sptVersionConstraint ?? ''
                     const activeSpt = activeLibrary?.sptVersion
-                    const activeSptSemver = activeSpt
-                      ? semver.coerce(activeSpt)
-                      : null
-                    const isSptIncompatible = Boolean(
-                      activeSptSemver &&
-                      sptConstraint &&
-                      semver.validRange(sptConstraint) &&
-                      !semver.satisfies(activeSptSemver, sptConstraint),
+                    const isSptIncompatible = isForgeVersionIncompatible(
+                      ver,
+                      activeLibrary?.sptVersion,
                     )
 
                     const isInstalled = matchableMods.some((metadata) => {
@@ -643,22 +745,24 @@ export function RegistryDetailInspector({
                               isLibraryBusy ||
                               isInstalled ||
                               hasParentBlock ||
-                              Boolean(isSptIncompatible) ||
                               !activeLibrary
                             }
                             onClick={() => {
                               if (!activeLibrary) return
-                              void installForgeVersion({
-                                libraryId: activeLibrary.id,
-                                kind: ver.kind,
-                                itemId: ver.itemId,
-                                versionId: ver.id,
-                              }).catch((error: unknown) => {
-                                console.error(
-                                  '[registry] install request failed',
-                                  error,
+                              if (
+                                shouldWarnForIncompatibleForgeVersion(
+                                  isSptIncompatible,
+                                  settings?.warnIncompatibleForgeInstall !==
+                                    false,
                                 )
-                              })
+                              ) {
+                                setIncompatibleInstall({
+                                  version: ver,
+                                  spt: activeLibrary.sptVersion ?? '',
+                                })
+                                return
+                              }
+                              startInstall(ver)
                             }}
                             className="size-8"
                           />

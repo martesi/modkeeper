@@ -176,6 +176,15 @@ test('retry on All page three keeps the known addon bound', async () => {
   })
 })
 
+test('stale search metadata shows the stale-cache banner', async () => {
+  search.mockResolvedValue({
+    ...response,
+    mods: { ...response.mods, stale: true },
+  })
+  await click('Next')
+  expect(container.textContent).toContain('staleCacheNotice')
+})
+
 test('initial search does not reset a page selected within the debounce window', async () => {
   await act(async () => root.unmount())
   const timers = spyOn(globalThis, 'setTimeout')
