@@ -9,6 +9,7 @@
 - With Nix, `nix develop -c ...` is also valid.
 - Do not use `nix-shell -p cargo`.
 - Run frontend commands with `bun run ...`.
+- For browser E2E on WSL, when `/dev/dxg` and the WSL GPU driver mounts are available, use `nix develop .#e2e-wsl-gpu -c xvfb-run -a ...`. Check GPU access with `bun scripts/check-wsl-gpu.mjs` inside that profile. Otherwise, use the normal `e2e` profile.
 
 ### Development Guidelines
 - **Testing**: Add tests for new features, refactor existing tests after changes
