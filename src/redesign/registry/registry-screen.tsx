@@ -115,13 +115,14 @@ export function RegistryScreen() {
 
   // 300ms Debounce for Titlebar / local search input
   useEffect(() => {
+    if (search === debouncedSearch) return
     const handler = setTimeout(() => {
       setDebouncedSearch(search)
       setModPage(1)
       setAddonPage(1)
     }, 300)
     return () => clearTimeout(handler)
-  }, [search, setModPage, setAddonPage])
+  }, [search, debouncedSearch, setModPage, setAddonPage])
 
   // Fetch from Forge registry
   useEffect(() => {

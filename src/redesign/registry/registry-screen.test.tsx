@@ -176,6 +176,24 @@ test('retry on All page three keeps the known addon bound', async () => {
   })
 })
 
+test('initial search does not reset a page selected within the debounce window', async () => {
+  await act(async () => root.unmount())
+  const timers = spyOn(globalThis, 'setTimeout')
+  const { RegistryScreen } = await import('./registry-screen')
+  root = createRoot(container)
+  await act(async () =>
+    root.render(
+      createElement(Provider, { store }, createElement(RegistryScreen)),
+    ),
+  )
+  const debounceTimers = timers.mock.calls.filter(([, delay]) => delay === 300)
+  timers.mockRestore()
+  await goToPageThree()
+  expect(debounceTimers).toHaveLength(0)
+  expect(store.get(registryModPageAtom)).toBe(3)
+  expect(store.get(registryAddonPageAtom)).toBe(3)
+})
+
 test('shrinking page counts are rediscovered after navigating to a later page', async () => {
   await click('Next')
   const start = search.mock.calls.length
