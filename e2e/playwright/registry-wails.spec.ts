@@ -64,3 +64,68 @@ test('Wails mock searches, opens details, and loads versions', async ({
       ]),
     )
 })
+
+test('Wails mock filters versions, persists warning and endpoint settings', async ({
+  page,
+}) => {
+  await bootMockApp(page)
+  await page.evaluate(() => {
+    ;(window as Window & { _wails?: { environment: { OS: string } } })._wails =
+      {
+        environment: { OS: 'linux' },
+      }
+  })
+  await page.getByRole('link', { name: /registry/i }).click()
+  await page.getByPlaceholder(/search/i).fill('Camo')
+  await page.getByRole('heading', { name: 'Mock Camo Zulu' }).click()
+  await expect(page.getByRole('heading', { name: 'Mock mod 1' })).toBeVisible()
+
+  const versions = page.getByRole('region', {
+    name: 'Versions & Compatibility',
+  })
+  await expect(versions.getByText('2 version(s)')).toBeVisible()
+  await versions.getByLabel('Compatible with this SPT version').check()
+  await expect(versions.getByText('1 version(s)')).toBeVisible()
+  await versions.getByLabel('Compatible with this SPT version').uncheck()
+
+  await versions
+    .getByRole('button', { name: 'Incompatible with SPT 3.9.0' })
+    .click()
+  await expect(page.getByText('Version may be incompatible')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByText('Version may be incompatible')).toBeHidden()
+
+  await page.getByRole('link', { name: /settings/i }).click()
+  const warningSwitch = page.getByRole('switch', {
+    name: 'Warn before installing incompatible Forge versions',
+  })
+  await warningSwitch.click()
+  await expect(warningSwitch).toHaveAttribute('aria-checked', 'false')
+  const endpoint = page.getByLabel('Forge endpoint')
+  await expect(endpoint).toHaveAttribute(
+    'placeholder',
+    'Default Forge endpoint',
+  )
+  await endpoint.fill('https://forge.example/api/v0')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(endpoint).toHaveValue('https://forge.example/api/v0')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem('mk-e2e-settings') ?? '{}'),
+      ),
+    )
+    .toMatchObject({
+      warnIncompatibleForgeInstall: false,
+      forgeEndpoint: 'https://forge.example/api/v0',
+    })
+
+  await page.getByRole('link', { name: /registry/i }).click()
+  await page.getByPlaceholder(/search/i).fill('Camo')
+  await page.getByRole('heading', { name: 'Mock Camo Zulu' }).click()
+  const incompatibleInstall = page.getByRole('button', {
+    name: 'Incompatible with SPT 3.9.0',
+  })
+  await incompatibleInstall.click()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+})

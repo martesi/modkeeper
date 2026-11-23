@@ -171,9 +171,18 @@ describe('Wails browser mock', () => {
         expect.objectContaining({
           kind: 'mod',
           itemId: 1,
+          version: '2.0.0',
+          sptVersionConstraint: '^4.0.0',
           contentLength: 1_024,
         }),
+        expect.objectContaining({
+          kind: 'mod',
+          itemId: 1,
+          version: '1.0.0',
+          sptVersionConstraint: '^3.0.0',
+        }),
       ],
+      pagination: { currentPage: 1, lastPage: 1, perPage: 20, total: 2 },
     })
 
     const addonVersions = await mockTransport.commands?.forgeAddonVersions?.(
@@ -187,9 +196,29 @@ describe('Wails browser mock', () => {
         expect.objectContaining({
           kind: 'addon',
           itemId: 2,
+          version: '2.0.0',
+          sptVersionConstraint: '^4.0.0',
           contentLength: 1_024,
         }),
+        expect.objectContaining({
+          kind: 'addon',
+          itemId: 2,
+          version: '1.0.0',
+          sptVersionConstraint: '^3.0.0',
+        }),
       ],
+    })
+  })
+
+  test('settings mock persists custom endpoint and warning preference', async () => {
+    const mockTransport = createInMemoryWailsMock()
+    await mockTransport.commands?.saveSettings?.({
+      forgeEndpoint: 'https://forge.example/api/v0',
+      warnIncompatibleForgeInstall: false,
+    })
+    expect(await mockTransport.commands?.getSettings?.()).toMatchObject({
+      forgeEndpoint: 'https://forge.example/api/v0',
+      warnIncompatibleForgeInstall: false,
     })
   })
 
