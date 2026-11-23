@@ -204,7 +204,7 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		}
 		failures := make([]models.ArchiveFailure, 0, len(in.ArchivePaths))
 		l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
-		enable := s.Store.Config.Settings.EnableModsOnInstall
+		enable := s.GetSettings().EnableModsOnInstall
 		for i, path := range in.ArchivePaths {
 			if ctx.Err() != nil {
 				s.finishCancelled(e, in, l.Mods)

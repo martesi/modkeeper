@@ -74,6 +74,7 @@ const workspace = {
     accentColor: 'teal',
     language: 'en-US',
     enableModsOnInstall: true,
+    forgeEndpoint: '',
   },
 }
 

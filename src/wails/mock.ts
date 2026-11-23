@@ -84,6 +84,7 @@ export function createInMemoryWailsMock(): WailsMock {
             accentColor: '#6750a4',
             language: 'en-US',
             enableModsOnInstall: true,
+            forgeEndpoint: '',
           }
         )
       } catch {
@@ -92,6 +93,7 @@ export function createInMemoryWailsMock(): WailsMock {
           accentColor: '#6750a4',
           language: 'en-US',
           enableModsOnInstall: true,
+          forgeEndpoint: '',
         }
       }
     })(),

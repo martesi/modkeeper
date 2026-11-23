@@ -19,7 +19,7 @@
     "lint": "eslint src/redesign src/routes src/main.tsx src/components/ui/dialog.tsx e2e --max-warnings 0",
     "format:check": "prettier --check \"src/redesign/**/*.{ts,tsx,css}\" \"src/routes/**/*.{ts,tsx}\" src/main.tsx \"src/components/ui/**/*.{ts,tsx}\" \"e2e/**/*.ts\" scripts/test-paths.ts E2E_PATHS.md",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run scripts/check-tokens.ts && bun run paths:check",
-    "test": "bun test src e2e --path-ignore-patterns 'e2e/playwright/**'",
+    "test": "bun test src e2e --path-ignore-patterns 'e2e/playwright/**' --parallel=1",
     "test:e2e": "playwright test",
     "test:paths": "bun scripts/test-paths.ts select --changed",
     "paths:check": "bun scripts/test-paths.ts --check",

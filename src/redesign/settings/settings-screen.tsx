@@ -1,5 +1,6 @@
-import { Fragment } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
+import { Button } from '@/components/ui/button'
 import { FidelityPanel } from '../shared/components/fidelity-panel'
 import { settingsAtom } from '../state/settings-state'
 import { saveSettings, DEFAULT_ACCENT } from '../data/settings-repository'
@@ -16,19 +17,39 @@ const FALLBACK_SETTINGS: AppSettings = {
   accentColor: DEFAULT_ACCENT,
   language: 'en-US',
   enableModsOnInstall: true,
+  forgeEndpoint: '',
 }
 
 /**
- * Settings screen: page header, then one neutral panel
- * with divider-separated rows — App Theme, Accent Color, Interface Language. Every change saves
- * the FULL settings object (T1); the initializers' applier turns the replaced atom into visible
- * effect.
+ * Settings screen with divider-separated rows. Each update saves a patch against the latest
+ * settings snapshot; the repository serializes writes to avoid stale full-object overwrites.
  */
 export function SettingsScreen() {
   const settings = useAtomValue(settingsAtom) ?? FALLBACK_SETTINGS
+  const [forgeEndpointDraft, setForgeEndpointDraft] = useState<string | null>(
+    null,
+  )
+  const [savingForgeEndpoint, setSavingForgeEndpoint] = useState(false)
+  const endpoint = forgeEndpointDraft ?? settings.forgeEndpoint
+  const endpointDirty = endpoint !== settings.forgeEndpoint
+  const forgeEndpointDraftRef = useRef(endpoint)
 
   function save(patch: Partial<AppSettings>) {
-    void saveSettings({ ...settings, ...patch })
+    void saveSettings(patch)
+  }
+
+  async function saveForgeEndpoint() {
+    if (savingForgeEndpoint || !endpointDirty) return
+    const endpointToSave = endpoint
+    setSavingForgeEndpoint(true)
+    const saved = await saveSettings({ forgeEndpoint: endpointToSave })
+    if (
+      saved.forgeEndpoint === endpointToSave &&
+      forgeEndpointDraftRef.current === endpointToSave
+    ) {
+      setForgeEndpointDraft(null)
+    }
+    setSavingForgeEndpoint(false)
   }
 
   const rows = [
@@ -44,6 +65,38 @@ export function SettingsScreen() {
             save({ enableModsOnInstall })
           }
         />
+      ),
+    },
+    {
+      key: 'forge-endpoint',
+      label: 'Forge endpoint',
+      description: 'Leave empty to use the default Forge endpoint.',
+      control: (
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="Forge endpoint"
+            className="w-72 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+            placeholder="Default Forge endpoint"
+            value={endpoint}
+            onChange={(event) => {
+              const nextEndpoint = event.currentTarget.value
+              forgeEndpointDraftRef.current = nextEndpoint
+              setForgeEndpointDraft(
+                savingForgeEndpoint || nextEndpoint !== settings.forgeEndpoint
+                  ? nextEndpoint
+                  : null,
+              )
+            }}
+          />
+          <Button
+            disabled={!endpointDirty || savingForgeEndpoint}
+            onClick={() => void saveForgeEndpoint()}
+            size="sm"
+            type="button"
+          >
+            {savingForgeEndpoint ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
       ),
     },
     {

@@ -28,31 +28,44 @@ import { DEFAULT_ACCENT } from './settings-defaults'
 
 export { DEFAULT_ACCENT } from './settings-defaults'
 
+let settingsSaveQueue: Promise<void> = Promise.resolve()
+
 export async function saveSettings(
-  settings: AppSettings,
+  patch: Partial<AppSettings>,
 ): Promise<AppSettings> {
-  return runPlainCommand({
-    isTauri: hasNativeRuntime(),
-    invoke: () => commands.saveSettings(settings),
-    mock: () => {
-      const workspace = structuredClone(getMockWorkspace())
-      workspace.settings = settings
-      setMockWorkspace(workspace)
-      setSettings(settings)
-      return settings
-    },
-    apply: setSettings,
-    onDomainError: (error) => {
-      toast.error(resolveCommandError(error))
-      console.error('[redesign] saveSettings command error', error)
-    },
-    onTransportError: (error) => {
-      toast.error(commonText.backendUnavailable())
-      console.error('[redesign] saveSettings transport failure', error)
-    },
-    current: () =>
-      getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings,
+  const operation = settingsSaveQueue.then(() => {
+    const settings = {
+      ...(getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings),
+      ...patch,
+    }
+    return runPlainCommand({
+      isTauri: hasNativeRuntime(),
+      invoke: () => commands.saveSettings(settings),
+      mock: () => {
+        const workspace = structuredClone(getMockWorkspace())
+        workspace.settings = settings
+        setMockWorkspace(workspace)
+        setSettings(settings)
+        return settings
+      },
+      apply: setSettings,
+      onDomainError: (error) => {
+        toast.error(resolveCommandError(error))
+        console.error('[redesign] saveSettings command error', error)
+      },
+      onTransportError: (error) => {
+        toast.error(commonText.backendUnavailable())
+        console.error('[redesign] saveSettings transport failure', error)
+      },
+      current: () =>
+        getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings,
+    })
   })
+  settingsSaveQueue = operation.then(
+    () => undefined,
+    () => undefined,
+  )
+  return operation
 }
 
 /**

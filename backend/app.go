@@ -47,6 +47,7 @@ func NewAppAt(path string) *App {
 		return &App{ConfigPath: path, InitErr: err}
 	}
 	forgeService := forge.NewService(nil, service.ActiveSPTVersion)
+	forgeService.Endpoint = func() string { return service.GetSettings().ForgeEndpoint }
 	forgeService.Hooks = service.ForgeInstallHooks()
 	return &App{Library: service, Forge: forgeService, ConfigPath: path}
 }

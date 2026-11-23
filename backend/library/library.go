@@ -366,6 +366,7 @@ type Service struct {
 	installMarkerWriter    func(string, installTransaction) error
 	installTaskHook        func(string)
 	modWrites              sync.Mutex
+	configMu               sync.RWMutex
 }
 
 // DeriveLibraryRoot returns the default library location for a game install.
@@ -416,28 +417,34 @@ func (s *Service) Start() error {
 	s.startupMu.Lock()
 	s.startupStarted = true
 	s.startupMu.Unlock()
+	s.configMu.RLock()
+	var startupLibraryRoot string
 	if id := s.Store.Config.AppState.ActiveLibraryID; id != nil {
 		if k := s.Store.Config.FindLibrary(*id); k != nil {
-			go func() {
-				defer s.Registry.FinishStartupLoad(nil)
-				s.libraryMu.Lock()
-				defer s.libraryMu.Unlock()
-				l, err := Load(k.LibraryRoot)
-				if err != nil {
-					// Rust clears the active id on a load failure so the next
-					// launch does not repeat it, and persists the cleared config.
-					s.clearActiveLibrarySelection()
-					return
-				}
-				if recoveryErr := recoverInterruptedInstall(l); recoveryErr != nil {
-					s.setWarning(recoveryErr.Error())
-					return
-				}
-				s.active = l
-				s.Registry.SetActive(l.manifest.ID, true)
-			}()
-			return nil
+			startupLibraryRoot = k.LibraryRoot
 		}
+	}
+	s.configMu.RUnlock()
+	if startupLibraryRoot != "" {
+		go func() {
+			defer s.Registry.FinishStartupLoad(nil)
+			s.libraryMu.Lock()
+			defer s.libraryMu.Unlock()
+			l, err := Load(startupLibraryRoot)
+			if err != nil {
+				// Rust clears the active id on a load failure so the next
+				// launch does not repeat it, and persists the cleared config.
+				s.clearActiveLibrarySelection()
+				return
+			}
+			if recoveryErr := recoverInterruptedInstall(l); recoveryErr != nil {
+				s.setWarning(recoveryErr.Error())
+				return
+			}
+			s.active = l
+			s.Registry.SetActive(l.manifest.ID, true)
+		}()
+		return nil
 	}
 	s.Registry.FinishStartupLoad(nil)
 	return nil
@@ -447,12 +454,35 @@ func (s *Service) Start() error {
 // persists the cleared config. Only a save failure is surfaced, matching Rust's
 // startup path; the load error itself stays out of the workspace warning.
 func (s *Service) clearActiveLibrarySelection() {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
 	s.Store.Config.AppState.ActiveLibraryID = nil
 	s.active = nil
 	s.Registry.SetActive("", false)
 	if err := s.Store.Save(); err != nil {
 		s.setWarning(err.Error())
 	}
+}
+
+func cloneAppConfig(value config.AppConfig) config.AppConfig {
+	value.KnownLibraries = append([]config.KnownLibrary(nil), value.KnownLibraries...)
+	if value.AppState.ActiveLibraryID != nil {
+		activeID := *value.AppState.ActiveLibraryID
+		value.AppState.ActiveLibraryID = &activeID
+	}
+	return value
+}
+
+func (s *Service) updateConfigAndSave(update func(*config.AppConfig)) error {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	previous := cloneAppConfig(s.Store.Config)
+	update(&s.Store.Config)
+	if err := s.Store.Save(); err != nil {
+		s.Store.Config = previous
+		return err
+	}
+	return nil
 }
 
 // WaitForInitialLoad blocks on the startup handshake for the commands Rust
@@ -549,11 +579,10 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						s.setWarning(err.Error())
 						return err
 					}
-					prev := s.Store.Config
-					s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
-					s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
-					if err := s.Store.Save(); err != nil {
-						s.Store.Config = prev
+					if err := s.updateConfigAndSave(func(cfg *config.AppConfig) {
+						cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
+						cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
+					}); err != nil {
 						return err
 					}
 					s.active = l
@@ -595,11 +624,10 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				s.setWarning(err.Error())
 				return err
 			}
-			prev := s.Store.Config
-			s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
-			s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
-			if err := s.Store.Save(); err != nil {
-				s.Store.Config = prev
+			if err := s.updateConfigAndSave(func(cfg *config.AppConfig) {
+				cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
+				cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
+			}); err != nil {
 				return err
 			}
 			s.active = l
@@ -614,11 +642,10 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	if e != nil {
 		return e
 	}
-	prev := s.Store.Config
-	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: l.Root})
-	s.Store.Config.AppState.ActiveLibraryID = &l.manifest.ID
-	if e = s.Store.Save(); e != nil {
-		s.Store.Config = prev
+	if e = s.updateConfigAndSave(func(cfg *config.AppConfig) {
+		cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: l.Root})
+		cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
+	}); e != nil {
 		return e
 	}
 	s.active = l
@@ -630,11 +657,17 @@ func (s *Service) ActivateLibrary(id string) error {
 		return err
 	}
 	defer s.libraryMu.Unlock()
+	s.configMu.RLock()
 	k := s.Store.Config.FindLibrary(id)
-	if k == nil {
+	var libraryRoot string
+	if k != nil {
+		libraryRoot = k.LibraryRoot
+	}
+	s.configMu.RUnlock()
+	if libraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
-	l, e := Load(k.LibraryRoot)
+	l, e := Load(libraryRoot)
 	if e != nil {
 		return e
 	}
@@ -642,10 +675,9 @@ func (s *Service) ActivateLibrary(id string) error {
 		s.setWarning(e.Error())
 		return e
 	}
-	prev := s.Store.Config
-	s.Store.Config.AppState.ActiveLibraryID = &id
-	if e = s.Store.Save(); e != nil {
-		s.Store.Config = prev
+	if e = s.updateConfigAndSave(func(cfg *config.AppConfig) {
+		cfg.AppState.ActiveLibraryID = strPtr(id)
+	}); e != nil {
 		return e
 	}
 	s.active = l
@@ -657,8 +689,14 @@ func (s *Service) RenameLibrary(id, name string) error {
 		return err
 	}
 	defer s.libraryMu.Unlock()
+	s.configMu.RLock()
 	k := s.Store.Config.FindLibrary(id)
-	if k == nil {
+	var libraryRoot string
+	if k != nil {
+		libraryRoot = k.LibraryRoot
+	}
+	s.configMu.RUnlock()
+	if libraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	// Rust renames the live instance from memory and inactive libraries from
@@ -667,10 +705,10 @@ func (s *Service) RenameLibrary(id, name string) error {
 		s.active.manifest.Name = name
 		return s.active.Persist()
 	}
-	manifestPath := filepath.Join(k.LibraryRoot, "manifest.toml")
+	manifestPath := filepath.Join(libraryRoot, "manifest.toml")
 	m, err := readStrictManifest(manifestPath)
 	if err != nil {
-		return models.Fail(models.InvalidLibrary, k.LibraryRoot, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
+		return models.Fail(models.InvalidLibrary, libraryRoot, fmt.Sprintf("manifest.toml is invalid or unreadable: %v", err))
 	}
 	m.Name = name
 	f, err := os.CreateTemp(filepath.Dir(manifestPath), ".tmp-*")
@@ -696,8 +734,14 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		return err
 	}
 	defer s.libraryMu.Unlock()
+	s.configMu.RLock()
 	k := s.Store.Config.FindLibraryByHandle(id)
-	if k == nil {
+	var knownLibrary config.KnownLibrary
+	if k != nil {
+		knownLibrary = *k
+	}
+	s.configMu.RUnlock()
+	if knownLibrary.ID == "" && knownLibrary.LibraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	// Validate the purge and every recorded deployment artifact BEFORE touching
@@ -708,16 +752,16 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		if err := s.assertGameOrServerStopped(); err != nil {
 			return err
 		}
-		m, _, _, _, _, err := layout(k.LibraryRoot)
+		m, _, _, _, _, err := layout(knownLibrary.LibraryRoot)
 		if err != nil {
-			return models.Fail(models.InvalidLibrary, k.LibraryRoot, err.Error())
+			return models.Fail(models.InvalidLibrary, knownLibrary.LibraryRoot, err.Error())
 		}
-		gameRoot := resolveGameRoot(k.LibraryRoot, m.GameRoot)
+		gameRoot := resolveGameRoot(knownLibrary.LibraryRoot, m.GameRoot)
 		rules, discoverErr := spt.Discover(gameRoot)
 		if discoverErr != nil {
 			return discoverErr
 		}
-		depLayout = deployment.Layout{LibraryRoot: k.LibraryRoot, GameRoot: gameRoot, Rules: rules}
+		depLayout = deployment.Layout{LibraryRoot: knownLibrary.LibraryRoot, GameRoot: gameRoot, Rules: rules}
 		if err := deployment.VerifyOwnership(depLayout); err != nil {
 			return err
 		}
@@ -726,13 +770,12 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		}
 		mods = sortedMods(m.Mods)
 	}
-	prev := s.Store.Config
-	s.Store.Config.RemoveLibrary(k.ID)
-	if e := s.Store.Save(); e != nil {
-		s.Store.Config = prev
+	if e := s.updateConfigAndSave(func(cfg *config.AppConfig) {
+		cfg.RemoveLibrary(knownLibrary.ID)
+	}); e != nil {
 		return e
 	}
-	if s.active != nil && s.active.manifest.ID == k.ID {
+	if s.active != nil && s.active.manifest.ID == knownLibrary.ID {
 		s.active = nil
 		s.Registry.SetActive("", false)
 	}
@@ -745,19 +788,25 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		// Remove only the known library payload. Any unrecorded content keeps
 		// its parent directory in place.
 		for _, dir := range []string{"mods", "staging", "backups"} {
-			_ = os.Remove(filepath.Join(k.LibraryRoot, dir))
+			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, dir))
 		}
 		for _, file := range []string{"manifest.toml", "cache.toml", "deployment.toml"} {
-			_ = os.Remove(filepath.Join(k.LibraryRoot, file))
+			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, file))
 		}
-		if entries, e := os.ReadDir(k.LibraryRoot); e == nil && len(entries) == 0 {
-			return os.Remove(k.LibraryRoot)
+		if entries, e := os.ReadDir(knownLibrary.LibraryRoot); e == nil && len(entries) == 0 {
+			return os.Remove(knownLibrary.LibraryRoot)
 		}
 	}
 	return nil
 }
-func (s *Service) GetSettings() config.AppSettings { return s.Store.Config.Settings }
+func (s *Service) GetSettings() config.AppSettings {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	return s.Store.Config.Settings
+}
 func (s *Service) SaveSettings(v config.AppSettings) (config.AppSettings, error) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
 	old := s.Store.Config.Settings
 	s.Store.Config.Settings = v
 	if e := s.Store.Save(); e != nil {
