@@ -267,7 +267,7 @@ mod task_progress_contract_tests {
         }
     }
 
-    const WORKSPACE_JSON: &str = r#"{"libraries":[],"modsByLibraryId":{},"toolsByLibraryId":{},"settings":{"theme":"system","accentColor":"default","language":"en-US","enableModsOnInstall":true}}"#;
+    const WORKSPACE_JSON: &str = r#"{"libraries":[],"modsByLibraryId":{},"toolsByLibraryId":{},"settings":{"theme":"system","accentColor":"default","language":"en-US","enableModsOnInstall":true,"forgeEndpoint":""}}"#;
 
     #[test]
     fn existing_completion_event_payloads_keep_their_wire_shapes() {
