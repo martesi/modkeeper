@@ -265,8 +265,8 @@ test('shrinking results keeps keyboard activation on a valid option', async ({
   const input = page.getByRole('combobox')
   const options = dialog.getByRole('option')
   const count = await options.count()
-  if (count < 2) test.skip(true, 'Mock library needs at least two mods')
-  for (let index = 0; index < count; index += 1) {
+  if (count < 10) test.skip(true, 'Mock library needs at least ten mods')
+  for (let index = 0; index < 9; index += 1) {
     await input.press('ArrowDown')
   }
   await input.evaluate(async () => {
@@ -283,17 +283,22 @@ test('shrinking results keeps keyboard activation on a valid option', async ({
       ...workspace,
       modsByLibraryId: {
         ...workspace.modsByLibraryId,
-        [libraryId]: mods.slice(0, 1),
+        [libraryId]: mods.slice(0, 3),
       },
     })
   })
-  const firstId = await options.first().getAttribute('id')
-  if (!firstId) throw new Error('First result has no accessible id')
-  // The clamped index still references a rendered option.
-  await expect(input).toHaveAttribute('aria-activedescendant', firstId)
+  const thirdId = await options.nth(2).getAttribute('id')
+  const secondId = await options.nth(1).getAttribute('id')
+  if (!thirdId || !secondId) throw new Error('Result has no accessible id')
+  // The stale active index is clamped to the third visible result.
+  await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true')
+  await expect(input).toHaveAttribute('aria-activedescendant', thirdId)
+  await input.press('ArrowUp')
+  await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(input).toHaveAttribute('aria-activedescendant', secondId)
   await input.press('Enter')
   await expect(dialog).toBeHidden()
-  const onlyModId = firstId.replace('palette-result-', '')
+  const onlyModId = secondId.replace('palette-result-', '')
   await expect(
     page.locator(`[data-mod-id="${onlyModId}"]:not([role="option"])`),
   ).toBeFocused()
