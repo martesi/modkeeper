@@ -22,9 +22,6 @@ import { installLinguiMacroMock } from '../testing/lingui-macro'
 
 installLinguiMacroMock()
 
-mock.module('../i18n/registry-text', () => ({
-  registryText: new Proxy({}, { get: (_, key) => () => String(key) }),
-}))
 mock.module('./registry-toolbar', () => ({
   RegistryToolbar: ({
     modPage,
@@ -168,8 +165,8 @@ test('retry on All page three keeps the known addon bound', async () => {
     modPage: 3,
     addonPage: 2,
   })
-  expect(container.textContent).toContain('searchFailedTitle')
-  await click('retrySearch')
+  expect(container.textContent).toContain('Forge search failed')
+  await click('Retry Search')
   expect(search.mock.calls.at(-1)?.[0]).toMatchObject({
     modPage: 3,
     addonPage: 2,
@@ -182,7 +179,9 @@ test('stale search metadata shows the stale-cache banner', async () => {
     mods: { ...response.mods, stale: true },
   })
   await click('Next')
-  expect(container.textContent).toContain('staleCacheNotice')
+  expect(container.textContent).toContain(
+    'Showing cached Forge data. You are currently offline.',
+  )
 })
 
 test('initial search does not reset a page selected within the debounce window', async () => {
@@ -236,7 +235,7 @@ test('shrinking page counts are rediscovered after navigating to a later page', 
   ])
   expect(store.get(registryModPageAtom)).toBe(2)
   expect(store.get(registryAddonPageAtom)).toBe(2)
-  expect(container.textContent).not.toContain('searchFailedTitle')
+  expect(container.textContent).not.toContain('Forge search failed')
 })
 
 test('a later-page HTTP rejection resets once and a page-one failure is shown', async () => {
@@ -251,8 +250,8 @@ test('a later-page HTTP rejection resets once and a page-one failure is shown', 
     [2, 2],
     [1, 1],
   ])
-  expect(container.textContent).toContain('searchFailedTitle')
-  await click('retrySearch')
+  expect(container.textContent).toContain('Forge search failed')
+  await click('Retry Search')
   expect(search.mock.calls.at(-1)?.[0]).toMatchObject({
     modPage: 1,
     addonPage: 1,
