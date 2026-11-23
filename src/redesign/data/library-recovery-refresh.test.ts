@@ -218,7 +218,7 @@ function loadThroughBoundary(
   apply: (workspace: LibraryWorkspace) => void,
 ): Promise<LibraryWorkspace> {
   return runPlainCommand({
-    isTauri: true,
+    isNative: true,
     invoke: () => invoke,
     mock: emptyWorkspace,
     apply,

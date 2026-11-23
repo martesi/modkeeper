@@ -2,7 +2,7 @@
  * Library repository (consolidated-spec.md §10).
  *
  * The UI calls these functions, never the generated bindings directly. Every function is real-first /
- * mock-fallback: it tries the generated Tauri command, and if no backend is present (browser
+ * mock-fallback: it tries the generated Wails command, and if no backend is present (browser
  * prototype) or the transport fails (backend killed), it falls back to `example-data.ts`. Every
  * fallback is tagged `MOCK-FALLBACK` so it is a single grep target that goes to zero once the
  * backend covers it.
@@ -193,7 +193,7 @@ function applyWorkspace(workspace: LibraryWorkspace): LibraryWorkspace {
 }
 
 /**
- * The PLAIN command shape (§10): Tauri failures leave the current workspace as-is. Only the
+ * The PLAIN command shape (§10): Wails failures leave the current workspace as-is. Only the
  * browser prototype clones and mutates its fixture.
  */
 export type CommandOutcome<T> =
@@ -206,7 +206,7 @@ async function plainCommand(
 ): Promise<CommandOutcome<LibraryWorkspace>> {
   let failed = false
   const workspace = await runPlainCommand({
-    isTauri: hasNativeRuntime(),
+    isNative: hasNativeRuntime(),
     invoke: real,
     mock: () => {
       const workspace = structuredClone(getMockWorkspace())
@@ -245,9 +245,9 @@ async function fireAndTrack(
   mockComplete: (taskId: string) => void,
   onTaskRegistered?: (taskId: string) => void,
 ): Promise<OperationAccepted> {
-  const tauri = hasNativeRuntime()
+  const wails = hasNativeRuntime()
   return runTrackedCommand({
-    isTauri: tauri,
+    isNative: wails,
     ensureReady: ensureWorkspaceEventBus,
     onNotReady: () => toast.error(libraryText.taskUpdatesUnavailable()),
     invoke: real,
@@ -313,7 +313,7 @@ export async function loadLibraryWorkspace(
   let failed = false
   let superseded = false
   const workspace = await runPlainCommand({
-    isTauri: hasNativeRuntime(),
+    isNative: hasNativeRuntime(),
     invoke: () => commands.getLibraryWorkspace(),
     mock: getMockWorkspace,
     apply: applyWorkspace,

@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// createdTime reads the filesystem birth time. Rust's metadata.created() uses
+// createdTime reads the filesystem birth time. current implementation's metadata.created() uses
 // statx on Linux; ENOSYS and filesystems without btime fall back to mtime.
 func createdTime(path string) (time.Time, bool) {
 	var stat unix.Statx_t

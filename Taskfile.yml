@@ -3,63 +3,91 @@ version: '3'
 includes:
   windows: ./build/windows/Taskfile.yml
 
+vars:
+  SERVER_PORT: '{{.MODKEEPER_SERVER_PORT | default "8080"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default "34116"}}'
+
 tasks:
   build:
     cmds:
       - bun run build:wails
       - mkdir -p build/bin
       - go build -o build/bin/modkeeper .
+  frontend:build:
+    internal: true
+    sources:
+      - src/**/*
+      - public/**/*
+      - locales/**/*
+      - frontend/bindings/**/*
+      - e2e/**/*
+      - index.html
+      - vite.config.ts
+      - tsconfig*.json
+      - package.json
+      - bun.lock
+    generates:
+      - dist/.wails-build
+      - dist/index.html
+    cmds:
+      - bun run build:wails
+      - printf '%s\n' 'Wails frontend bundle' > dist/.wails-build
+
+  dist:placeholder:
+    internal: true
+    summary: Creates a placeholder dist/ so go:embed compiles when no frontend is built
+    status:
+      - test -f dist/index.html
+    cmds:
+      - mkdir -p dist
+      - |
+        cat > dist/index.html <<'HTML'
+        <!doctype html>
+        <title>Modkeeper</title>
+        <p>Development backend. Open the Vite URL.</p>
+        HTML
+
+  server:build:
+    internal: true
+    cmds:
+      - mkdir -p build/bin
+      - go build -tags server -buildvcs=false -o build/bin/modkeeper-server .
+
   build:server:
     summary: Builds the application in Wails server mode
     cmds:
-      - bun run build:wails
-      - mkdir -p build/bin
-      - go build -tags server -o build/bin/modkeeper-server .
+      - task: frontend:build
+      - task: server:build
+
   dev:server:
     summary: Runs a server-tagged backend with Vite HMR and real Wails IPC
     desc: |
       Runs the Go server on MODKEEPER_SERVER_PORT (default 8080) and Vite on
       WAILS_VITE_PORT (default 34116). Open the Vite URL to use the app.
+    deps:
+      - task: dev:backend
+      - task: dev:vite
+
+  dev:backend:
+    internal: true
+    env:
+      MODKEEPER_SERVER_HOST: 127.0.0.1
+      MODKEEPER_SERVER_PORT: '{{.SERVER_PORT}}'
     cmds:
-      - |
-        set -euo pipefail
-        server_port="{{.MODKEEPER_SERVER_PORT | default "8080"}}"
-        vite_port="{{.WAILS_VITE_PORT | default "34116"}}"
-        backend_url="http://127.0.0.1:${server_port}"
-        build_dir="$(mktemp -d "${TMPDIR:-/tmp}/modkeeper-server-dev.XXXXXX")"
-        backend_pid=""
-        vite_pid=""
-        cleanup() {
-          trap - EXIT
-          if [ -n "$vite_pid" ]; then kill "$vite_pid" 2>/dev/null || true; wait "$vite_pid" 2>/dev/null || true; fi
-          if [ -n "$backend_pid" ]; then kill "$backend_pid" 2>/dev/null || true; wait "$backend_pid" 2>/dev/null || true; fi
-          rm -rf "$build_dir"
-        }
-        trap cleanup EXIT
-        bun run build:wails
-        echo "Building server-tagged backend..."
-        go build -tags server -buildvcs=false -o "$build_dir/modkeeper-server" .
-        echo "Starting backend at ${backend_url}..."
-        MODKEEPER_SERVER_HOST=127.0.0.1 MODKEEPER_SERVER_PORT="$server_port" "$build_dir/modkeeper-server" &
-        backend_pid=$!
-        backend_ready=false
-        for _ in $(seq 1 100); do
-          if curl --silent --fail "${backend_url}/" >/dev/null 2>&1; then backend_ready=true; break; fi
-          sleep 0.1
-        done
-        if [ "$backend_ready" != true ]; then echo "Backend did not become ready at ${backend_url}" >&2; exit 1; fi
-        echo "Starting Vite at http://127.0.0.1:${vite_port}/..."
-        MODKEEPER_SERVER_DEV=1 MODKEEPER_SERVER_URL="$backend_url" WAILS_APP=true WAILS_VITE_PORT="$vite_port" \
-          bun run dev -- --host 127.0.0.1 --port "$vite_port" --strictPort &
-        vite_pid=$!
-        vite_ready=false
-        for _ in $(seq 1 100); do
-          if curl --silent --fail "http://127.0.0.1:${vite_port}/" >/dev/null 2>&1; then vite_ready=true; break; fi
-          sleep 0.1
-        done
-        if [ "$vite_ready" != true ]; then echo "Vite did not become ready at http://127.0.0.1:${vite_port}/" >&2; exit 1; fi
-        echo "Server development app ready at http://127.0.0.1:${vite_port}/"
-        wait "$vite_pid"
+      - task: dist:placeholder
+      - task: server:build
+      - ./build/bin/modkeeper-server
+
+  dev:vite:
+    internal: true
+    env:
+      MODKEEPER_SERVER_DEV: '1'
+      MODKEEPER_SERVER_URL: 'http://127.0.0.1:{{.SERVER_PORT}}'
+      WAILS_APP: 'true'
+      WAILS_VITE_PORT: '{{.VITE_PORT}}'
+    cmds:
+      - bun run dev -- --host 127.0.0.1 --port {{.VITE_PORT}} --strictPort
+
   run:server:
     summary: Builds and runs the application in Wails server mode
     deps:
@@ -76,8 +104,7 @@ tasks:
   package:windows:
     summary: Builds both Windows executables and machine/user NSIS installers
     cmds:
-      - bun run build:wails
-      - task: windows:package
+      - sh scripts/build-windows.sh
 
   run:
     cmds:

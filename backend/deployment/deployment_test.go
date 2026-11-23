@@ -68,7 +68,7 @@ func code(t *testing.T, e error, want string) {
 		t.Fatalf("error %v, want %s", e, want)
 	}
 }
-func TestTestCollisionDetection(t *testing.T) {
+func TestCollisionDetection(t *testing.T) {
 	l := fixture(t)
 	a := mod(t, l, "a", map[string]string{"BepInEx/plugins/conflict.dll": "a"})
 	b := mod(t, l, "b", map[string]string{"BepInEx/plugins/conflict.dll": "b"})
@@ -91,7 +91,7 @@ func testRecursiveLinkingLogic(t *testing.T) {
 		}
 	}
 }
-func TestTestPurgeRemovesDeactivatedMods(t *testing.T) {
+func TestPurgeRemovesDeactivatedMods(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	syncMods(t, l, m)
@@ -182,7 +182,7 @@ func testUntrackedFileSafetyInSharedFolder(t *testing.T) {
 	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/SharedDir/notes"), "user")
 	absent(t, filepath.Join(l.GameRoot, "BepInEx/plugins/SharedDir/a.dll"))
 }
-func TestTestUpgradeSuccessLeavesNoSnapshot(t *testing.T) {
+func TestUpgradeSuccessLeavesNoSnapshot(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "v1"})
 	syncMods(t, l, m)
@@ -270,7 +270,7 @@ func testSyncRefusesRedirectedRecordedDirectoriesWhenArtifactsAreMissing(t *test
 	must(t, os.Symlink(outside, p))
 	mustCollisionPreflight(t, l)
 }
-func TestDurableRustRecordsRoundTrip(t *testing.T) {
+func TestDurableRecordsRoundTrip(t *testing.T) {
 	l := fixture(t)
 	c := Cache{map[string]CachedMod{"a": {ID: "a", ModType: "server", Files: []string{"SPT/user/mods/A/file"}, Executables: []string{}}}}
 	must(t, SaveCache(l, c))

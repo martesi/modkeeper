@@ -25,7 +25,7 @@ export function clearRegistryInstallTimeout(taskId: string): void {
 }
 
 export async function runRegistryInstallTask<E>(input: {
-  isTauri: boolean
+  isNative: boolean
   ensureReady: () => Promise<boolean>
   onNotReady: () => void
   canStart: () => boolean
@@ -51,7 +51,7 @@ export async function runRegistryInstallTask<E>(input: {
 
   try {
     return await runTrackedCommand({
-      isTauri: input.isTauri,
+      isNative: input.isNative,
       ensureReady: input.ensureReady,
       onNotReady: input.onNotReady,
       canStart: input.canStart,

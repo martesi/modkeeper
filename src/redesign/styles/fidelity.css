@@ -4,7 +4,7 @@
  */
 
 /*
- * Browser-prototype page surface (the reference's `pageBg` radial gradient). Tauri Windows/macOS
+ * Browser-prototype page surface (the reference's `pageBg` radial gradient). Wails Windows/macOS
  * use a transparent native surface, while Linux uses this because its window is opaque (§6).
  */
 .mk-page-gradient {

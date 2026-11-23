@@ -4,7 +4,7 @@ export type CommandResult<T, E> =
 export type TrackedCommandResponse = { accepted: boolean }
 
 export async function runPlainCommand<T, E>(input: {
-  isTauri: boolean
+  isNative: boolean
   invoke: () => Promise<CommandResult<T, E>>
   mock: () => T | Promise<T>
   apply: (data: T) => void
@@ -22,7 +22,7 @@ export async function runPlainCommand<T, E>(input: {
     return input.current()
   }
   if (!isCurrent()) return stale()
-  if (!input.isTauri) {
+  if (!input.isNative) {
     const result = await input.mock()
     if (!input.applyMock) return result
     if (!isCurrent()) return stale()
@@ -33,7 +33,7 @@ export async function runPlainCommand<T, E>(input: {
 
   let result: CommandResult<T, E>
   try {
-    // Tauri IPC wraps domain errors in Result but rejects on transport failure.
+    // Wails IPC wraps domain errors in Result but rejects on transport failure.
     result = await input.invoke()
   } catch (error) {
     if (!isCurrent()) return stale()
@@ -53,7 +53,7 @@ export async function runPlainCommand<T, E>(input: {
 }
 
 export async function runTrackedCommand<E>(input: {
-  isTauri: boolean
+  isNative: boolean
   ensureReady?: () => Promise<boolean>
   onNotReady?: () => void
   canStart?: () => boolean
@@ -66,7 +66,7 @@ export async function runTrackedCommand<E>(input: {
   onDomainError: (error: E) => void
   onTransportError: (error: unknown) => void
 }): Promise<TrackedCommandResponse> {
-  if (input.isTauri && input.ensureReady && !(await input.ensureReady())) {
+  if (input.isNative && input.ensureReady && !(await input.ensureReady())) {
     input.onNotReady?.()
     return { accepted: false }
   }
@@ -80,7 +80,7 @@ export async function runTrackedCommand<E>(input: {
 
   const taskId = input.registerPending()
 
-  if (!input.isTauri) {
+  if (!input.isNative) {
     input.schedule(() => input.mockComplete(taskId))
     return { accepted: true }
   }

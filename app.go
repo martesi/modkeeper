@@ -61,20 +61,18 @@ func startBackend(app *application.App, appBackend *backend.App) {
 	}
 }
 
-// dropPayload maps Wails' native drop context to the renderer event payload.
-func dropPayload(files []string, target *application.DropTargetDetails) models.WindowFilesDroppedEvent {
-	payload := models.WindowFilesDroppedEvent{Filenames: files}
+// dropTarget converts Wails' drop context to the backend's plain type.
+func dropTarget(target *application.DropTargetDetails) *backend.DropTarget {
 	if target == nil {
-		return payload
+		return nil
 	}
-	payload.X = target.X
-	payload.Y = target.Y
-	payload.ElementDetails = models.WindowDropElementDetails{
-		ID:         target.ElementID,
+	return &backend.DropTarget{
+		X:          target.X,
+		Y:          target.Y,
+		ElementID:  target.ElementID,
 		ClassList:  target.ClassList,
 		Attributes: target.Attributes,
 	}
-	return payload
 }
 
 // forwardWindowFileDrops re-emits Wails' window file-drop event on the JS
@@ -88,7 +86,7 @@ func forwardWindowFileDrops(window *application.WebviewWindow) {
 		// Wails v3.1.0 still fans the event out through the application event
 		// bus, so another window would receive this drop too; consumers must
 		// filter on Sender when that matters.
-		if window.EmitEvent(fileDropEvent, dropPayload(files, target)) {
+		if window.EmitEvent(fileDropEvent, backend.WindowFilesDroppedPayload(files, dropTarget(target))) {
 			log.Printf("modkeeper: file-drop event was cancelled")
 		}
 	})

@@ -3,8 +3,7 @@ import type { PlatformKind } from '@/platform'
 
 /**
  * Wails v3 drags a frameless window from the CSS custom property
- * `--wails-draggable`, while Tauri uses the `data-tauri-drag-region`
- * attribute. The titlebar keeps both markers so one render serves both shells.
+ * `--wails-draggable` CSS custom property.
  */
 export function titlebarDragStyle(
   platform: PlatformKind,
@@ -17,7 +16,6 @@ export function TitleBarDragRegion({ platform }: { platform: PlatformKind }) {
   return (
     <div
       aria-hidden
-      data-tauri-drag-region
       style={titlebarDragStyle(platform)}
       className="absolute inset-0"
     />

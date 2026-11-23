@@ -6,9 +6,6 @@ pre-commit:
     prettier:
       glob: '**/*.{js,ts,jsx,tsx,css}'
       run: bun prettier {staged_files} --write && git add {staged_files}
-    rustfmt:
-      glob: 'src-tauri/**/*.rs'
-      run: sh scripts/with-rust.sh cargo fmt --all --manifest-path src-tauri/Cargo.toml && git add {staged_files}
     lingui-extract:
       glob: 'src/**/*.{ts,tsx}'
       run: bun run extract && git add locales/*.po

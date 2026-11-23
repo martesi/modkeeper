@@ -67,7 +67,7 @@ func searchParams(kind, query string, page, perPage int, version string) map[str
 }
 
 // Search returns the ForgeSearchResponse wire object. Each page carries its own
-// stale flag, matching the Tauri command's single response value.
+// stale flag in the single response value.
 func (s *Service) Search(query string, modPage, addonPage, perPage int) (json.RawMessage, error) {
 	version, err := s.active()
 	if err != nil {

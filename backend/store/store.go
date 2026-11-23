@@ -75,7 +75,7 @@ func SaveTo(path string, cfg config.AppConfig) error {
 }
 
 // saveFailure keeps the previous message while preserving the stable wire code
-// the Rust store emits for every write failure.
+// the store returns for every write failure.
 func saveFailure(err error) error {
 	return models.Fail(models.ConfigSaveFailed, fmt.Sprintf("save config: %v", err))
 }

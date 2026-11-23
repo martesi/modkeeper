@@ -37,28 +37,21 @@ afterAll(() => {
 describe('titlebar drag marker', () => {
   test('overlay carries the Wails CSS property only in the Wails shell', async () => {
     const wailsContainer = document.createElement('div')
-    const tauriContainer = document.createElement('div')
-    document.body.append(wailsContainer, tauriContainer)
+    document.body.append(wailsContainer)
     const wailsRoot = createRoot(wailsContainer)
-    const tauriRoot = createRoot(tauriContainer)
 
     await act(async () => {
       wailsRoot.render(createElement(TitleBarDragRegion, { platform: 'wails' }))
-      tauriRoot.render(createElement(TitleBarDragRegion, { platform: 'tauri' }))
     })
 
     const wailsOverlay = wailsContainer.firstElementChild as HTMLElement
-    const tauriOverlay = tauriContainer.firstElementChild as HTMLElement
-    expect(wailsOverlay.getAttribute('data-tauri-drag-region')).toBe('true')
+    expect(wailsOverlay.getAttribute('data-wails-drag-region')).toBeNull()
     expect(wailsOverlay.style.getPropertyValue('--wails-draggable')).toBe(
       'drag',
     )
-    expect(tauriOverlay.getAttribute('data-tauri-drag-region')).toBe('true')
-    expect(tauriOverlay.style.getPropertyValue('--wails-draggable')).toBe('')
 
     await act(async () => {
       wailsRoot.unmount()
-      tauriRoot.unmount()
     })
     document.body.replaceChildren()
   })

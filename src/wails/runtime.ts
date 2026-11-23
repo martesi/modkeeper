@@ -1,6 +1,5 @@
 /** Wails runtime detection and access. This module is safe in a normal browser. */
 export type WailsWindow = Window & {
-  __TAURI__?: unknown
   __MK_WAILS_MOCK__?: unknown
   _wails?: { environment?: { OS?: string } }
 }
@@ -44,8 +43,7 @@ export function isWailsDesktop(): boolean {
  * this value.
  */
 export function isNativeDesktopShell(): boolean {
-  const target = wailsWindow()
-  return Boolean(target?.__TAURI__) || isWailsDesktop()
+  return isWailsDesktop()
 }
 
 export function getNativeDesktopSnapshot(): boolean {
@@ -97,5 +95,5 @@ function notifyNativeDesktopChange(): void {
 
 export function hasNativeRuntime(): boolean {
   const target = wailsWindow()
-  return Boolean(target?.__TAURI__ || target?.__MK_WAILS_MOCK__ || isWails())
+  return Boolean(target?.__MK_WAILS_MOCK__ || isWails())
 }

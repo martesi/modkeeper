@@ -35,7 +35,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-// Plan prefers copies, matching Rust's volume capability probe.
+// Plan prefers copies when the source and destination support them.
 func Plan(mods []models.Mod, l Layout) (DeploymentPlan, error) {
 	file, directory, err := probeMethods(l)
 	if err != nil {

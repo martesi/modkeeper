@@ -75,7 +75,7 @@ func (m *Mod) UnmarshalTOML(data any) error {
 	return m.UnmarshalJSON(bytes)
 }
 
-// ApplyInstall implements the Rust install contract: updates retain enabled
+// ApplyInstall implements the current implementation install contract: updates retain enabled
 // state and original install time; only a new install takes the preference.
 // A local overwrite clears all Forge identity and version metadata.
 func (m *Mod) ApplyInstall(enableOnInstall bool, forge *ForgeIdentity, now time.Time) {

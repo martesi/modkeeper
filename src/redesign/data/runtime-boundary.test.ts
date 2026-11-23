@@ -6,11 +6,11 @@ import {
 } from './runtime-boundary'
 
 describe('runPlainCommand', () => {
-  test('uses the browser mock without invoking Tauri', async () => {
+  test('uses the browser mock without invoking Wails', async () => {
     let value = 0
     let invoked = false
     const result = await runPlainCommand({
-      isTauri: false,
+      isNative: false,
       invoke: async () => {
         invoked = true
         return { status: 'ok' as const, data: 3 }
@@ -20,7 +20,7 @@ describe('runPlainCommand', () => {
         return value
       },
       apply: () => {
-        throw new Error('browser mock must not use the Tauri apply path')
+        throw new Error('browser mock must not use the Wails apply path')
       },
       onDomainError: () => {},
       onTransportError: () => {},
@@ -32,10 +32,10 @@ describe('runPlainCommand', () => {
     expect(invoked).toBe(false)
   })
 
-  test('applies Tauri success data', async () => {
+  test('applies Wails success data', async () => {
     const applied: number[] = []
     const result = await runPlainCommand({
-      isTauri: true,
+      isNative: true,
       invoke: async () => ({ status: 'ok', data: 7 }),
       mock: () => -1,
       apply: (data) => applied.push(data),
@@ -48,11 +48,11 @@ describe('runPlainCommand', () => {
     expect(applied).toEqual([7])
   })
 
-  test('returns current state on a Tauri domain error', async () => {
+  test('returns current state on a Wails domain error', async () => {
     const errors: string[] = []
     let mockCalls = 0
     const result = await runPlainCommand({
-      isTauri: true,
+      isNative: true,
       invoke: async () => ({ status: 'error', error: 'domain' }),
       mock: () => {
         mockCalls += 1
@@ -69,11 +69,11 @@ describe('runPlainCommand', () => {
     expect(mockCalls).toBe(0)
   })
 
-  test('returns current state on a Tauri transport throw', async () => {
+  test('returns current state on a Wails transport throw', async () => {
     const errors: unknown[] = []
     let mockCalls = 0
     const result = await runPlainCommand({
-      isTauri: true,
+      isNative: true,
       invoke: async () => {
         throw new Error('IPC disconnected')
       },
@@ -94,10 +94,10 @@ describe('runPlainCommand', () => {
 })
 
 describe('runTrackedCommand', () => {
-  test('registers pending before invoke and returns Tauri data', async () => {
+  test('registers pending before invoke and returns Wails data', async () => {
     const order: string[] = []
     const result = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => {
         order.push('register')
         return 'task-1'
@@ -117,10 +117,10 @@ describe('runTrackedCommand', () => {
     expect(order).toEqual(['register', 'invoke:task-1'])
   })
 
-  test('clears pending once on a Tauri domain error without mock completion', async () => {
+  test('clears pending once on a Wails domain error without mock completion', async () => {
     const order: string[] = []
     const result = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => 'task-2',
       invoke: async () => ({ status: 'error', error: 'domain' }),
       clearPending: (taskId) => order.push(`clear:${taskId}`),
@@ -134,10 +134,10 @@ describe('runTrackedCommand', () => {
     expect(order).toEqual(['clear:task-2', 'domain:domain'])
   })
 
-  test('clears pending once on a Tauri throw without mock completion', async () => {
+  test('clears pending once on a Wails throw without mock completion', async () => {
     const order: string[] = []
     const result = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => 'task-3',
       invoke: async () => {
         throw new Error('IPC disconnected')
@@ -157,7 +157,7 @@ describe('runTrackedCommand', () => {
     const order: string[] = []
     let scheduled: (() => void) | undefined
     const result = await runTrackedCommand({
-      isTauri: false,
+      isNative: false,
       registerPending: () => {
         order.push('register')
         return 'task-browser'
@@ -217,7 +217,7 @@ describe('runTrackedCommand admission', () => {
     const ensure = createRetryableConnection(() => {})
     const run = () =>
       runTrackedCommand({
-        isTauri: true,
+        isNative: true,
         ensureReady: () =>
           ensure(async () => {
             attempts += 1
@@ -258,7 +258,7 @@ describe('runTrackedCommand admission', () => {
     let busy = 0
     const run = () =>
       runTrackedCommand({
-        isTauri: true,
+        isNative: true,
         canStart: () => registered === 0,
         onBusy: () => {
           busy += 1
@@ -288,7 +288,7 @@ describe('runTrackedCommand admission', () => {
   test('clears pending when the backend explicitly rejects an ok response', async () => {
     const cleared: string[] = []
     const result = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => 'task-rejected',
       invoke: async () => ({ status: 'ok', data: { accepted: false } }),
       clearPending: (taskId) => cleared.push(taskId),

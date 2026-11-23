@@ -1,7 +1,7 @@
 import { platformKind } from '@/platform'
 
 /**
- * Neutral browser/Linux fallback. In Tauri on Windows and macOS it renders nothing so the
+ * Neutral browser/Linux fallback. In Wails on Windows and macOS it renders nothing so the
  * transparent window can show its native surface.
  */
 export function AppBackground() {

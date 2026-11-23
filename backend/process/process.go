@@ -4,7 +4,7 @@ package process
 // Inspector checks whether any of the supplied executable paths are running.
 // Implementations must return errors rather than reporting a safe absence when
 // inspection cannot be completed. Platforms without native inspection report a
-// documented absence instead, matching the Rust shell's non-Windows behavior.
+// documented absence instead, matching the current implementation shell's non-Windows behavior.
 type Inspector interface {
 	IsRunning(paths []string) (bool, error)
 }

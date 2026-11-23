@@ -258,7 +258,7 @@ func TestVersionedRootName(t *testing.T) {
 	}
 }
 
-func TestTestCacheRebuildRenamesMismatchedFolder(t *testing.T) {
+func TestCacheRebuildRenamesMismatchedFolder(t *testing.T) {
 	env := testenv.New(t)
 	wrong := filepath.Join(env.ModsDir, "wrong-folder-name")
 	if err := os.MkdirAll(wrong, 0755); err != nil {

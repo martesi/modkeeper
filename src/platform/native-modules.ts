@@ -4,10 +4,6 @@
  * without process-global module mocks, which leak across files under Bun.
  */
 export const nativeModules = {
-  tauriDialog: () => import('@tauri-apps/plugin-dialog'),
-  tauriOpener: () => import('@tauri-apps/plugin-opener'),
-  tauriWindow: () => import('@tauri-apps/api/window'),
-  tauriLog: () => import('@tauri-apps/plugin-log'),
   wails: () => import('@wailsio/runtime'),
   appBindings: () => import('@/wails'),
 }

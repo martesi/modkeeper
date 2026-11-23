@@ -15,7 +15,7 @@ import (
 )
 
 // Forge command inputs are aliases of the shared durable models so Wails
-// bindings expose the same ForgeKind enum as the Tauri commands.
+// bindings expose the ForgeKind enum used by the frontend.
 type ForgeDownloadVersionInput = models.ForgeDownloadVersionInput
 type ForgeMatchInstalledModInput = models.ForgeMatchInstalledModInput
 type InstallMetadata struct {

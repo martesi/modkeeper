@@ -15,7 +15,7 @@ import { workspaceStatusAtom } from '../state/library-state'
  *
  * Pulls in the fidelity design tokens, catches render crashes at the top (§13), mounts startup
  * wiring, and frames the routed content in the shell. Mounted by the `__root.tsx` route adapter
- * with the router's Outlet as children (unless the legacy-UI toggle is on, §10a).
+ * with the router's Outlet as children.
  */
 export function RedesignRoot({ children }: { children: ReactNode }) {
   return (

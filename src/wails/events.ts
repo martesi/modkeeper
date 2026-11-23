@@ -1,16 +1,14 @@
 import { Events as WailsEvents } from '@wailsio/runtime'
-import { events as tauriEvents } from '@gen/bindings'
 import {
   TaskProgress as TaskProgressEventName,
   WorkspaceEvent as WorkspaceEventName,
 } from '../../frontend/bindings/events'
 import type { TaskProgressEvent, WorkspaceEvent } from './contract'
-import { wailsWindow } from './runtime'
 import { getWailsMock } from './mock'
 
 type Callback<T> = (event: { event: string; id: number; payload: T }) => void
 
-function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
+function makeEvent<T>(name: string) {
   const listen = (callback: Callback<T>): Promise<() => void> => {
     const mockOn = getWailsMock()?.events?.on
     if (mockOn) {
@@ -23,8 +21,6 @@ function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
       )
       return Promise.resolve(unlisten)
     }
-    if (wailsWindow()?.__TAURI__)
-      return tauriEvents[tauriName].listen(callback as never)
     return Promise.resolve(
       WailsEvents.On(name, (event) =>
         callback({ event: name, id: 0, payload: event.data as T }),
@@ -45,8 +41,6 @@ function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
       })
       return Promise.resolve(unlisten)
     }
-    if (wailsWindow()?.__TAURI__)
-      return tauriEvents[tauriName].once(callback as never)
     return Promise.resolve(
       WailsEvents.Once(name, (event) =>
         callback({ event: name, id: 0, payload: event.data as T }),
@@ -59,8 +53,6 @@ function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
       mockEmit(name, payload)
       return Promise.resolve()
     }
-    if (wailsWindow()?.__TAURI__)
-      return tauriEvents[tauriName].emit(payload as never)
     return WailsEvents.Emit(name, payload)
   }
   return Object.assign(
@@ -78,12 +70,6 @@ function makeEvent<T>(name: string, tauriName: keyof typeof tauriEvents) {
 }
 
 export const events = {
-  taskProgress: makeEvent<TaskProgressEvent>(
-    TaskProgressEventName,
-    'taskProgress',
-  ),
-  workspaceEvent: makeEvent<WorkspaceEvent>(
-    WorkspaceEventName,
-    'workspaceEvent',
-  ),
+  taskProgress: makeEvent<TaskProgressEvent>(TaskProgressEventName),
+  workspaceEvent: makeEvent<WorkspaceEvent>(WorkspaceEventName),
 }

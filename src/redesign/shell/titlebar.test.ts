@@ -51,7 +51,7 @@ describe('titlebar window controls', () => {
     expect(showWindowControls(true, isNativeDesktopShell())).toBe(false)
 
     setWailsBuildFlag('false')
-    setWindow({ __TAURI__: {} })
+    setWindow({ _wails: { environment: { OS: 'linux' } } })
     expect(showWindowControls(false, isNativeDesktopShell())).toBe(true)
   })
 })

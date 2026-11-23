@@ -14,7 +14,6 @@ dev_mode:
     dir:
       - .git
       - node_modules
-      - src-tauri
     file:
       - .DS_Store
       - "*_test.go"

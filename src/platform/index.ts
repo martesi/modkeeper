@@ -1,13 +1,8 @@
 import { z } from 'zod'
 import { nativeModules } from './native-modules'
-import {
-  hasNativeRuntime,
-  isNativeDesktopShell,
-  isWails,
-  wailsWindow,
-} from '@/wails/runtime'
+import { isNativeDesktopShell, isWails } from '@/wails/runtime'
 
-export type PlatformKind = 'wails' | 'tauri' | 'browser'
+export type PlatformKind = 'wails' | 'browser'
 export type FileSelectionOptions = {
   multiple?: boolean
   directory?: boolean
@@ -24,7 +19,6 @@ const wailsFileDropSchema = z.object({
 
 export function platformKind(): PlatformKind {
   if (isWails()) return 'wails'
-  if (hasNativeRuntime() && !wailsWindow()?.__MK_WAILS_MOCK__) return 'tauri'
   return 'browser'
 }
 
@@ -47,19 +41,6 @@ export function canOpenPath(): boolean {
   return isNativeDesktopShell()
 }
 
-function tauriDialogOptions(options: FileSelectionOptions) {
-  return {
-    multiple: options.multiple ?? false,
-    directory: options.directory ?? false,
-    filters: options.filters?.map(({ name, extensions }) => ({
-      name,
-      extensions,
-    })),
-    defaultPath: options.defaultPath,
-    title: options.title,
-  }
-}
-
 export async function pickFiles(
   options: FileSelectionOptions = {},
 ): Promise<string[]> {
@@ -79,11 +60,6 @@ export async function pickFiles(
     })
     return (Array.isArray(result) ? result : [result]).filter(Boolean)
   }
-  if (platformKind() === 'tauri') {
-    const { open } = await nativeModules.tauriDialog()
-    const result = await open(tauriDialogOptions(options))
-    return (Array.isArray(result) ? result : result ? [result] : []) as string[]
-  }
   return []
 }
 
@@ -102,78 +78,50 @@ export async function pickDirectory(
     })
     return typeof result === 'string' && result ? result : null
   }
-  if (platformKind() === 'tauri') {
-    const { open } = await nativeModules.tauriDialog()
-    const result = await open({
-      ...tauriDialogOptions(options),
-      directory: true,
-      multiple: false,
-    })
-    return typeof result === 'string' ? result : null
-  }
   return null
 }
 
 export async function openUrl(url: string): Promise<void> {
   if (platformKind() === 'wails' && hasNativeWindowChrome())
     return (await nativeModules.wails()).Browser.OpenURL(url)
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriOpener()).openUrl(url)
   // Server and browser pages have no desktop host to open the URL, so use the
   // local tab instead of asking the server to open it.
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 // openPath reveals a directory in the OS file manager and opens a file with
-// the OS default handler (the Wails OpenPath bound method). Tauri keeps its
-// opener plugin behavior.
+// the OS default handler through the Wails OpenPath bound method.
 export async function openPath(path: string): Promise<void> {
   if (!canOpenPath()) return
   if (platformKind() === 'wails') {
     const { openPathWithPlatformOpener } = await nativeModules.appBindings()
     return openPathWithPlatformOpener(path)
   }
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriOpener()).openPath(path)
 }
 
 export async function startWindowDrag(): Promise<void> {
   if (!hasNativeWindowChrome()) return
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow())
-      .getCurrentWindow()
-      .startDragging()
   // Wails starts a drag from the `--wails-draggable: drag` CSS property on the
   // titlebar element and exposes no public JS start-drag API.
 }
 
 export async function minimizeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow()).getCurrentWindow().minimize()
   if (platformKind() === 'wails')
     return (await nativeModules.wails()).Window.Minimise()
 }
 export async function toggleMaximizeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow())
-      .getCurrentWindow()
-      .toggleMaximize()
   if (platformKind() === 'wails')
     return (await nativeModules.wails()).Window.ToggleMaximise()
 }
 export async function closeWindow(): Promise<void> {
   if (!hasNativeWindowChrome()) return
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow()).getCurrentWindow().close()
   if (platformKind() === 'wails')
     return (await nativeModules.wails()).Window.Close()
 }
 export async function isWindowMaximized(): Promise<boolean> {
   if (!hasNativeWindowChrome()) return false
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow()).getCurrentWindow().isMaximized()
   if (platformKind() === 'wails')
     return (await nativeModules.wails()).Window.IsMaximised()
   return false
@@ -182,12 +130,6 @@ export async function setWindowChrome(
   option: 'overlay' | 'frameless',
 ): Promise<void> {
   if (!hasNativeWindowChrome()) return
-  if (platformKind() === 'tauri') {
-    const win = (await nativeModules.tauriWindow()).getCurrentWindow()
-    return option === 'overlay'
-      ? win.setTitleBarStyle('overlay')
-      : win.setDecorations(false)
-  }
   if (platformKind() === 'wails') {
     if (option === 'frameless')
       return (await nativeModules.wails()).Window.SetFrameless(true)
@@ -200,10 +142,6 @@ export async function onWindowResize(
   callback: () => void,
 ): Promise<() => void> {
   if (!hasNativeWindowChrome()) return () => {}
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow())
-      .getCurrentWindow()
-      .onResized(callback)
   if (platformKind() === 'wails')
     return (await nativeModules.wails()).Events.On(
       'common:WindowDidResize',
@@ -224,12 +162,6 @@ export async function onFileDrop(
       },
     )
   }
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriWindow())
-      .getCurrentWindow()
-      .onDragDropEvent((event) => {
-        if (event.payload.type === 'drop') callback(event.payload.paths)
-      })
   return () => {}
 }
 export async function log(message: string): Promise<void> {
@@ -237,8 +169,6 @@ export async function log(message: string): Promise<void> {
     const { logToFile } = await nativeModules.appBindings()
     return logToFile(message)
   }
-  if (platformKind() === 'tauri')
-    return (await nativeModules.tauriLog()).info(message)
   console.info(message)
 }
 

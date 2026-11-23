@@ -25,17 +25,11 @@ func (s *Service) SetEventSenders(progress func(models.TaskProgressEvent) error,
 
 // Wait blocks until every admitted background task has finished. It exists for
 // tests and shutdown; Wails callers never wait because operations are
-// fire-and-track like the Rust commands.
+// fire-and-track like the current implementation commands.
 func (s *Service) Wait() { s.tasks.Wait() }
 
 func (s *Service) beginTask() { s.tasks.Add(1) }
 func (s *Service) endTask()   { s.tasks.Done() }
-
-// SetInstallTaskHook is a test seam for holding a fire-and-track install at a
-// deterministic point while verifying concurrent command admission.
-func (s *Service) SetInstallTaskHook(hook func(string)) {
-	s.installTaskHook = hook
-}
 
 func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requireStopped bool) (*task_progress.Emitter, context.Context, error) {
 	if taskID == "" || libraryID == "" {
@@ -86,7 +80,7 @@ func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requi
 }
 
 // runTask starts an admitted operation in the background and returns the accept
-// signal immediately, matching the Rust fire-and-track commands.
+// signal immediately, matching the current implementation fire-and-track commands.
 func (s *Service) runTask(taskID string, run func() error) *models.OperationAccepted {
 	go func() {
 		defer s.endTask()
@@ -199,9 +193,6 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		return nil, err
 	}
 	return s.runTask(in.TaskID, func() error {
-		if s.installTaskHook != nil {
-			s.installTaskHook(in.TaskID)
-		}
 		failures := make([]models.ArchiveFailure, 0, len(in.ArchivePaths))
 		l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
 		enable := s.GetSettings().EnableModsOnInstall

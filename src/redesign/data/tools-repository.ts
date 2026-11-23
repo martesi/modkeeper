@@ -4,7 +4,7 @@
  * BACKEND GAP: the tool registry is still deferred backend-side (§7d — `toolsByLibraryId` is
  * present-but-empty and no tool commands exist in the bindings). Until those land, tool CRUD
  * mutates the workspace atom (and the browser fixture) only, so registered tools DO NOT persist
- * across app restarts in Tauri. The shapes below mirror the frozen `ToolSummary` so swapping the
+ * across app restarts in Wails. The shapes below mirror the frozen `ToolSummary` so swapping the
  * body for real `commands.*` calls is a local change.
  */
 import { canOpenPath, openPath, platformKind } from '@/platform'
@@ -82,7 +82,7 @@ export function deleteTool(input: {
 
 /**
  * Launch the file with the OS default handler through the platform opener.
- * This is the same handoff Tauri's opener plugin performs; whether the OS
+ * This is the same handoff Wails's opener plugin performs; whether the OS
  * executes a given file depends on its registered handler. Launch arguments
  * cannot be passed through the opener, so they are stored but unused, and the
  * UI labels them accordingly.

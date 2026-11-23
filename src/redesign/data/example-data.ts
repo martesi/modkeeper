@@ -1,7 +1,7 @@
 /*
  * Prototype fixture for the redesign (consolidated-spec.md §8.4 / §12 mock-fallback path).
  *
- * The walking skeleton runs entirely against this when no Tauri backend is present. It is a MUTABLE
+ * The walking skeleton runs entirely against this when no Wails backend is present. It is a MUTABLE
  * in-memory workspace on purpose: the mock branches of the repository mutate it so a toggle followed
  * by a sync reflect each other, exactly as the real backend's returned workspace would.
  */

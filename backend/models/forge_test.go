@@ -7,7 +7,7 @@ import (
 
 func forgePtr[T any](value T) *T { return &value }
 
-// requireForgeWire pins the exact Rust serde shape: key names, key order,
+// requireForgeWire pins the exact JSON shape: key names, key order,
 // explicit nulls for Option fields, and the stale flag inside each page.
 func requireForgeWire[T any](t *testing.T, value T, wire string) {
 	t.Helper()
@@ -111,7 +111,7 @@ func TestForgeVersionsPageWireShape(t *testing.T) {
 	requireForgeWire(t, page, wire)
 }
 
-// Empty slices must stay arrays. Rust Vec never serializes as null, so the
+// Empty slices must stay arrays, not null, so the
 // service-built arrays must round-trip without turning into JSON null.
 func TestForgeResponseCollectionsStayArrays(t *testing.T) {
 	search := ForgeSearchResponse{

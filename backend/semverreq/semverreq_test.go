@@ -2,9 +2,9 @@ package semverreq
 
 import "testing"
 
-// These cases come from the Rust semver fixture used by
-// library_service::addon_parent_constraints_are_evaluated_with_semver.
-func TestRustAddonFixture(t *testing.T) {
+// These cases cover the semver requirement forms used by Forge addon
+// compatibility checks.
+func TestAddonFixture(t *testing.T) {
 	for _, test := range []struct {
 		version    string
 		constraint string
@@ -76,7 +76,7 @@ func TestPrereleaseRules(t *testing.T) {
 	}
 }
 
-func TestRustRejectedSyntax(t *testing.T) {
+func TestRejectedSyntax(t *testing.T) {
 	for _, constraint := range []string{
 		"",
 		"||",

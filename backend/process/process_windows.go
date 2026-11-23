@@ -14,7 +14,7 @@ import (
 )
 
 // Windows matches process image paths from a toolhelp snapshot, mirroring the
-// Rust shell's exact-path check against sysinfo.
+// current implementation shell's exact-path check against sysinfo.
 type Windows struct{}
 
 func defaultInspector() Inspector { return Windows{} }
@@ -45,7 +45,7 @@ func (Windows) IsRunning(paths []string) (bool, error) {
 		if imageErr != nil {
 			// A process can exit between the snapshot and the query, and
 			// protected processes stay unreadable. Skipping them matches the
-			// Rust shell, whose sysinfo listing also omits inaccessible images.
+			// current implementation shell, whose sysinfo listing also omits inaccessible images.
 			if errors.Is(imageErr, windows.ERROR_INVALID_PARAMETER) || errors.Is(imageErr, windows.ERROR_ACCESS_DENIED) {
 				continue
 			}

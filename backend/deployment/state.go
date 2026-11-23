@@ -40,7 +40,7 @@ type DeploymentPlan struct {
 	Directories []string
 }
 
-// The helpers below keep the Rust error-code/data contract on the wire.
+// The helpers below preserve the error-code/data contract on the wire.
 func collision(path string) error {
 	return models.Fail(models.FileCollision, []string{fmt.Sprintf("Deployment target already exists or cannot be safely removed: '%s'.", path)})
 }
