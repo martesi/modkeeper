@@ -22,12 +22,6 @@ import { installWailsMock } from '@/wails/mock'
 import { installLinguiMacroMock } from '../testing/lingui-macro'
 
 installLinguiMacroMock()
-mock.module('../i18n/registry-text', () => ({
-  registryText: new Proxy({}, { get: (_, key) => () => String(key) }),
-}))
-mock.module('../i18n/settings-text', () => ({
-  settingsText: new Proxy({}, { get: (_, key) => () => String(key) }),
-}))
 const closeDialog = createContext(() => {})
 mock.module('@/components/ui/alert-dialog', () => ({
   AlertDialog: ({
@@ -306,10 +300,10 @@ test('incompatible install dialog cancels without installing', async () => {
     element.textContent?.includes('v2.0.0'),
   )
   await click(
-    row?.querySelector('button[aria-label="statusSptIncompatible"]') ??
+    row?.querySelector('button[aria-label="Incompatible with SPT 3.9.1"]') ??
       undefined,
   )
-  expect(container.textContent).toContain('incompatibleInstallTitle')
+  expect(container.textContent).toContain('Version may be incompatible')
   await click(findButton('Cancel'))
   expect(installed).toEqual([])
 })
@@ -321,7 +315,7 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
     element.textContent?.includes('v2.0.0'),
   )
   await click(
-    row?.querySelector('button[aria-label="statusSptIncompatible"]') ??
+    row?.querySelector('button[aria-label="Incompatible with SPT 3.9.1"]') ??
       undefined,
   )
   const checkboxes = container.querySelectorAll('input[type="checkbox"]')
@@ -329,7 +323,7 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
   await act(async () => {
     ;(disableWarning as HTMLInputElement).click()
   })
-  await click(findButton('installAnyway'))
+  await click(findButton('Install anyway'))
   expect(installed).toEqual([[versions.versions[0]!, 'library-one']])
   expect(store.get(settingsAtom)?.warnIncompatibleForgeInstall).toBe(false)
   expect(savedSettings[0]).toMatchObject({
@@ -351,10 +345,10 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
   )
   await click(
     incompatibleRow?.querySelector(
-      'button[aria-label="statusSptIncompatible"]',
+      'button[aria-label="Incompatible with SPT 3.9.1"]',
     ) ?? undefined,
   )
-  expect(container.textContent).not.toContain('incompatibleInstallTitle')
+  expect(container.textContent).not.toContain('Version may be incompatible')
   expect(installed).toHaveLength(2)
 
   await act(async () => {
@@ -363,7 +357,7 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
     )
   })
   const warningSwitch = container.querySelector(
-    'button[aria-label="warnIncompatibleForgeInstall"]',
+    'button[aria-label="Warn before installing incompatible Forge versions"]',
   )
   await click(warningSwitch as HTMLButtonElement | undefined)
   expect(store.get(settingsAtom)?.warnIncompatibleForgeInstall).toBe(true)
@@ -379,13 +373,13 @@ test('active library change dismisses confirmation and prevents wrong-library in
     element.textContent?.includes('v2.0.0'),
   )
   await click(
-    row?.querySelector('button[aria-label="statusSptIncompatible"]') ??
+    row?.querySelector('button[aria-label="Incompatible with SPT 3.9.1"]') ??
       undefined,
   )
-  expect(container.textContent).toContain('incompatibleInstallTitle')
+  expect(container.textContent).toContain('Version may be incompatible')
   await act(async () => {
     store.set(libraryWorkspaceAtom, workspace('library-two'))
   })
-  expect(container.textContent).not.toContain('incompatibleInstallTitle')
+  expect(container.textContent).not.toContain('Version may be incompatible')
   expect(installed).toEqual([])
 })
