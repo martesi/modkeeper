@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { isNativeDesktopShell } from '@/wails/runtime'
 import {
   clampTitlebarActiveIndex,
+  stepTitlebarActiveIndex,
   closeTitlebarPaletteOnEscape,
   getTitlebarSearchResults,
   focusTitlebarPaletteInput,
@@ -179,6 +180,16 @@ describe('titlebar command palette', () => {
     expect(clampTitlebarActiveIndex(3, 1)).toBe(1)
     expect(clampTitlebarActiveIndex(3, 9)).toBe(2)
     expect(clampTitlebarActiveIndex(3, -2)).toBe(0)
+  })
+
+  test('Arrow Up moves from the clamped visible result after the list shrinks', () => {
+    const storedActive = 9
+    const resultCount = 3
+    const visibleActive = clampTitlebarActiveIndex(resultCount, storedActive)
+    const nextActive = stepTitlebarActiveIndex(resultCount, storedActive, -1)
+
+    expect(visibleActive).toBe(2)
+    expect(nextActive).toBe(1)
   })
 
   test('keyboard activation after shrinking lands on a valid option', () => {

@@ -47,6 +47,7 @@ import {
 } from './shell-state'
 import {
   clampTitlebarActiveIndex,
+  stepTitlebarActiveIndex,
   closeTitlebarPaletteOnEscape,
   focusTitlebarPaletteInput,
   getTitlebarSearchKind,
@@ -380,12 +381,14 @@ export function TitleBar() {
               if (event.key === 'ArrowDown') {
                 event.preventDefault()
                 setActiveResult((index) =>
-                  Math.max(0, Math.min(index + 1, results.length - 1)),
+                  stepTitlebarActiveIndex(results.length, index, 1),
                 )
               }
               if (event.key === 'ArrowUp') {
                 event.preventDefault()
-                setActiveResult((index) => Math.max(index - 1, 0))
+                setActiveResult((index) =>
+                  stepTitlebarActiveIndex(results.length, index, -1),
+                )
               }
               if (event.key === 'Enter' && results[safeActive]) {
                 event.preventDefault()

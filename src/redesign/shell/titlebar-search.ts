@@ -122,6 +122,15 @@ export function clampTitlebarActiveIndex(
   return Math.min(Math.max(activeIndex, 0), resultCount - 1)
 }
 
+export function stepTitlebarActiveIndex(
+  resultCount: number,
+  activeIndex: number,
+  step: -1 | 1,
+): number {
+  const base = clampTitlebarActiveIndex(resultCount, activeIndex)
+  return clampTitlebarActiveIndex(resultCount, base + step)
+}
+
 export function isPendingLibraryRevealLive(
   request: PendingLibraryReveal,
   snapshot: LibraryRevealSnapshot,
