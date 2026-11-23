@@ -143,6 +143,46 @@ describe('registry repository Wails bridge', () => {
     remove()
   })
 
+  test('search surfaces items and stale flags from the Wails payload', async () => {
+    const staleItem = {
+      kind: 'mod' as const,
+      id: 1042,
+      guid: 'solarint.sain',
+      name: 'SAIN — Solarint AI',
+      slug: 'sain-solarint-ai',
+      teaser: 'Complete overhaul of Tarkov bot combat AI.',
+      thumbnail: null,
+      detailUrl: 'https://sp-mod.com/mods/1042/sain',
+      fikaCompatibility: true,
+      parentModId: null,
+      parentModGuid: null,
+      parentModName: null,
+      parentModDetailUrl: null,
+      modVersionConstraint: null,
+      isDetached: null,
+    }
+    const staleResponse = {
+      ...searchResponse,
+      mods: {
+        items: [staleItem],
+        pagination: { currentPage: 1, lastPage: 1, perPage: 20, total: 1 },
+        stale: true,
+      },
+    }
+    // @ts-expect-error Test supplies a minimal browser global.
+    globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+    const remove = installWailsMock({
+      events: { on: () => () => {} },
+      commands: { forgeSearch: () => staleResponse },
+    })
+    const result = await searchForge({ query: 'sain' })
+    expect(result.mods.items).toEqual([staleItem])
+    expect(result.mods.stale).toBe(true)
+    expect(result.addons.stale).toBe(false)
+    expect(result.sptVersion).toBe(searchResponse.sptVersion)
+    remove()
+  })
+
   test('detail and versions keep kind and page positional arguments', async () => {
     const remove = installBridge()
     await expect(getForgeModDetail('addon', 9)).resolves.toEqual(detailResponse)
