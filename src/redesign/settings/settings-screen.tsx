@@ -21,16 +21,14 @@ const FALLBACK_SETTINGS: AppSettings = {
 }
 
 /**
- * Settings screen: page header, then one neutral panel
- * with divider-separated rows — App Theme, Accent Color, Interface Language. Every change saves
- * the FULL settings object (T1); the initializers' applier turns the replaced atom into visible
- * effect.
+ * Settings screen: page header, then one neutral panel with divider-separated rows. Each change
+ * sends a partial setting update; the repository merges and serializes it before persisting.
  */
 export function SettingsScreen() {
   const settings = useAtomValue(settingsAtom) ?? FALLBACK_SETTINGS
 
   function save(patch: Partial<AppSettings>) {
-    void saveSettings({ ...settings, ...patch })
+    void saveSettings(patch)
   }
 
   const rows = [

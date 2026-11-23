@@ -314,7 +314,9 @@ describe('registry repository Wails bridge', () => {
       itemId: 9,
       versionId: 2,
     })
-    expect(toastError).toHaveBeenCalledWith('errorParentMissing')
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining('parent mod is not installed'),
+    )
     expect(getDefaultStore().get(registryInstallingMapAtom)).toEqual({})
     toastError.mockRestore()
     remove()

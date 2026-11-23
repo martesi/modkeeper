@@ -122,10 +122,7 @@ export function ForgeVersionList({
       onInstall(pending.version, pending.libraryId)
       return
     }
-    void saveSettings({
-      ...settings,
-      warnIncompatibleForgeInstall: false,
-    }).then(() => {
+    void saveSettings({ warnIncompatibleForgeInstall: false }).then(() => {
       if (activeLibraryIdRef.current === pending.libraryId) {
         onInstall(pending.version, pending.libraryId)
         return

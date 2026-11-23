@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
-import { Provider, createStore, type Store } from 'jotai'
+import { Provider, getDefaultStore } from 'jotai'
 import {
   act,
   createContext,
@@ -18,6 +18,7 @@ import type {
 } from '@/wails/contract'
 import { libraryWorkspaceAtom } from '../state/library-state'
 import { settingsAtom } from '../state/settings-state'
+import { installWailsMock } from '@/wails/mock'
 import { installLinguiMacroMock } from '../testing/lingui-macro'
 
 installLinguiMacroMock()
@@ -97,14 +98,6 @@ mock.module('@/components/ui/switch', () => ({
     }),
 }))
 
-let saveSetting: (settings: AppSettings) => Promise<AppSettings> = async (
-  settings,
-) => settings
-mock.module('../data/settings-repository', () => ({
-  DEFAULT_ACCENT: 'default',
-  saveSettings: (settings: AppSettings) => saveSetting(settings),
-}))
-
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()
 for (const [name, value] of Object.entries({
@@ -118,6 +111,7 @@ for (const [name, value] of Object.entries({
   Element: browserWindow.Element,
   Node: browserWindow.Node,
   Event: browserWindow.Event,
+  MouseEvent: browserWindow.MouseEvent,
   MutationObserver: browserWindow.MutationObserver,
   getComputedStyle: browserWindow.getComputedStyle.bind(browserWindow),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -200,10 +194,12 @@ const initialSettings: AppSettings = {
   forgeEndpoint: '',
 }
 
-let store: Store
+let store: ReturnType<typeof getDefaultStore>
 let container: HTMLDivElement
 let root: Root
 let installed: Array<[ForgeVersionsPage['versions'][number], string]>
+let savedSettings: AppSettings[] = []
+let removeWailsMock = () => {}
 
 function workspace(activeLibraryId: string): LibraryWorkspace {
   return {
@@ -244,9 +240,18 @@ function listElement(settings = initialSettings) {
 }
 
 async function render(element: React.ReactNode) {
-  store = createStore()
-  store.set(libraryWorkspaceAtom, workspace('library-one'))
+  store = getDefaultStore()
+  savedSettings = []
   store.set(settingsAtom, initialSettings)
+  store.set(libraryWorkspaceAtom, workspace('library-one'))
+  removeWailsMock = installWailsMock({
+    commands: {
+      saveSettings: (settings) => {
+        savedSettings.push(settings as AppSettings)
+        return settings
+      },
+    },
+  })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -270,7 +275,8 @@ afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
   installed = []
-  saveSetting = async (settings) => settings
+  savedSettings = []
+  removeWailsMock()
 })
 
 afterAll(() => {
@@ -309,10 +315,7 @@ test('incompatible install dialog cancels without installing', async () => {
 })
 
 test('dialog persists disable preference, and settings can re-enable warnings', async () => {
-  saveSetting = async (settings) => {
-    store.set(settingsAtom, settings)
-    return settings
-  }
+  savedSettings = []
   await render(listElement())
   const row = [...container.querySelectorAll('div')].find((element) =>
     element.textContent?.includes('v2.0.0'),
@@ -329,6 +332,10 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
   await click(findButton('installAnyway'))
   expect(installed).toEqual([[versions.versions[0]!, 'library-one']])
   expect(store.get(settingsAtom)?.warnIncompatibleForgeInstall).toBe(false)
+  expect(savedSettings[0]).toMatchObject({
+    warnIncompatibleForgeInstall: false,
+    forgeEndpoint: initialSettings.forgeEndpoint,
+  })
 
   await act(async () => {
     root.render(
@@ -360,6 +367,10 @@ test('dialog persists disable preference, and settings can re-enable warnings', 
   )
   await click(warningSwitch as HTMLButtonElement | undefined)
   expect(store.get(settingsAtom)?.warnIncompatibleForgeInstall).toBe(true)
+  expect(savedSettings[1]).toMatchObject({
+    warnIncompatibleForgeInstall: true,
+    forgeEndpoint: initialSettings.forgeEndpoint,
+  })
 })
 
 test('active library change dismisses confirmation and prevents wrong-library install', async () => {

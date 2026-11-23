@@ -27,7 +27,7 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 		Libraries:        []models.LibraryEntry{},
 		ModsByLibraryID:  map[string][]models.ModSummary{},
 		ToolsByLibraryID: map[string][]models.ToolSummary{},
-		Settings:         s.Store.Config.Settings,
+		Settings:         s.GetSettings(),
 	}
 	for _, known := range s.Store.Config.KnownLibraries {
 		m, ok := s.workspaceManifest(known)
