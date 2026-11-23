@@ -73,13 +73,14 @@ export function RegistryScreen() {
     activeLibrary?.id ?? '',
     activeLibrary?.sptVersion ?? '',
     debouncedSearch,
-    refreshKey,
   ].join('\u0000')
-  const requestKey = [scopeKey, modPage, addonPage].join('\u0000')
+  const requestKey = [scopeKey, refreshKey, modPage, addonPage].join('\u0000')
   const searchResponse =
     searchResult?.key === requestKey ? searchResult.response : null
   const paginationResponse =
     searchResult?.scopeKey === scopeKey ? searchResult.response : null
+  const needsPageReset =
+    !paginationResponse && (modPage !== 1 || addonPage !== 1)
   const requestedModPage = Math.max(
     1,
     Math.min(modPage, paginationResponse?.mods.pagination.lastPage ?? modPage),
@@ -126,6 +127,11 @@ export function RegistryScreen() {
   useEffect(() => {
     if (!activeLibrary) return
     if (isRateLimited) return
+    if (needsPageReset) {
+      setModPage(1)
+      setAddonPage(1)
+      return
+    }
 
     let isSubscribed = true
     const currentRequestKey = requestKey
@@ -167,6 +173,9 @@ export function RegistryScreen() {
     scopeKey,
     requestedModPage,
     requestedAddonPage,
+    needsPageReset,
+    setModPage,
+    setAddonPage,
   ])
 
   // Merge items based on kind filter
