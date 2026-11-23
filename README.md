@@ -87,6 +87,16 @@ The Wails frontend uses the same Vite sources and keeps the Tauri default unchan
 - Run `bun run build` for the existing Tauri-compatible frontend build.
 - After `wails3 dev` starts, `bun run e2e:wails` checks that its Vite server serves the app shell. This is not a native-window or IPC test.
 
+For Chromium tests with WSL GPU acceleration, use the `e2e-wsl-gpu` shell.
+It requires `/dev/dri`, `/dev/dxg`, `/run/opengl-driver`, `/usr/lib/wsl/lib`,
+and `/usr/lib/wsl/drivers` to be available in the environment. Run a virtual X
+server for each command and check the WebGL renderer before running tests:
+
+```sh
+nix develop .#e2e-wsl-gpu -c xvfb-run -a bun scripts/check-wsl-gpu.mjs
+nix develop .#e2e-wsl-gpu -c xvfb-run -a bun run test:e2e
+```
+
 The frontend event APIs are not interchangeable. Tauri uses `@tauri-apps/api/event` listeners and emitters. Wails v3 uses generated Go service bindings and `@wailsio/runtime` events.
 
 ### Initial Setup
