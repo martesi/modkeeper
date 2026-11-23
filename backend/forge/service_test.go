@@ -264,3 +264,16 @@ func TestFreshCacheTTLAndRedirectTargetsAreNotPinned(t *testing.T) {
 		t.Fatal("redirect target cached")
 	}
 }
+func TestSearchSurfacesResolverError(t *testing.T) {
+	resolverErr := errors.New("store unavailable")
+	s := NewService(NewClient(), func() (string, error) { return "", resolverErr })
+	if _, err := s.Search("", 1, 1, 20); !errors.Is(err, resolverErr) {
+		t.Fatalf("Search: expected resolver error, got %v", err)
+	}
+	if _, err := s.Detail("mod", 1); !errors.Is(err, resolverErr) {
+		t.Fatalf("Detail: expected resolver error, got %v", err)
+	}
+	if _, err := s.Versions("mod", 1, 1); !errors.Is(err, resolverErr) {
+		t.Fatalf("Versions: expected resolver error, got %v", err)
+	}
+}
