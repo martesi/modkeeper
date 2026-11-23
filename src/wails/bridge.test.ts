@@ -136,6 +136,38 @@ describe('Wails browser mock', () => {
     remove()
   })
 
+  test('forge mock returns Wails-shaped registry responses', async () => {
+    const mockTransport = createInMemoryWailsMock()
+    const search = await mockTransport.commands?.forgeSearch?.(
+      'fixture',
+      1,
+      1,
+      10,
+    )
+    expect(search).toHaveProperty('sptVersion', '3.9.0')
+    expect(search).toHaveProperty('mods.items.0.kind', 'mod')
+    expect(search).toHaveProperty('mods.pagination.currentPage', 1)
+    expect(search).toHaveProperty('mods.pagination.perPage', 10)
+    expect(search).toHaveProperty('mods.stale', false)
+    expect(search).toHaveProperty('addons.items.length', 0)
+    expect(search).toHaveProperty('addons.pagination.currentPage', 1)
+    expect(search).toHaveProperty('addons.stale', false)
+    expect(
+      await mockTransport.commands?.forgeModDetail?.('mod', 1),
+    ).toMatchObject({
+      kind: 'mod',
+      id: 1,
+      stale: false,
+    })
+    expect(
+      await mockTransport.commands?.forgeModVersions?.('mod', 1, 1),
+    ).toMatchObject({
+      kind: 'mod',
+      itemId: 1,
+      versions: [expect.objectContaining({ kind: 'mod', itemId: 1 })],
+    })
+  })
+
   test('every generated command has a resolving mock handler', async () => {
     const mockTransport = createInMemoryWailsMock()
     const missing = Object.keys(commands).filter(
@@ -161,12 +193,20 @@ describe('Wails browser mock', () => {
       ],
       rebuildLibraryCache: [{ taskId: 'unit-task', libraryId: 'mock-library' }],
       saveSettings: [{}],
-      forgeSearch: ['fixture', 0, 0, 10],
+      forgeSearch: ['fixture', 1, 1, 10],
       forgeModDetail: ['mod', 1],
-      forgeModVersions: ['mod', 1, 0],
-      forgeAddonVersions: [1, 0],
+      forgeModVersions: ['mod', 1, 1],
+      forgeAddonVersions: [1, 1],
       forgeDownloadVersion: [{}],
-      forgeMatchInstalledMod: [{}],
+      forgeMatchInstalledMod: [
+        {
+          libraryId: 'mock-library',
+          installedModId: 'mock-mod-active',
+          kind: 'mod',
+          itemId: 1,
+          versionId: 101,
+        },
+      ],
       applyWindowEffect: [null],
     }
     for (const name of Object.keys(commands)) {

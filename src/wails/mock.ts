@@ -178,27 +178,130 @@ export function createInMemoryWailsMock(): WailsMock {
         )
       return workspace.settings
     },
-    forgeSearch: async (query: string) =>
-      query.trim()
-        ? {
-            mods: [
-              { id: 1, name: `Mock ${query}`, summary: 'Mock Forge result' },
-            ],
-            addons: [],
-            pagination: {},
-          }
-        : { mods: [], addons: [], pagination: {} },
-    forgeModDetail: async (_kind: string, id: number) => ({
+    forgeSearch: async (
+      query: string,
+      modPage: number,
+      addonPage: number,
+      perPage: number,
+    ) => {
+      const matching = query.trim()
+      const mods = matching
+        ? [
+            {
+              kind: 'mod',
+              id: 1,
+              guid: 'mock.mod',
+              name: `Mock ${matching} Zulu`,
+              slug: null,
+              teaser: 'Mock Forge result',
+              thumbnail: null,
+              detailUrl: null,
+              fikaCompatibility: null,
+              parentModId: null,
+              parentModGuid: null,
+              parentModName: null,
+              parentModDetailUrl: null,
+              modVersionConstraint: null,
+              isDetached: null,
+            },
+            {
+              kind: 'mod',
+              id: 2,
+              guid: 'mock.mod.alpha',
+              name: `Mock ${matching} Alpha`,
+              slug: null,
+              teaser: 'Mock Forge result',
+              thumbnail: null,
+              detailUrl: null,
+              fikaCompatibility: null,
+              parentModId: null,
+              parentModGuid: null,
+              parentModName: null,
+              parentModDetailUrl: null,
+              modVersionConstraint: null,
+              isDetached: null,
+            },
+          ]
+        : []
+      const addons: unknown[] = []
+      const page = (items: unknown[], currentPage: number) => {
+        const pageSize = Math.max(1, perPage)
+        return {
+          items: items.slice(
+            (currentPage - 1) * pageSize,
+            currentPage * pageSize,
+          ),
+          pagination: {
+            currentPage,
+            lastPage: Math.max(1, Math.ceil(items.length / pageSize)),
+            perPage,
+            total: items.length,
+          },
+          stale: false,
+        }
+      }
+      return {
+        sptVersion: '3.9.0',
+        mods: page(mods, modPage),
+        addons: page(addons, addonPage),
+      }
+    },
+    forgeModDetail: async (kind: string, id: number) => ({
+      kind,
       id,
-      name: `Mock mod ${id}`,
+      guid: `mock.${kind}.${id}`,
+      name: `Mock ${kind} ${id}`,
+      slug: null,
+      teaser: 'Mock Forge result',
+      description: 'Mock Forge description',
+      thumbnail: null,
+      detailUrl: null,
+      fikaCompatibility: null,
+      parentModId: null,
+      parent: null,
+      modVersionConstraint: null,
+      isDetached: null,
+      stale: false,
     }),
-    forgeModVersions: async (_kind: string, id: number) => ({
-      data: [{ id, name: '1.0.0' }],
-      pagination: {},
+    forgeModVersions: async (kind: string, id: number, page: number) => ({
+      kind,
+      itemId: id,
+      versions: [
+        {
+          kind,
+          itemId: id,
+          id: id * 100 + 1,
+          version: '1.0.0',
+          description: null,
+          link: '#',
+          contentLength: null,
+          sptVersionConstraint: null,
+          fikaCompatibility: null,
+          dependencies: [],
+        },
+      ],
+      pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 1 },
+      stale: false,
     }),
-    forgeAddonVersions: async (id: number) => ({
-      data: [{ id, name: '1.0.0' }],
-      pagination: {},
+    forgeAddonVersions: async (id: number, page: number) => ({
+      kind: 'addon',
+      itemId: id,
+      versions: [
+        {
+          kind: 'addon',
+          itemId: id,
+          id: id * 100 + 1,
+          version: '1.0.0',
+          description: null,
+          link: '#',
+          contentLength: null,
+          sptVersionConstraint: null,
+          fikaCompatibility: null,
+          dependencies: [],
+        },
+      ],
+      pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 1 },
+      stale: false,
     }),
     forgeDownloadVersion: async () => ({ accepted: true }),
     forgeMatchInstalledMod: () => structuredClone(workspace),
