@@ -13,7 +13,11 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ForgeSearchResponse, LibraryWorkspace } from '@/wails/contract'
 import { libraryWorkspaceAtom } from '../state/library-state'
-import { registrySearchAtom } from '../state/registry-state'
+import {
+  registryAddonPageAtom,
+  registryModPageAtom,
+  registrySearchAtom,
+} from '../state/registry-state'
 import { installLinguiMacroMock } from '../testing/lingui-macro'
 
 installLinguiMacroMock()
@@ -170,6 +174,63 @@ test('retry on All page three keeps the known addon bound', async () => {
     modPage: 3,
     addonPage: 2,
   })
+})
+
+test('shrinking page counts are rediscovered after navigating to a later page', async () => {
+  await click('Next')
+  const start = search.mock.calls.length
+  search.mockImplementation(async (input) => ({
+    ...response,
+    mods: {
+      ...response.mods,
+      pagination: {
+        ...response.mods.pagination,
+        currentPage: input.modPage ?? 1,
+        lastPage: 2,
+      },
+    },
+    addons: {
+      ...response.addons,
+      pagination: {
+        ...response.addons.pagination,
+        currentPage: input.addonPage ?? 1,
+        lastPage: 1,
+      },
+    },
+  }))
+  await click('Next')
+  expect(
+    search.mock.calls
+      .slice(start)
+      .map(([input]) => [input.modPage, input.addonPage]),
+  ).toEqual([
+    [3, 2],
+    [2, 1],
+  ])
+  expect(store.get(registryModPageAtom)).toBe(2)
+  expect(store.get(registryAddonPageAtom)).toBe(2)
+  expect(container.textContent).not.toContain('searchFailedTitle')
+})
+
+test('a later-page HTTP rejection resets once and a page-one failure is shown', async () => {
+  search.mockRejectedValue({ code: 'IOError', data: 'Forge returned HTTP 422' })
+  const start = search.mock.calls.length
+  await click('Next')
+  expect(
+    search.mock.calls
+      .slice(start)
+      .map(([input]) => [input.modPage, input.addonPage]),
+  ).toEqual([
+    [2, 2],
+    [1, 1],
+  ])
+  expect(container.textContent).toContain('searchFailedTitle')
+  await click('retrySearch')
+  expect(search.mock.calls.at(-1)?.[0]).toMatchObject({
+    modPage: 1,
+    addonPage: 1,
+  })
+  expect(search.mock.calls.length - start).toBe(3)
 })
 
 test('a new library or SPT version starts from page one before discovering bounds', async () => {

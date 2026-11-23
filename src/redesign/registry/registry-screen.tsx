@@ -144,6 +144,31 @@ export function RegistryScreen() {
     })
       .then((data) => {
         if (!isSubscribed) return
+        const lastModPage = Math.max(
+          1,
+          data.mods.pagination.lastPage ?? modPage,
+        )
+        const lastAddonPage = Math.max(
+          1,
+          data.addons.pagination.lastPage ?? addonPage,
+        )
+        if (
+          requestedModPage > lastModPage ||
+          requestedAddonPage > lastAddonPage
+        ) {
+          const allLastPage = Math.max(lastModPage, lastAddonPage)
+          setModPage(
+            Math.min(modPage, kindFilter === 'all' ? allLastPage : lastModPage),
+          )
+          setAddonPage(
+            Math.min(
+              addonPage,
+              kindFilter === 'all' ? allLastPage : lastAddonPage,
+            ),
+          )
+          setSearchResult({ key: currentRequestKey, scopeKey, response: data })
+          return
+        }
         setSearchResult({
           key: currentRequestKey,
           scopeKey,
@@ -153,6 +178,23 @@ export function RegistryScreen() {
       })
       .catch((error: unknown) => {
         if (!isSubscribed) return
+        // The bridge preserves only the HTTP status, not a range error body.
+        // Rediscover once from page one; other failures retain their retry bounds.
+        if (
+          (modPage > 1 || addonPage > 1) &&
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'IOError' &&
+          'data' in error &&
+          typeof error.data === 'string' &&
+          /^Forge returned HTTP (404|422)$/.test(error.data)
+        ) {
+          setSearchResult(null)
+          setModPage(1)
+          setAddonPage(1)
+          return
+        }
         setFailedRequest({
           key: currentRequestKey,
           kind: classifyRegistryRequestFailure(error),
@@ -174,6 +216,7 @@ export function RegistryScreen() {
     requestedModPage,
     requestedAddonPage,
     needsPageReset,
+    kindFilter,
     setModPage,
     setAddonPage,
   ])
