@@ -257,6 +257,30 @@ test('shrinking results keeps keyboard activation on a valid option', async ({
   page,
 }) => {
   await openLibrary(page)
+  await page.evaluate(async () => {
+    const statePath = '/src/redesign/state/library-state.ts'
+    const jotaiPath = '/node_modules/.vite/deps/jotai.js'
+    const state = await import(statePath)
+    const { getDefaultStore } = await import(jotaiPath)
+    const store = getDefaultStore()
+    const workspace = store.get(state.libraryWorkspaceAtom)
+    const libraryId = workspace?.activeLibraryId
+    if (!workspace || !libraryId) throw new Error('No active library')
+    const mods = workspace.modsByLibraryId[libraryId] ?? []
+    if (mods.length === 0) throw new Error('Library has no mods to seed')
+    const seededMods = Array.from({ length: 10 }, (_, index) => ({
+      ...mods[index % mods.length],
+      id: `palette-regression-${index}`,
+      name: `Palette regression mod ${index}`,
+    }))
+    store.set(state.libraryWorkspaceAtom, {
+      ...workspace,
+      modsByLibraryId: {
+        ...workspace.modsByLibraryId,
+        [libraryId]: seededMods,
+      },
+    })
+  })
   await page
     .getByRole('button', { name: /search mods/i })
     .first()
@@ -265,8 +289,8 @@ test('shrinking results keeps keyboard activation on a valid option', async ({
   const input = page.getByRole('combobox')
   const options = dialog.getByRole('option')
   const count = await options.count()
-  if (count < 10) test.skip(true, 'Mock library needs at least ten mods')
-  for (let index = 0; index < 9; index += 1) {
+  expect(count).toBe(10)
+  for (let index = 0; index < 4; index += 1) {
     await input.press('ArrowDown')
   }
   await input.evaluate(async () => {
@@ -290,7 +314,7 @@ test('shrinking results keeps keyboard activation on a valid option', async ({
   const thirdId = await options.nth(2).getAttribute('id')
   const secondId = await options.nth(1).getAttribute('id')
   if (!thirdId || !secondId) throw new Error('Result has no accessible id')
-  // The stale active index is clamped to the third visible result.
+  // Shrinking from active index 4 clamps selection to the third visible result.
   await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true')
   await expect(input).toHaveAttribute('aria-activedescendant', thirdId)
   await input.press('ArrowUp')
