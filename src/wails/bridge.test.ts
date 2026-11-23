@@ -159,12 +159,37 @@ describe('Wails browser mock', () => {
       id: 1,
       stale: false,
     })
-    expect(
-      await mockTransport.commands?.forgeModVersions?.('mod', 1, 1),
-    ).toMatchObject({
+    const modVersions = await mockTransport.commands?.forgeModVersions?.(
+      'mod',
+      1,
+      1,
+    )
+    expect(modVersions).toMatchObject({
       kind: 'mod',
       itemId: 1,
-      versions: [expect.objectContaining({ kind: 'mod', itemId: 1 })],
+      versions: [
+        expect.objectContaining({
+          kind: 'mod',
+          itemId: 1,
+          contentLength: 1_024,
+        }),
+      ],
+    })
+
+    const addonVersions = await mockTransport.commands?.forgeAddonVersions?.(
+      2,
+      1,
+    )
+    expect(addonVersions).toMatchObject({
+      kind: 'addon',
+      itemId: 2,
+      versions: [
+        expect.objectContaining({
+          kind: 'addon',
+          itemId: 2,
+          contentLength: 1_024,
+        }),
+      ],
     })
   })
 

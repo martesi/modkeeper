@@ -3,6 +3,7 @@
  * Event names are exactly `task_progress` and `workspace-event`.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { ForgeKind, ForgeVersionsPage } from './contract'
 export type WailsMock = {
   commands?: Record<string, (...args: unknown[]) => unknown>
   events?: {
@@ -27,6 +28,33 @@ export function installWailsMock(mock: WailsMock): () => void {
   window.__MK_WAILS_MOCK__ = mock
   return () => {
     if (window.__MK_WAILS_MOCK__ === mock) delete window.__MK_WAILS_MOCK__
+  }
+}
+
+function createForgeVersionsPage(
+  kind: ForgeKind,
+  itemId: number,
+  page: number,
+): ForgeVersionsPage {
+  return {
+    kind,
+    itemId,
+    versions: [
+      {
+        kind,
+        itemId,
+        id: itemId * 100 + 1,
+        version: '1.0.0',
+        description: null,
+        link: '#',
+        contentLength: 1_024,
+        sptVersionConstraint: null,
+        fikaCompatibility: null,
+        dependencies: [],
+      },
+    ],
+    pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 1 },
+    stale: false,
   }
 }
 
@@ -263,46 +291,15 @@ export function createInMemoryWailsMock(): WailsMock {
       isDetached: null,
       stale: false,
     }),
-    forgeModVersions: async (kind: string, id: number, page: number) => ({
-      kind,
-      itemId: id,
-      versions: [
-        {
-          kind,
-          itemId: id,
-          id: id * 100 + 1,
-          version: '1.0.0',
-          description: null,
-          link: '#',
-          contentLength: null,
-          sptVersionConstraint: null,
-          fikaCompatibility: null,
-          dependencies: [],
-        },
-      ],
-      pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 1 },
-      stale: false,
-    }),
-    forgeAddonVersions: async (id: number, page: number) => ({
-      kind: 'addon',
-      itemId: id,
-      versions: [
-        {
-          kind: 'addon',
-          itemId: id,
-          id: id * 100 + 1,
-          version: '1.0.0',
-          description: null,
-          link: '#',
-          contentLength: null,
-          sptVersionConstraint: null,
-          fikaCompatibility: null,
-          dependencies: [],
-        },
-      ],
-      pagination: { currentPage: page, lastPage: 1, perPage: 20, total: 1 },
-      stale: false,
-    }),
+    forgeModVersions: async (
+      kind: ForgeKind,
+      id: number,
+      page: number,
+    ): Promise<ForgeVersionsPage> => createForgeVersionsPage(kind, id, page),
+    forgeAddonVersions: async (
+      id: number,
+      page: number,
+    ): Promise<ForgeVersionsPage> => createForgeVersionsPage('addon', id, page),
     forgeDownloadVersion: async () => ({ accepted: true }),
     forgeMatchInstalledMod: () => structuredClone(workspace),
     applyWindowEffect: () => undefined,
