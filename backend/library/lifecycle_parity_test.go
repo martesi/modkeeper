@@ -113,7 +113,7 @@ func TestTestToDtoUsesHashId(t *testing.T) {
 func TestTestPersistenceCycle(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["persist-id"] = models.Mod{ID: "persist-id", Name: "Persist", Enabled: true}
+	l.manifest.Mods["persist-id"] = models.Mod{ID: "persist-id", Name: "Persist", Enabled: true, Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTestModIdCaseNormalization(t *testing.T) {
 	// manifest retains the exact supplied ID; verify load does not alter it.
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["CaseID"] = models.Mod{ID: "CaseID"}
+	l.manifest.Mods["CaseID"] = models.Mod{ID: "CaseID", Name: "CaseID", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
@@ -220,8 +220,8 @@ func TestActivateInactiveLibraryRecoversInterruptedInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldMod := models.Mod{ID: "RecoverOnActivate", Name: "old", Source: models.ModSourceLocal}
-	newMod := models.Mod{ID: oldMod.ID, Name: "new", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "RecoverOnActivate", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: oldMod.ID, Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	destination := filepath.Join(inactive.ModsDir, oldMod.ID)
 	snapshot := installSnapshotPath(inactive, oldMod.ID)
 	for path, content := range map[string]string{
@@ -286,7 +286,7 @@ func TestActivationIsBusyWhileInstallHasPreparedMarker(t *testing.T) {
 	if err := s.Store.Save(); err != nil {
 		t.Fatal(err)
 	}
-	oldMod := models.Mod{ID: "KeepExisting", Name: "keep", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "KeepExisting", Name: "keep", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	inactive.manifest.Mods[oldMod.ID] = oldMod
 	if err := inactive.Persist(); err != nil {
 		t.Fatal(err)
@@ -508,7 +508,7 @@ func TestTestDeleteLibraryUnregisteredIdFails(t *testing.T) {
 func TestTestBulkUpdateSetsStaleAndNeverDeploys(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func TestTestBulkUpdateRejectsNonActiveLibrary(t *testing.T) {
 func TestTestBulkUpdateDeleteRemovesMod(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +545,7 @@ func TestTestBulkUpdateDeleteRemovesMod(t *testing.T) {
 func TestTestOverlappingModWritesSettleToARequestedState(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "M", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := modmanager.AddMod(&modmanager.Library{Root: l.ModsDir, Mods: l.manifest.Mods}, "m", "M", "server", "local", false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +579,7 @@ func TestTestAssemblyUnreadableManifestIsPathOnlyStub(t *testing.T) {
 	root := filepath.Join(env.GameRoot, "broken")
 	_ = os.MkdirAll(root, 0700)
 	s.Store.Config.UpsertLibrary(config.KnownLibrary{ID: "broken", LibraryRoot: root})
-	w := s.Workspace()
+	w := mustWorkspace(t, s)
 	if len(w.Libraries) != 1 || w.Libraries[0].Stub == nil || w.Libraries[0].Summary != nil {
 		t.Fatalf("workspace: %+v", w.Libraries)
 	}
@@ -588,11 +588,11 @@ func TestTestAssemblyReportsModsAndDeployStale(t *testing.T) {
 	s, env := newParityService(t)
 	l := createParityLibrary(t, s, env)
 	l.manifest.IsDirty = true
-	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "Example"}
+	l.manifest.Mods["m"] = models.Mod{ID: "m", Name: "Example", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	if err := l.Persist(); err != nil {
 		t.Fatal(err)
 	}
-	w := s.Workspace()
+	w := mustWorkspace(t, s)
 	if len(w.Libraries) != 1 {
 		t.Fatalf("libraries: %d", len(w.Libraries))
 	}
@@ -601,5 +601,76 @@ func TestTestAssemblyReportsModsAndDeployStale(t *testing.T) {
 	}
 	if len(w.ModsByLibraryID[l.manifest.ID]) != 1 {
 		t.Fatal("mod summary missing")
+	}
+}
+
+// Rust's rename reads only manifest.toml for inactive libraries and persists
+// the active instance from memory; neither path reads cache.toml.
+func TestTestRenameLibraryIgnoresCorruptCache(t *testing.T) {
+	s, env := newParityService(t)
+	l := addInactiveLibrary(t, s, env.GameRoot, filepath.Join(env.Root, "rename-corrupt-cache"))
+	cachePath := filepath.Join(l.Root, "cache.toml")
+	corrupt := []byte("mods = [")
+	if err := os.WriteFile(cachePath, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RenameLibrary(l.manifest.ID, "Renamed"); err != nil {
+		t.Fatalf("rename failed on a corrupt cache: %v", err)
+	}
+	m, err := readStrictManifest(filepath.Join(l.Root, "manifest.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Name != "Renamed" {
+		t.Fatalf("manifest name = %q; want Renamed", m.Name)
+	}
+	if got, err := os.ReadFile(cachePath); err != nil || string(got) != string(corrupt) {
+		t.Fatalf("inactive rename rewrote the cache: %q %v", got, err)
+	}
+}
+
+// Destructive delete loads cleanup state before any config or disk mutation;
+// a corrupt cache must abort with InvalidLibrary and change nothing.
+func TestTestDestructiveDeleteRejectsCorruptCacheBeforeMutation(t *testing.T) {
+	s, env := newParityService(t)
+	l := createParityLibrary(t, s, env)
+	cachePath := filepath.Join(l.Root, "cache.toml")
+	corrupt := []byte("mods = [")
+	if err := os.WriteFile(cachePath, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	configBefore, err := os.ReadFile(s.Store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.DeleteLibrary(l.manifest.ID, true)
+	if err == nil || !strings.Contains(err.Error(), "InvalidLibrary") || !strings.Contains(err.Error(), "cache.toml") {
+		t.Fatalf("delete error = %v; want InvalidLibrary naming cache.toml", err)
+	}
+	if s.Store.Config.FindLibrary(l.manifest.ID) == nil {
+		t.Fatal("library entry removed from memory")
+	}
+	if s.active == nil || s.active.manifest.ID != l.manifest.ID {
+		t.Fatal("active library changed")
+	}
+	configAfter, err := os.ReadFile(s.Store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(configBefore) != string(configAfter) {
+		t.Fatal("persisted config changed")
+	}
+	for _, path := range []string{
+		filepath.Join(l.Root, "manifest.toml"),
+		cachePath,
+		l.ModsDir,
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s changed before validation: %v", path, err)
+		}
+	}
+	if got, err := os.ReadFile(cachePath); err != nil || string(got) != string(corrupt) {
+		t.Fatalf("cache changed before validation: %q %v", got, err)
 	}
 }

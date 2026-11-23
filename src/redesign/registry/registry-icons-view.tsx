@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from 'jotai'
-import type { ForgeSearchItem } from '@gen/bindings'
+import type { ForgeSearchItem } from '@/wails/contract'
 import {
   selectedRegistryItemAtom,
   registrySearchAtom,

@@ -2,41 +2,14 @@ import { Provider, createStore } from 'jotai'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
 import {
   libraryWorkspaceAtom,
   workspaceStatusAtom,
 } from '../state/library-state'
+import { installLinguiMacroMock } from '../testing/lingui-macro'
 
-mock.module('../shared/hooks/use-archive-file-picker', () => ({
-  useArchiveFilePicker: () => ({
-    pickAndInstall: async () => {},
-    pathInputDialog: null,
-  }),
-}))
-mock.module('../i18n/library-text', () => ({
-  libraryText: {
-    emptyActivateTitle: () => 'Activate a library',
-    emptyActivateBody: () => 'Create a profile',
-    manageLibraries: () => 'Manage libraries',
-    subtitleModsInstalled: (count: number) => `${count} mods installed`,
-  },
-}))
-mock.module('../i18n/common-text', () => ({
-  commonText: { close: () => 'Close' },
-}))
-mock.module('../data/library-repository', () => ({
-  syncMods: async () => {},
-  retryFailedArchives: async () => {},
-}))
-mock.module('./manage-library/manage-library-dialog', () => ({
-  ManageLibraryDialog: () => null,
-}))
-mock.module('./library-drop-empty-state', () => ({
-  LibraryDropEmptyState: () => null,
-}))
-mock.module('./mod-grid-toolbar', () => ({ ModGridToolbar: () => null }))
-mock.module('./mod-grid', () => ({ ModGrid: () => null }))
+installLinguiMacroMock()
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()
@@ -49,6 +22,8 @@ for (const [name, value] of Object.entries({
   Node: browserWindow.Node,
   NodeFilter: browserWindow.NodeFilter,
   Event: browserWindow.Event,
+  EventTarget: browserWindow.EventTarget,
+  MouseEvent: browserWindow.MouseEvent,
   CustomEvent: browserWindow.CustomEvent,
   MutationObserver: browserWindow.MutationObserver,
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -96,6 +71,8 @@ afterAll(() => {
 })
 
 test('does not show an inert create-or-activate subtitle without an active library', () => {
+  expect(container.textContent).toContain('Activate a library')
+  expect(container.textContent).toContain('Manage libraries')
   expect(container.textContent).not.toContain(
     'Click to create or activate a library',
   )

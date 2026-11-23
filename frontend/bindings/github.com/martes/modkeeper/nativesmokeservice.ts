@@ -13,14 +13,34 @@ import {
   CancellablePromise as $CancellablePromise,
 } from '@wailsio/runtime'
 
+export function HoldInstall(): $CancellablePromise<void> {
+  return $Call.ByID(829508535)
+}
+
 export function ListenerReady(): $CancellablePromise<void> {
   return $Call.ByID(2439673796)
+}
+
+export function ReleaseInstall(): $CancellablePromise<void> {
+  return $Call.ByID(2856926513)
+}
+
+export function ReportDropFiles(value: string): $CancellablePromise<void> {
+  return $Call.ByID(4042471001, value)
 }
 
 export function ReportEvent(value: string): $CancellablePromise<void> {
   return $Call.ByID(484600653, value)
 }
 
+export function ReportNativeFlow(value: string): $CancellablePromise<void> {
+  return $Call.ByID(1178548500, value)
+}
+
 export function ReportSettings(value: string): $CancellablePromise<void> {
   return $Call.ByID(218157666, value)
+}
+
+export function ReportUIInteraction(value: string): $CancellablePromise<void> {
+  return $Call.ByID(817596011, value)
 }

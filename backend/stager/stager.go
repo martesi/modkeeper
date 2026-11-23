@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/martes/modkeeper/backend/archive"
+	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modfs"
 )
 
@@ -40,7 +41,7 @@ func Resolve(inputs []string, stagingRoot, serverMods, clientPlugins string, ins
 		}
 		if fs.ModType == "unknown" {
 			_ = os.RemoveAll(root)
-			return nil, errors.New("UnableToDetermineModId")
+			return nil, models.Fail(models.UnableToDetermineModId)
 		}
 		exes := make([]string, len(fs.Executables))
 		for i, x := range fs.Executables {
@@ -48,7 +49,7 @@ func Resolve(inputs []string, stagingRoot, serverMods, clientPlugins string, ins
 		}
 		if inspector != nil && inspector.IsRunning(exes) {
 			_ = os.RemoveAll(root)
-			return nil, errors.New("ProcessRunning")
+			return nil, models.Fail(models.ProcessRunning)
 		}
 		out = append(out, StagedMod{root, input, strings.TrimSuffix(filepath.Base(input), filepath.Ext(input)), true, fs})
 	}

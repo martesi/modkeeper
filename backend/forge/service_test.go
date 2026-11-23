@@ -55,9 +55,41 @@ func TestAddonSearchOmitsUnsupportedSptFilter(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"data":[{"id":1,"guid":"g","name":"n"}],"meta":{"current_page":1}}`)
 	})
-	body, stale, err := s.Search("  query  ", 0, 0, 100)
-	if err != nil || stale || !strings.Contains(string(body), `"sptVersion":"4.0.11"`) {
-		t.Fatalf("%s %v %v", body, stale, err)
+	body, err := s.Search("  query  ", 0, 0, 100)
+	if err != nil || !strings.Contains(string(body), `"sptVersion":"4.0.11"`) {
+		t.Fatalf("%s %v", body, err)
+	}
+}
+
+func TestSearchUsesEndpointForEachRequestAndEmptyUsesDefault(t *testing.T) {
+	var hosts []string
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, "first")
+		fmt.Fprint(w, `{"data":[],"meta":{"current_page":1}}`)
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, "second")
+		fmt.Fprint(w, `{"data":[],"meta":{"current_page":1}}`)
+	}))
+	defer second.Close()
+
+	s := NewService(NewClient(), func() (string, error) { return "4.0.11", nil })
+	endpoint := first.URL
+	s.Endpoint = func() string { return endpoint }
+	if _, err := s.Search("first", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	endpoint = second.URL
+	if _, err := s.Search("second", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 4 || hosts[0] != "first" || hosts[1] != "first" || hosts[2] != "second" || hosts[3] != "second" {
+		t.Fatalf("requests did not use endpoint per call: %v", hosts)
+	}
+	s.Endpoint = func() string { return "" }
+	if got := s.endpoint(); got != APIBase {
+		t.Fatalf("empty endpoint fallback: %q", got)
 	}
 }
 func TestSupportedDownloadExtensionsAreExplicit(t *testing.T) {
@@ -95,7 +127,7 @@ func TestRetryAfterAcceptsSecondsAndHttpDate(t *testing.T) {
 	}
 }
 func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
-	for _, command := range []string{"Search", "ModDetail", "ModVersions", "AddonVersions", "DownloadVersion"} {
+	for _, command := range []string{"Search", "Detail", "Versions", "AddonVersions", "DownloadVersion"} {
 		for _, bad := range []string{"json", "http", "shape"} {
 			t.Run(command+"/"+bad, func(t *testing.T) {
 				s := testService(t, func(w http.ResponseWriter, r *http.Request) {
@@ -111,13 +143,13 @@ func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
 				var err error
 				switch command {
 				case "Search":
-					_, _, err = s.Search("", 1, 1, 20)
-				case "ModDetail":
-					_, _, err = s.ModDetail(1)
-				case "ModVersions":
-					_, _, err = s.ModVersions(1)
+					_, err = s.Search("", 1, 1, 20)
+				case "Detail":
+					_, err = s.Detail("mod", 1)
+				case "Versions":
+					_, err = s.Versions("mod", 1, 1)
 				case "AddonVersions":
-					_, _, err = s.AddonVersions(1)
+					_, err = s.Versions("addon", 1, 1)
 				case "DownloadVersion":
 					done := make(chan error, 1)
 					s.Hooks = InstallHooks{Admit: func(ForgeDownloadVersionInput) (string, string, error) { return "4.0.11", t.TempDir(), nil }, Install: func(ForgeDownloadVersionInput, string, InstallMetadata, *AddonConstraint, Progress) error { return nil }, Complete: func(_ ForgeDownloadVersionInput, e error) { done <- e }, Release: func(string) {}}
@@ -141,8 +173,8 @@ func TestCommandsMapMalformedJSONAndHTTPFailures(t *testing.T) {
 }
 func TestCommandsRequireActiveLibrary(t *testing.T) {
 	s := NewService(nil, nil)
-	for _, call := range []func() (json.RawMessage, bool, error){func() (json.RawMessage, bool, error) { return s.Search("", 1, 1, 1) }, func() (json.RawMessage, bool, error) { return s.ModDetail(1) }, func() (json.RawMessage, bool, error) { return s.ModVersions(1) }, func() (json.RawMessage, bool, error) { return s.AddonVersions(1) }} {
-		_, _, err := call()
+	for _, call := range []func() (json.RawMessage, error){func() (json.RawMessage, error) { return s.Search("", 1, 1, 1) }, func() (json.RawMessage, error) { return s.Detail("mod", 1) }, func() (json.RawMessage, error) { return s.Versions("mod", 1, 1) }, func() (json.RawMessage, error) { return s.Versions("addon", 1, 1) }} {
+		_, err := call()
 		assertCode(t, err, "NoActiveLibrary")
 	}
 	_, err := s.DownloadVersion(ForgeDownloadVersionInput{Kind: "mod"})
@@ -151,16 +183,47 @@ func TestCommandsRequireActiveLibrary(t *testing.T) {
 func TestVersionsPaginationParams(t *testing.T) {
 	s := testService(t, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("page") != "1" || q.Get("per_page") != "50" || q.Get("include") != "dependencies" || q.Get("filter[spt_version]") != "4.0.11" {
+		if q.Get("page") != "2" || q.Get("per_page") != "50" || q.Get("include") != "dependencies" || q.Get("filter[spt_version]") != "4.0.11" {
 			t.Error(q)
 		}
 		fmt.Fprint(w, `{"data":[{"id":2,"version":"1","link":"https://example.test/a.zip","content_length":3}]}`)
 	})
-	for _, call := range []func(uint32) (json.RawMessage, bool, error){s.ModVersions, s.AddonVersions} {
-		body, stale, err := call(1)
-		if err != nil || stale || !strings.Contains(string(body), `"contentLength":3`) {
+	for _, kind := range []string{"mod", "addon"} {
+		body, err := s.Versions(kind, 1, 2)
+		if err != nil || !strings.Contains(string(body), `"contentLength":3`) {
 			t.Fatalf("%s %v", body, err)
 		}
+	}
+}
+
+func TestEndpointIsResolvedForEachRequestAndEmptyUsesDefault(t *testing.T) {
+	var hosts []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, r.Host)
+		fmt.Fprint(w, `{"data":[{"id":1,"guid":"g","name":"n"}]}`)
+	})
+	first := httptest.NewServer(handler)
+	defer first.Close()
+	second := httptest.NewServer(handler)
+	defer second.Close()
+
+	endpoint := first.URL
+	s := NewService(NewClient(), func() (string, error) { return "4.0.11", nil })
+	s.Endpoint = func() string { return endpoint }
+	if _, err := s.Search("", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	endpoint = second.URL
+	if _, err := s.Search("", 2, 2, 20); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 4 || hosts[0] != strings.TrimPrefix(first.URL, "http://") || hosts[2] != strings.TrimPrefix(second.URL, "http://") {
+		t.Fatalf("requests did not use endpoint per call: %v", hosts)
+	}
+
+	s.Endpoint = func() string { return "" }
+	if s.endpoint() != APIBase {
+		t.Fatalf("empty endpoint fallback: %q", s.endpoint())
 	}
 }
 func TestDownloadWritesBytesAndReportsProgressWithoutTouchingSourceArchive(t *testing.T) {
@@ -262,5 +325,18 @@ func TestFreshCacheTTLAndRedirectTargetsAreNotPinned(t *testing.T) {
 	}
 	if _, ok := s.Client.cache[s.BaseURL+"/one"]; ok {
 		t.Fatal("redirect target cached")
+	}
+}
+func TestSearchSurfacesResolverError(t *testing.T) {
+	resolverErr := errors.New("store unavailable")
+	s := NewService(NewClient(), func() (string, error) { return "", resolverErr })
+	if _, err := s.Search("", 1, 1, 20); !errors.Is(err, resolverErr) {
+		t.Fatalf("Search: expected resolver error, got %v", err)
+	}
+	if _, err := s.Detail("mod", 1); !errors.Is(err, resolverErr) {
+		t.Fatalf("Detail: expected resolver error, got %v", err)
+	}
+	if _, err := s.Versions("mod", 1, 1); !errors.Is(err, resolverErr) {
+		t.Fatalf("Versions: expected resolver error, got %v", err)
 	}
 }

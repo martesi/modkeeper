@@ -103,6 +103,35 @@ export const clearLibraryFiltersAtom = atom(null, (_get, set) => {
   set(libraryTypeFilterAtom, 'all')
 })
 
+export const libraryRevealModIdAtom = atom<string | null>(null)
+export const libraryScreenInstanceAtom = atom<object | null>(null)
+
+export const prepareLocateLibraryModAtom = atom(
+  null,
+  (get, set, modId: string) => {
+    const mod = get(modListAtom).find((candidate) => candidate.id === modId)
+    if (mod) {
+      const search = get(librarySearchAtom).trim().toLowerCase()
+      if (search && !mod.name.toLowerCase().includes(search)) {
+        set(librarySearchAtom, '')
+      }
+      const status = get(libraryStatusFilterAtom)
+      if (status !== 'all' && mod.isEnabled !== (status === 'enabled')) {
+        set(libraryStatusFilterAtom, 'all')
+      }
+      const type = get(libraryTypeFilterAtom)
+      if (type !== 'all' && mod.type !== type) {
+        set(libraryTypeFilterAtom, 'all')
+      }
+    }
+  },
+)
+
+export const locateLibraryModAtom = atom(null, (_get, set, modId: string) => {
+  set(prepareLocateLibraryModAtom, modId)
+  set(libraryRevealModIdAtom, modId)
+})
+
 /** The mods the grid actually renders: status/type-filtered, search-filtered, sorted. */
 export const visibleModsAtom = atom<ModSummary[]>((get) => {
   const statusFilter = get(libraryStatusFilterAtom)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useAtom, useAtomValue } from 'jotai'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,7 @@ import { ModInitialIcon } from './mod-initial-icon'
 import {
   libraryBusyAtom,
   selectedModIdsAtom,
+  libraryRevealModIdAtom,
   type LibraryViewMode,
 } from '../state/library-state'
 import { toggleModStatus } from '../data/library-repository'
@@ -27,6 +28,17 @@ export function ModTitleCard({
   const libraryBusy = useAtomValue(libraryBusyAtom)
   const [selectedIds, setSelectedIds] = useAtom(selectedModIdsAtom)
   const selected = selectedIds.has(mod.id)
+  const [revealId, setRevealId] = useAtom(libraryRevealModIdAtom)
+  useEffect(() => {
+    if (revealId !== mod.id) return
+    const card = document.querySelector<HTMLElement>(
+      `[data-mod-id="${CSS.escape(mod.id)}"]:not([role="option"])`,
+    )
+    if (!card) return
+    setRevealId(null)
+    card.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    card.focus({ preventScroll: true })
+  }, [mod.id, revealId, setRevealId])
   const disabled = pending || libraryBusy
 
   async function handleToggle() {
@@ -80,8 +92,15 @@ export function ModTitleCard({
 
   if (viewMode === 'list') {
     return (
-      <tr className="h-9 text-[13px]">
-        <td className="border-y border-border bg-card py-1 align-middle pl-2 first:rounded-l-md">
+      <tr
+        data-mod-id={mod.id}
+        tabIndex={-1}
+        className={cn(
+          'h-9 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'focus:ring-2 focus:ring-ring',
+        )}
+      >
+        <td className="border-y border-border bg-card py-1 align-middle pl-2 first:border-l first:rounded-l-md">
           {selection}
         </td>
         <td className="border-y border-border bg-card px-2 py-1 align-middle">
@@ -100,7 +119,7 @@ export function ModTitleCard({
         <td className="border-y border-border bg-card px-2 py-1 align-middle whitespace-nowrap text-muted-foreground">
           {typeLabel(mod.type)}
         </td>
-        <td className="border-y border-border bg-card px-2 py-1 align-middle last:rounded-r-md">
+        <td className="border-y border-border bg-card px-2 py-1 align-middle last:border-r last:rounded-r-md">
           {statusToggle}
         </td>
       </tr>
@@ -110,8 +129,13 @@ export function ModTitleCard({
   if (viewMode === 'icons') {
     return (
       <FidelityPanel
+        data-mod-id={mod.id}
+        tabIndex={-1}
         radius="card"
-        className="relative flex h-[142px] w-[142px] flex-col items-center justify-center gap-1 px-2 pt-7"
+        className={cn(
+          'relative flex h-[142px] w-[142px] flex-col items-center justify-center gap-1 px-2 pt-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'focus:ring-2 focus:ring-ring',
+        )}
       >
         <div className="absolute left-2 top-2">{selection}</div>
         <div className="absolute right-2 top-2">{statusToggle}</div>
@@ -136,8 +160,13 @@ export function ModTitleCard({
 
   return (
     <FidelityPanel
+      data-mod-id={mod.id}
+      tabIndex={-1}
       radius="card"
-      className="flex h-[70px] min-w-0 items-center gap-3 px-3 transition-colors"
+      className={cn(
+        'flex h-[70px] min-w-0 items-center gap-3 px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'focus:ring-2 focus:ring-ring',
+      )}
     >
       {selection}
       <ModInitialIcon

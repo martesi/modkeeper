@@ -5,7 +5,7 @@ import type {
   ForgeDetail,
   ForgeSearchItem,
   ForgeSearchResponse,
-} from '@gen/bindings'
+} from '@/wails/contract'
 import { activeLibraryAtom } from '../state/library-state'
 import {
   registryAddonPageAtom,
@@ -33,6 +33,7 @@ import { RegistryNoLibraryEmptyState } from './registry-no-library-empty-state'
 import { RegistryParentDialog } from './registry-parent-dialog'
 import { resolveRegistryNoResults } from './registry-no-results'
 import { classifyRegistryRequestFailure } from '../data/registry-errors'
+import { allPageItems, allPageNumber } from './registry-pagination'
 
 export function RegistryScreen() {
   const activeLibrary = useAtomValue(activeLibraryAtom)
@@ -72,13 +73,25 @@ export function RegistryScreen() {
     activeLibrary?.id ?? '',
     activeLibrary?.sptVersion ?? '',
     debouncedSearch,
-    refreshKey,
   ].join('\u0000')
-  const requestKey = [scopeKey, modPage, addonPage].join('\u0000')
+  const requestKey = [scopeKey, refreshKey, modPage, addonPage].join('\u0000')
   const searchResponse =
     searchResult?.key === requestKey ? searchResult.response : null
   const paginationResponse =
     searchResult?.scopeKey === scopeKey ? searchResult.response : null
+  const needsPageReset =
+    !paginationResponse && (modPage !== 1 || addonPage !== 1)
+  const requestedModPage = Math.max(
+    1,
+    Math.min(modPage, paginationResponse?.mods.pagination.lastPage ?? modPage),
+  )
+  const requestedAddonPage = Math.max(
+    1,
+    Math.min(
+      addonPage,
+      paginationResponse?.addons.pagination.lastPage ?? addonPage,
+    ),
+  )
   const requestFailure =
     failedRequest?.key === requestKey ? failedRequest.kind : null
   const isOfflineError = requestFailure === 'offline'
@@ -102,30 +115,61 @@ export function RegistryScreen() {
 
   // 300ms Debounce for Titlebar / local search input
   useEffect(() => {
+    if (search === debouncedSearch) return
     const handler = setTimeout(() => {
       setDebouncedSearch(search)
       setModPage(1)
       setAddonPage(1)
     }, 300)
     return () => clearTimeout(handler)
-  }, [search, setModPage, setAddonPage])
+  }, [search, debouncedSearch, setModPage, setAddonPage])
 
   // Fetch from Forge registry
   useEffect(() => {
     if (!activeLibrary) return
     if (isRateLimited) return
+    if (needsPageReset) {
+      setModPage(1)
+      setAddonPage(1)
+      return
+    }
 
     let isSubscribed = true
     const currentRequestKey = requestKey
 
     void searchForge({
       query: debouncedSearch,
-      modPage,
-      addonPage,
+      modPage: requestedModPage,
+      addonPage: requestedAddonPage,
       perPage: 20,
     })
       .then((data) => {
         if (!isSubscribed) return
+        const lastModPage = Math.max(
+          1,
+          data.mods.pagination.lastPage ?? modPage,
+        )
+        const lastAddonPage = Math.max(
+          1,
+          data.addons.pagination.lastPage ?? addonPage,
+        )
+        if (
+          requestedModPage > lastModPage ||
+          requestedAddonPage > lastAddonPage
+        ) {
+          const allLastPage = Math.max(lastModPage, lastAddonPage)
+          setModPage(
+            Math.min(modPage, kindFilter === 'all' ? allLastPage : lastModPage),
+          )
+          setAddonPage(
+            Math.min(
+              addonPage,
+              kindFilter === 'all' ? allLastPage : lastAddonPage,
+            ),
+          )
+          setSearchResult({ key: currentRequestKey, scopeKey, response: data })
+          return
+        }
         setSearchResult({
           key: currentRequestKey,
           scopeKey,
@@ -135,6 +179,23 @@ export function RegistryScreen() {
       })
       .catch((error: unknown) => {
         if (!isSubscribed) return
+        // The bridge preserves only the HTTP status, not a range error body.
+        // Rediscover once from page one; other failures retain their retry bounds.
+        if (
+          (modPage > 1 || addonPage > 1) &&
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'IOError' &&
+          'data' in error &&
+          typeof error.data === 'string' &&
+          /^Forge returned HTTP (404|422)$/.test(error.data)
+        ) {
+          setSearchResult(null)
+          setModPage(1)
+          setAddonPage(1)
+          return
+        }
         setFailedRequest({
           key: currentRequestKey,
           kind: classifyRegistryRequestFailure(error),
@@ -153,6 +214,12 @@ export function RegistryScreen() {
     isRateLimited,
     requestKey,
     scopeKey,
+    requestedModPage,
+    requestedAddonPage,
+    needsPageReset,
+    kindFilter,
+    setModPage,
+    setAddonPage,
   ])
 
   // Merge items based on kind filter
@@ -160,7 +227,16 @@ export function RegistryScreen() {
     if (!searchResponse) return []
     let list: ForgeSearchItem[] = []
     if (kindFilter === 'all') {
-      list = [...searchResponse.mods.items, ...searchResponse.addons.items]
+      list = allPageItems(modPage, {
+        mods: {
+          items: searchResponse.mods.items,
+          lastPage: searchResponse.mods.pagination.lastPage ?? 1,
+        },
+        addons: {
+          items: searchResponse.addons.items,
+          lastPage: searchResponse.addons.pagination.lastPage ?? 1,
+        },
+      })
     } else if (kindFilter === 'mods') {
       list = [...searchResponse.mods.items]
     } else {
@@ -171,7 +247,7 @@ export function RegistryScreen() {
       list.sort((a, b) => a.name.localeCompare(b.name))
     }
     return list
-  }, [searchResponse, kindFilter, sort])
+  }, [searchResponse, kindFilter, sort, modPage])
 
   const modTotalPages = Math.max(
     1,
@@ -195,6 +271,12 @@ export function RegistryScreen() {
 
   function handleAddonPageChange(page: number) {
     setAddonPage(Math.min(Math.max(page, 1), addonTotalPages))
+  }
+
+  function handleAllPageChange(page: number) {
+    const nextPage = allPageNumber(page, modTotalPages, addonTotalPages)
+    setModPage(nextPage)
+    setAddonPage(nextPage)
   }
 
   // 1. No Active Library
@@ -278,6 +360,7 @@ export function RegistryScreen() {
         addonTotalPages={addonTotalPages}
         onModPageChange={handleModPageChange}
         onAddonPageChange={handleAddonPageChange}
+        onAllPageChange={handleAllPageChange}
         isBusy={isLoading || isRateLimited}
         isRateLimited={isRateLimited}
       />

@@ -12,6 +12,7 @@ import (
 type Service struct {
 	Client        *Client
 	BaseURL       string
+	Endpoint      func() string
 	ActiveVersion func() (string, error)
 	Hooks         InstallHooks
 }
@@ -22,6 +23,18 @@ func NewService(client *Client, activeVersion func() (string, error)) *Service {
 	}
 	return &Service{Client: client, BaseURL: APIBase, ActiveVersion: activeVersion}
 }
+func (s *Service) endpoint() string {
+	baseURL := s.BaseURL
+	if s.Endpoint != nil {
+		if configured := strings.TrimSpace(s.Endpoint()); configured != "" {
+			baseURL = configured
+		}
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		return APIBase
+	}
+	return baseURL
+}
 func (s *Service) active() (string, error) {
 	if s.ActiveVersion == nil {
 		return "", &Error{Code: "NoActiveLibrary"}
@@ -29,7 +42,7 @@ func (s *Service) active() (string, error) {
 	return s.ActiveVersion()
 }
 func (s *Service) get(path string, params map[string]string) (json.RawMessage, bool, error) {
-	u, err := url.Parse(strings.TrimRight(s.BaseURL, "/") + "/" + path)
+	u, err := url.Parse(strings.TrimRight(s.endpoint(), "/") + "/" + path)
 	if err != nil {
 		return nil, false, fail("ParseError", "Invalid Forge API URL: "+err.Error())
 	}
@@ -52,38 +65,38 @@ func searchParams(kind, query string, page, perPage int, version string) map[str
 	}
 	return p
 }
-func (s *Service) Search(query string, modPage, addonPage, perPage int) (json.RawMessage, bool, error) {
+
+// Search returns the ForgeSearchResponse wire object. Each page carries its own
+// stale flag, matching the Tauri command's single response value.
+func (s *Service) Search(query string, modPage, addonPage, perPage int) (json.RawMessage, error) {
 	version, err := s.active()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	result := object{"sptVersion": version}
-	stale := false
 	for _, item := range []struct {
 		kind string
 		page int
 	}{{"mod", modPage}, {"addon", addonPage}} {
 		body, old, err := s.get(item.kind+"s", searchParams(item.kind, query, item.page, perPage, version))
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		records, meta, err := page[apiRecord](body)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		items := []object{}
 		for _, r := range records {
 			o, err := r.convert(item.kind, false, old)
 			if err != nil {
-				return nil, false, err
+				return nil, err
 			}
 			items = append(items, o)
 		}
 		result[item.kind+"s"] = object{"items": items, "pagination": meta, "stale": old}
-		stale = stale || old
 	}
-	body, err := json.Marshal(result)
-	return body, stale, err
+	return json.Marshal(result)
 }
 func (s *Service) detail(kind string, id uint64) (object, bool, error) {
 	params := map[string]string{}
@@ -114,16 +127,20 @@ func (s *Service) detail(kind string, id uint64) (object, bool, error) {
 	}
 	return o, stale, nil
 }
-func (s *Service) ModDetail(id uint32) (json.RawMessage, bool, error) {
+
+// Detail returns one ForgeDetail wire object with the stale flag embedded.
+func (s *Service) Detail(kind string, id uint32) (json.RawMessage, error) {
+	if err := validKind(kind); err != nil {
+		return nil, err
+	}
 	if _, err := s.active(); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	o, stale, err := s.detail("mod", uint64(id))
+	o, _, err := s.detail(kind, uint64(id))
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	body, err := json.Marshal(o)
-	return body, stale, err
+	return json.Marshal(o)
 }
 func (s *Service) versions(kind string, id uint64, p int, version string) (object, bool, error) {
 	body, stale, err := s.get(fmt.Sprintf("%s/%d/versions", kind, id), map[string]string{"page": fmt.Sprint(max(1, p)), "per_page": "50", "filter[spt_version]": version, "include": "dependencies"})
@@ -144,23 +161,22 @@ func (s *Service) versions(kind string, id uint64, p int, version string) (objec
 	}
 	return object{"kind": kind, "itemId": id, "versions": items, "pagination": meta, "stale": stale}, stale, nil
 }
-func (s *Service) versionsCommand(kind string, id uint32) (json.RawMessage, bool, error) {
+
+// Versions returns one ForgeVersionsPage wire object with the requested page
+// and the stale flag embedded.
+func (s *Service) Versions(kind string, id uint32, p int) (json.RawMessage, error) {
+	if err := validKind(kind); err != nil {
+		return nil, err
+	}
 	version, err := s.active()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	o, stale, err := s.versions(kind, uint64(id), 1, version)
+	o, _, err := s.versions(kind, uint64(id), p, version)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	body, err := json.Marshal(o)
-	return body, stale, err
-}
-func (s *Service) ModVersions(id uint32) (json.RawMessage, bool, error) {
-	return s.versionsCommand("mod", id)
-}
-func (s *Service) AddonVersions(id uint32) (json.RawMessage, bool, error) {
-	return s.versionsCommand("addon", id)
+	return json.Marshal(o)
 }
 func (s *Service) findVersion(kind string, id, versionID uint64, spt string) (object, bool, error) {
 	last := 1

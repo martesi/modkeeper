@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,16 +37,22 @@ func (s *Service) SetInstallTaskHook(hook func(string)) {
 	s.installTaskHook = hook
 }
 
-func (s *Service) admit(taskID, libraryID string, op models.TaskOperation) (*task_progress.Emitter, context.Context, error) {
+func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requireStopped bool) (*task_progress.Emitter, context.Context, error) {
 	if taskID == "" || libraryID == "" {
-		return nil, nil, fmt.Errorf("ParseError: taskId and libraryId are required")
+		return nil, nil, models.Fail(models.ParseError, "taskId and libraryId are required")
 	}
 	if !s.libraryMu.TryRLock() {
 		return nil, nil, models.Fail(models.LibraryBusy)
 	}
+	if requireStopped {
+		if err := s.assertGameOrServerStopped(); err != nil {
+			s.libraryMu.RUnlock()
+			return nil, nil, err
+		}
+	}
 	if s.active == nil {
 		s.libraryMu.RUnlock()
-		return nil, nil, fmt.Errorf("NoActiveLibrary")
+		return nil, nil, models.Fail(models.NoActiveLibrary)
 	}
 	if err := s.Registry.AssertActiveLibrary(libraryID); err != nil {
 		s.libraryMu.RUnlock()
@@ -53,7 +60,7 @@ func (s *Service) admit(taskID, libraryID string, op models.TaskOperation) (*tas
 	}
 	if s.active.manifest.ID != libraryID {
 		s.libraryMu.RUnlock()
-		return nil, nil, fmt.Errorf("InvalidLibrary: %s", libraryID)
+		return nil, nil, models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	if !s.modWrites.TryLock() {
 		s.libraryMu.RUnlock()
@@ -96,18 +103,21 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 	defer s.libraryMu.RUnlock()
 	s.modWrites.Lock()
 	defer s.modWrites.Unlock()
-	if s.active == nil || s.active.manifest.ID != in.LibraryID {
-		return fmt.Errorf("InvalidLibrary: not the active library")
+	if s.active == nil {
+		return models.Fail(models.NoActiveLibrary)
+	}
+	if s.active.manifest.ID != in.LibraryID {
+		return models.Fail(models.InvalidLibrary, in.LibraryID, "not the active library")
 	}
 	if len(in.ModIDs) == 0 || (in.Action != models.BulkActionEnable && in.Action != models.BulkActionDisable && in.Action != models.BulkActionDelete) {
-		return fmt.Errorf("ParseError: invalid bulk update")
+		return models.Fail(models.ParseError, "invalid bulk update")
 	}
 	l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
 	switch in.Action {
 	case models.BulkActionEnable, models.BulkActionDisable:
 		for _, id := range in.ModIDs {
 			if _, ok := l.Mods[id]; !ok {
-				return fmt.Errorf("ModNotFound: %s", id)
+				return models.Fail(models.ModNotFound, id)
 			}
 		}
 		for _, id := range in.ModIDs {
@@ -135,11 +145,20 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 	return s.active.Persist()
 }
 
+// sendWorkspaceSnapshot attaches the current workspace to a completion event.
+func (s *Service) sendWorkspaceSnapshot(event models.WorkspaceEvent) {
+	if s.sendWorkspace == nil {
+		return
+	}
+	event.Workspace = *s.Workspace()
+	_ = s.sendWorkspace(event)
+}
+
 func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progress func(models.TaskProgressEvent) error) (*models.OperationAccepted, error) {
 	if progress != nil {
 		s.sendProgress = progress
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationCacheRebuild)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationCacheRebuild, false)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +181,7 @@ func (s *Service) RebuildLibraryCache(in models.RebuildLibraryCacheInput, progre
 		rebuilt := time.Now().UTC().Format(time.RFC3339)
 		status := &models.CacheStatus{State: models.CacheStateReady, LastRebuiltAt: &rebuilt}
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Workspace: *s.Workspace(), CacheStatus: status})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventCacheRebuildCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, CacheStatus: status})
 		}
 		return nil
 	}), nil
@@ -173,9 +192,9 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		s.sendProgress = progress
 	}
 	if len(in.ArchivePaths) == 0 {
-		return nil, fmt.Errorf("ParseError: archivePaths is empty")
+		return nil, models.Fail(models.ParseError, "archivePaths is empty")
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationInstall)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationInstall, false)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +204,7 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		}
 		failures := make([]models.ArchiveFailure, 0, len(in.ArchivePaths))
 		l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
-		enable := s.Store.Config.Settings.EnableModsOnInstall
+		enable := s.GetSettings().EnableModsOnInstall
 		for i, path := range in.ArchivePaths {
 			if ctx.Err() != nil {
 				s.finishCancelled(e, in, l.Mods)
@@ -204,97 +223,9 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 					s.finishCancelled(e, in, l.Mods)
 					return ctx.Err()
 				}
-				previous, hadPrevious := l.Mods[item.FS.ID]
-				snapshot := ""
-				var err error
-				if hadPrevious {
-					snapshot, err = s.snapshotMod(item.FS.ID)
-					if err == nil && snapshot == "" {
-						hadPrevious = false
-						delete(l.Mods, item.FS.ID)
-					}
-				} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
-					err = fmt.Errorf("ModIdConflict: untracked directory already exists for %s", item.FS.ID)
-				} else if !os.IsNotExist(statErr) {
-					err = statErr
-				}
-				newMod := previous
-				if !hadPrevious {
-					newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
-				}
-				newMod.ApplyInstall(enable, nil, time.Now())
-				if err == nil {
-					l.Mods[item.FS.ID] = newMod
-				}
-				transaction := installTransaction{
-					Version: 1,
-					ID:      item.FS.ID,
-					Phase:   installPrepared,
-					HadOld:  hadPrevious,
-					NewMod:  newMod,
-				}
-				if hadPrevious {
-					old := previous
-					transaction.OldMod = &old
-				}
-				marker := installMarkerPath(s.active, item.FS.ID)
-				markerPrepared := false
-				if err == nil {
-					err = s.writeInstallMarker(marker, transaction)
-					markerPrepared = err == nil
-					if markerPrepared && s.installTransactionHook != nil {
-						s.installTransactionHook("after-prepared-marker")
-					}
-				}
-				if err == nil {
-					err = modmanager.AddModWithMetadata(&l, item.FS.ID, item.Name, item.FS.ModType, path, enable, nil)
-				}
-				if err == nil {
-					err = s.installModTree(ctx, item.Root, item.FS.ID, func() {
-						e.Progress(models.TaskStageInstallArchiveStage, nil)
-					})
-					if err == nil {
-						// This existing progress boundary is after replacement and
-						// before manifest persistence.
-						e.Progress(models.TaskStageInstallArchiveStage, nil)
-					}
-				}
-				if err != nil && markerPrepared {
-					if recoveryErr := recoverInstallTransaction(
-						s.active,
-						marker,
-						installCommittedMarkerPath(s.active, item.FS.ID),
-						transaction,
-						nil,
-					); recoveryErr != nil {
-						err = fmt.Errorf("%w (recovery failed: %v)", err, recoveryErr)
-					}
-				}
-				_ = stager.CleanUp(item.IsStaging, item.Root)
-				if err != nil {
-					if hadPrevious {
-						l.Mods[item.FS.ID] = previous
-					} else {
-						delete(l.Mods, item.FS.ID)
-					}
-					s.active.manifest.Mods = l.Mods
-					if _, markerErr := os.Stat(marker); os.IsNotExist(markerErr) && snapshot != "" {
-						_ = os.RemoveAll(snapshot)
-					}
-				}
-				if err == nil {
-					committed, finishErr := s.finishInstallTransaction(transaction)
-					if finishErr != nil {
-						err = finishErr
-						restoreErr := recoverInterruptedInstall(s.active)
-						if restoreErr != nil {
-							err = fmt.Errorf("%w (recovery failed: %v)", err, restoreErr)
-						} else if committed {
-							err = nil
-						}
-						l.Mods = s.active.manifest.Mods
-					}
-				}
+				err := s.installStagedMod(ctx, path, item, &l, enable, nil, func(stage models.TaskProgressStage, percent *float64) {
+					e.Progress(stage, percent)
+				})
 				if ctx.Err() != nil {
 					s.finishCancelled(e, in, l.Mods)
 					return ctx.Err()
@@ -318,17 +249,124 @@ func (s *Service) InstallModArchives(in models.InstallModArchivesInput, progress
 		}
 		e.Completed(task_progress.ArchiveOutcome(len(failures), len(in.ArchivePaths)))
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 		}
 		return nil
 	}), nil
+}
+
+// installStagedMod applies one staged mod under the caller's library write
+// lock, using the same prepared/committed transaction as archive installs. It
+// owns staging cleanup and restores the mod map on failure.
+func (s *Service) installStagedMod(ctx context.Context, archivePath string, item stager.StagedMod, l *modmanager.Library, enable bool, forgeIdentity *models.ForgeIdentity, progress func(models.TaskProgressStage, *float64)) error {
+	previous, hadPrevious := l.Mods[item.FS.ID]
+	snapshot := ""
+	var err error
+	if hadPrevious {
+		snapshot, err = s.snapshotMod(item.FS.ID)
+		if err == nil && snapshot == "" {
+			hadPrevious = false
+			delete(l.Mods, item.FS.ID)
+		}
+	} else if _, statErr := os.Lstat(filepath.Join(s.active.ModsDir, item.FS.ID)); statErr == nil {
+		err = models.Fail(models.ModIdConflict, item.FS.ID, filepath.Join(s.active.ModsDir, item.FS.ID))
+	} else if !os.IsNotExist(statErr) {
+		err = statErr
+	}
+	newMod := previous
+	if !hadPrevious {
+		newMod = models.Mod{ID: item.FS.ID, Name: item.Name}
+	}
+	if item.FS.ModType != "" {
+		newMod.Type = models.ModType(item.FS.ModType)
+	}
+	newMod.ApplyInstall(enable, forgeIdentity, time.Now())
+	if err == nil {
+		l.Mods[item.FS.ID] = newMod
+	}
+	transaction := installTransaction{
+		Version: 1,
+		ID:      item.FS.ID,
+		Phase:   installPrepared,
+		HadOld:  hadPrevious,
+		NewMod:  newMod,
+	}
+	if hadPrevious {
+		old := previous
+		transaction.OldMod = &old
+	}
+	marker := installMarkerPath(s.active, item.FS.ID)
+	markerPrepared := false
+	if err == nil {
+		err = s.writeInstallMarker(marker, transaction)
+		markerPrepared = err == nil
+		if markerPrepared && s.installTransactionHook != nil {
+			s.installTransactionHook("after-prepared-marker")
+		}
+	}
+	if err == nil {
+		var metadata *modmanager.Metadata
+		if forgeIdentity != nil {
+			metadata = &modmanager.Metadata{Forge: forgeIdentity}
+		}
+		err = modmanager.AddModWithMetadata(l, item.FS.ID, item.Name, item.FS.ModType, archivePath, enable, metadata)
+	}
+	if err == nil {
+		err = s.installModTree(ctx, item.Root, item.FS.ID, func() {
+			if progress != nil {
+				progress(models.TaskStageInstallArchiveStage, nil)
+			}
+		})
+		if err == nil && progress != nil {
+			// This existing progress boundary is after replacement and
+			// before manifest persistence.
+			progress(models.TaskStageInstallArchiveStage, nil)
+		}
+	}
+	if err != nil && markerPrepared {
+		if recoveryErr := recoverInstallTransaction(
+			s.active,
+			marker,
+			installCommittedMarkerPath(s.active, item.FS.ID),
+			transaction,
+			nil,
+		); recoveryErr != nil {
+			err = fmt.Errorf("%w (recovery failed: %v)", err, recoveryErr)
+		}
+	}
+	_ = stager.CleanUp(item.IsStaging, item.Root)
+	if err != nil {
+		if hadPrevious {
+			l.Mods[item.FS.ID] = previous
+		} else {
+			delete(l.Mods, item.FS.ID)
+		}
+		s.active.manifest.Mods = l.Mods
+		if _, markerErr := os.Stat(marker); os.IsNotExist(markerErr) && snapshot != "" {
+			_ = os.RemoveAll(snapshot)
+		}
+		return err
+	}
+	committed, finishErr := s.finishInstallTransaction(transaction)
+	if finishErr == nil {
+		return nil
+	}
+	restoreErr := recoverInterruptedInstall(s.active)
+	l.Mods = s.active.manifest.Mods
+	if restoreErr != nil {
+		return fmt.Errorf("%w (recovery failed: %v)", finishErr, restoreErr)
+	}
+	if committed {
+		return nil
+	}
+	return finishErr
 }
 
 func (s *Service) finishCancelled(e *task_progress.Emitter, in models.InstallModArchivesInput, mods map[string]models.Mod) {
 	s.active.manifest.Mods = mods
 	e.Cancelled()
 	if s.sendWorkspace != nil {
-		_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: []models.ArchiveFailure{}, Workspace: *s.Workspace()})
+		s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventModInstallCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: []models.ArchiveFailure{}})
 	}
 }
 
@@ -336,7 +374,7 @@ func (s *Service) CancelTask(taskID, libraryID string) error {
 	s.libraryMu.RLock()
 	defer s.libraryMu.RUnlock()
 	if s.active == nil || s.active.manifest.ID != libraryID {
-		return fmt.Errorf("InvalidLibrary: %s", libraryID)
+		return models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
 	return s.Registry.CancelTask(taskID, libraryID)
 }
@@ -345,7 +383,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 	if progress != nil {
 		s.sendProgress = progress
 	}
-	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationSync)
+	e, ctx, err := s.admit(in.TaskID, in.LibraryID, models.TaskOperationSync, true)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +410,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 				e.Completed(task_progress.Failure)
 			}
 			if s.sendWorkspace != nil {
-				_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+				s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 			}
 			return err
 		}
@@ -388,15 +426,16 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			e.Completed(task_progress.Success)
 		}
 		if s.sendWorkspace != nil {
-			_ = s.sendWorkspace(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Workspace: *s.Workspace()})
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 		}
 		return nil
 	}), nil
 }
 
 func archiveError(err error) models.Error {
-	if e, ok := err.(*models.Error); ok {
-		return *e
+	var coded *models.Error
+	if errors.As(err, &coded) {
+		return *coded
 	}
 	return models.Error{Code: "Unexpected", Data: err.Error()}
 }

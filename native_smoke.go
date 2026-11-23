@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ type NativeSmokeService struct {
 	settings chan string
 	ready    chan struct{}
 	event    chan string
+	drop     chan string
 	ui       chan string
 	flow     chan string
 	release  chan struct{}
@@ -27,6 +29,7 @@ func newNativeSmokeService() *NativeSmokeService {
 		settings: make(chan string, 1),
 		ready:    make(chan struct{}, 1),
 		event:    make(chan string, 1),
+		drop:     make(chan string, 1),
 		ui:       make(chan string, 1),
 		flow:     make(chan string, 1),
 		release:  make(chan struct{}),
@@ -55,6 +58,11 @@ func (s *NativeSmokeService) ListenerReady() error {
 
 func (s *NativeSmokeService) ReportEvent(value string) error {
 	s.event <- value
+	return nil
+}
+
+func (s *NativeSmokeService) ReportDropFiles(value string) error {
+	s.drop <- value
 	return nil
 }
 
@@ -150,6 +158,31 @@ func runNativeSmoke(app *application.App, window *application.WebviewWindow, ser
 		}
 		if observed.Payload != payload || !observed.ExecJSObserved {
 			return fmt.Errorf("event/ExecJS observation mismatch: got %s", got)
+		}
+		return nil
+	}) {
+		return
+	}
+
+	dropFiles := []string{"/tmp/modkeeper-native-smoke-drop.zip"}
+	encoded, err := json.Marshal(dropFiles)
+	if err != nil {
+		log.Printf("native-smoke: FAIL file drop encoding: %v", err)
+		app.Quit()
+		return
+	}
+	window.ExecJS(fmt.Sprintf(
+		"window._wails.handlePlatformFileDrop(%s, 50, 50)",
+		encoded,
+	))
+	if !wait("native file drop reaches the renderer callback", func() error {
+		got := <-service.drop
+		var dropped []string
+		if err := json.Unmarshal([]byte(got), &dropped); err != nil {
+			return err
+		}
+		if !slices.Equal(dropped, dropFiles) {
+			return fmt.Errorf("dropped files = %v, want %v", dropped, dropFiles)
 		}
 		return nil
 	}) {

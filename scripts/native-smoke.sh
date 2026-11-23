@@ -42,7 +42,8 @@ if [[ "$status" -ne 0 ]]; then
   exit 1
 fi
 for link in "PASS settings JS→Go→JS value" "PASS frontend event listener ready" \
-  "PASS Go emitted registered event" "PASS event payload observed by frontend and reported to Go"; do
+  "PASS Go emitted registered event" "PASS event payload observed by frontend and reported to Go" \
+  "PASS native file drop reaches the renderer callback"; do
   if ! grep -Fq "$link" /tmp/modkeeper-native-smoke.log; then
     echo "native-smoke: FAIL missing evidence: $link" >&2
     exit 1

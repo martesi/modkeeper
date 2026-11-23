@@ -17,9 +17,6 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as json$0 from '../../../../encoding/json/models.js'
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as config$0 from './config/models.js'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -34,6 +31,12 @@ export function ActivateLibrary(
   return $Call.ByID(2762475955, input)
 }
 
+/**
+ * ApplyWindowEffect is a compatibility no-op. Wails applies the window backdrop
+ * and appearance when it creates the window, and has no runtime setter, so
+ * main.go seeds both from the saved theme at startup. Returning success keeps
+ * the existing frontend call path working when the user changes theme later.
+ */
 export function ApplyWindowEffect(
   isDark: boolean | null,
 ): $CancellablePromise<void> {
@@ -66,35 +69,50 @@ export function DeleteLibrary(
 }
 
 export function ForgeAddonVersions(
-  addonID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1423140075, addonID)
+  id: number,
+  page: number,
+): $CancellablePromise<models$0.ForgeVersionsPage | null> {
+  return $Call.ByID(1423140075, id, page)
 }
 
 export function ForgeDownloadVersion(
   input: forge$0.ForgeDownloadVersionInput,
-): $CancellablePromise<json$0.RawMessage> {
+): $CancellablePromise<models$0.OperationAccepted | null> {
   return $Call.ByID(2889594628, input)
 }
 
+export function ForgeMatchInstalledMod(
+  input: forge$0.ForgeMatchInstalledModInput,
+): $CancellablePromise<models$0.LibraryWorkspace | null> {
+  return $Call.ByID(3570687643, input)
+}
+
 export function ForgeModDetail(
-  modID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1050554349, modID)
+  kind: string,
+  id: number,
+): $CancellablePromise<models$0.ForgeDetail | null> {
+  return $Call.ByID(1050554349, kind, id)
 }
 
 export function ForgeModVersions(
-  modID: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
-  return $Call.ByID(1957956409, modID)
+  kind: string,
+  id: number,
+  page: number,
+): $CancellablePromise<models$0.ForgeVersionsPage | null> {
+  return $Call.ByID(1957956409, kind, id, page)
 }
 
+/**
+ * ForgeSearch returns the single response object shaped like
+ * src-tauri/src/models/forge.rs. Wails packs multiple Go return values into an
+ * array, so the stale flag must stay inside each response.
+ */
 export function ForgeSearch(
   query: string,
   modPage: number,
   addonPage: number,
   perPage: number,
-): $CancellablePromise<[json$0.RawMessage, boolean]> {
+): $CancellablePromise<models$0.ForgeSearchResponse | null> {
   return $Call.ByID(3029807572, query, modPage, addonPage, perPage)
 }
 
@@ -110,6 +128,27 @@ export function InstallModArchives(
   input: models$0.InstallModArchivesInput,
 ): $CancellablePromise<models$0.OperationAccepted | null> {
   return $Call.ByID(1475805379, input)
+}
+
+/**
+ * Log writes a frontend diagnostic through the Wails application logger. The
+ * desktop entrypoint points that logger at a file in the config directory, so
+ * this replaces Tauri's log plugin.
+ */
+export function Log(message: string): $CancellablePromise<void> {
+  return $Call.ByID(2479127961, message)
+}
+
+/**
+ * OpenPath reveals a directory in the OS file manager and opens a file with
+ * the OS default handler. Wails v3 has no JavaScript opener, so the frontend
+ * calls this bound method for "open folder" actions and tool launches.
+ *
+ * The operation is unavailable in the headless server build: there is no user
+ * desktop on the server host to open.
+ */
+export function OpenPath(path: string): $CancellablePromise<void> {
+  return $Call.ByID(1289568346, path)
 }
 
 export function RebuildLibraryCache(

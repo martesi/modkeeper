@@ -210,7 +210,7 @@ func TestCrashDuringInstallRecoveryCleanupIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mod := models.Mod{ID: "CleanupMod", Name: "new", Source: models.ModSourceLocal}
+	mod := models.Mod{ID: "CleanupMod", Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	tree := filepath.Join(l.ModsDir, mod.ID)
 	snapshot := installSnapshotPath(l, mod.ID)
 	for path, body := range map[string]string{
@@ -360,9 +360,11 @@ func TestCrashAfterCommittedMarkerKeepsUpgradeOnTwoRestarts(t *testing.T) {
 		if err := restarted.Start(); err != nil {
 			t.Fatal(err)
 		}
-		workspace := restarted.Workspace()
-		if workspace.ConfigWarning != nil {
-			t.Fatalf("restart %d warning=%q", restart, *workspace.ConfigWarning)
+		if err := restarted.WaitForInitialLoad(); err != nil {
+			t.Fatal(err)
+		}
+		if warning := restarted.TakeStartupWarning(); warning != nil {
+			t.Fatalf("restart %d warning=%q", restart, *warning)
 		}
 		loaded, err := Load(root)
 		if err != nil {

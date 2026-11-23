@@ -1,11 +1,9 @@
 /*
  * Settings repository (consolidated-spec.md §10).
  *
- * Settings are backend-owned in App Config (T1): the initial value rides the workspace from
- * `get_library_workspace`, and every mutation goes through `saveSettings`, which returns the FULL
- * object — the atom is replaced wholesale, never patched. The appliers (`applyTheme` side of theme
- * lives with next-themes in the initializers; accent/language live here) turn the saved value into
- * visible effect.
+ * Settings are backend-owned in App Config (T1). Mutations accept partial patches and serialize
+ * them against the latest atom value before sending the full settings object to the backend.
+ * Returned settings replace the atom wholesale. Appliers turn that saved value into visible effects.
  */
 import { toast } from 'sonner'
 import { i18n } from '@lingui/core'
@@ -28,31 +26,44 @@ import { DEFAULT_ACCENT } from './settings-defaults'
 
 export { DEFAULT_ACCENT } from './settings-defaults'
 
+let settingsSaveQueue: Promise<void> = Promise.resolve()
+
 export async function saveSettings(
-  settings: AppSettings,
+  patch: Partial<AppSettings>,
 ): Promise<AppSettings> {
-  return runPlainCommand({
-    isTauri: hasNativeRuntime(),
-    invoke: () => commands.saveSettings(settings),
-    mock: () => {
-      const workspace = structuredClone(getMockWorkspace())
-      workspace.settings = settings
-      setMockWorkspace(workspace)
-      setSettings(settings)
-      return settings
-    },
-    apply: setSettings,
-    onDomainError: (error) => {
-      toast.error(resolveCommandError(error))
-      console.error('[redesign] saveSettings command error', error)
-    },
-    onTransportError: (error) => {
-      toast.error(commonText.backendUnavailable())
-      console.error('[redesign] saveSettings transport failure', error)
-    },
-    current: () =>
-      getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings,
+  const operation = settingsSaveQueue.then(() => {
+    const settings = {
+      ...(getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings),
+      ...patch,
+    }
+    return runPlainCommand({
+      isTauri: hasNativeRuntime(),
+      invoke: () => commands.saveSettings(settings),
+      mock: () => {
+        const workspace = structuredClone(getMockWorkspace())
+        workspace.settings = settings
+        setMockWorkspace(workspace)
+        setSettings(settings)
+        return settings
+      },
+      apply: setSettings,
+      onDomainError: (error) => {
+        toast.error(resolveCommandError(error))
+        console.error('[redesign] saveSettings command error', error)
+      },
+      onTransportError: (error) => {
+        toast.error(commonText.backendUnavailable())
+        console.error('[redesign] saveSettings transport failure', error)
+      },
+      current: () =>
+        getDefaultStore().get(settingsAtom) ?? emptyWorkspace().settings,
+    })
   })
+  settingsSaveQueue = operation.then(
+    () => undefined,
+    () => undefined,
+  )
+  return operation
 }
 
 /**

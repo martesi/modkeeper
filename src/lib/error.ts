@@ -1,5 +1,5 @@
 import { msg, t } from '@lingui/core/macro'
-import type { SError } from '@gen/bindings'
+import type { SError } from '@/wails/contract'
 
 /**
  * Translates SError to user-friendly messages using lingui

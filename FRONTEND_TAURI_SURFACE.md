@@ -31,8 +31,7 @@ contracts, but they do not make runtime calls.
 - `@tauri-apps/api/window`: current-window minimize/maximize/close in
   `redesign/shell/titlebar.tsx`; drag/drop subscription in
   `redesign/shared/hooks/use-window-drop-zone.ts`.
-- `@tauri-apps/plugin-dialog`: `lib/library-actions.ts`,
-  `redesign/shared/hooks/use-archive-file-picker.ts`,
+- `@tauri-apps/plugin-dialog`: `redesign/shared/hooks/use-archive-file-picker.ts`,
   `redesign/library/manage-library/{manage-library-dialog,configure-tool-dialog}.tsx`.
 - `@tauri-apps/plugin-opener`: `redesign/shared/utils/app-opener.ts`,
   `redesign/registry/registry-detail-inspector.tsx`,

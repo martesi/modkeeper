@@ -1,12 +1,15 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/martes/modkeeper/backend/config"
+	"github.com/martes/modkeeper/backend/models"
+	"github.com/martes/modkeeper/backend/testenv"
 )
 
 func TestTestLoadMissingFileYieldsDefault(t *testing.T) {
@@ -70,15 +73,18 @@ func TestTestSavedPinkAccentRoundTripsUnchanged(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
-func TestTestSaveFailureSurfacesConfigSaveFailedAndPreservesTarget(t *testing.T) {
+func TestSaveFailureSurfacesConfigSaveFailedAndPreservesTarget(t *testing.T) {
 	d := t.TempDir()
 	p := filepath.Join(d, "config.toml")
 	_ = SaveTo(p, config.Default())
 	before, _ := os.ReadFile(p)
 	blocked := filepath.Join(d, "blocked")
 	_ = os.MkdirAll(filepath.Join(blocked, "sub"), 0700)
-	if err := SaveTo(blocked, config.Default()); err == nil {
-		t.Fatal("expected error")
+	err := SaveTo(blocked, config.Default())
+	data := testenv.RequireWireData(t, err, models.ConfigSaveFailed)
+	var detail string
+	if unmarshalErr := json.Unmarshal(data, &detail); unmarshalErr != nil || !strings.HasPrefix(detail, "save config: ") {
+		t.Fatalf("data %s; want a cause string", data)
 	}
 	after, _ := os.ReadFile(p)
 	if string(before) != string(after) {

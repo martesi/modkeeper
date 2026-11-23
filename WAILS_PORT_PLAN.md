@@ -31,18 +31,28 @@ Frontend calls exactly these, via `src/wails/bridge.ts` → generated `frontend/
 | `rebuildLibraryCache` | `RebuildLibraryCache(models.RebuildLibraryCacheInput) (*models.OperationAccepted, error)` | WD |
 | `getSettings` | `GetSettings() (config.AppSettings, error)` | WC |
 | `saveSettings` | `SaveSettings(config.AppSettings) (config.AppSettings, error)` | WC |
-| `forgeSearch` | `ForgeSearch(query string, modPage, addonPage, perPage int) (json.RawMessage, bool, error)` | WB |
-| `forgeModDetail` | `ForgeModDetail(modID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeModVersions` | `ForgeModVersions(modID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeAddonVersions` | `ForgeAddonVersions(addonID uint32) (json.RawMessage, bool, error)` | WB |
-| `forgeDownloadVersion` | `ForgeDownloadVersion(input models.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
-| `openPath` | `OpenPath(path string) error` | Wails runtime limitation; console fallback |
+| `forgeSearch` | `ForgeSearch(query string, modPage, addonPage, perPage int) (json.RawMessage, error)` | WB |
+| `forgeModDetail` | `ForgeModDetail(kind models.ForgeKind, id uint32) (json.RawMessage, error)` | WB |
+| `forgeModVersions` | `ForgeModVersions(kind models.ForgeKind, id uint32, page int) (json.RawMessage, error)` | WB |
+| `forgeAddonVersions` | `ForgeAddonVersions(id uint32, page int) (json.RawMessage, error)` | WB |
+| `forgeDownloadVersion` | `ForgeDownloadVersion(input forge.ForgeDownloadVersionInput) (json.RawMessage, error)` | WB |
+| `forgeMatchInstalledMod` | `ForgeMatchInstalledMod(input forge.ForgeMatchInstalledModInput) (*models.LibraryWorkspace, error)` | WB |
+| `openPath` | `OpenPath(path string) error` | WX (directories: `Env.OpenFileManager`; files: `Browser.OpenFile`) |
+| `log` | `Log(message string) error` | WX (Wails logger file sink) |
 | `selectFiles` | `SelectFiles() ([]string, error)` | Wails runtime limitation; no-op fallback |
 | `setWindowEffect` | `SetWindowEffect(effect string) error` | WX |
 | `getVersion` | `GetVersion() string` | WA |
 
 Wails derives the JS name by lowercasing the first letter of the exported method, so Go names must
-match the TS names exactly. `ApplyWindowEffect` stays as-is.
+match the TS names exactly. `ApplyWindowEffect` remains a bound method but is a compatibility no-op;
+the effect is seeded from the saved theme when the window is created. `OpenPath` sends directories
+to `Env.OpenFileManager` and files to `Browser.OpenFile`. `Log` writes through the Wails application
+logger, which the desktop entrypoint points at `modkeeper.log` in the config directory. The log file
+is append-only and does not rotate, matching Tauri's default `KeepAll` rotation policy; it grows
+across runs.
+
+The Forge read methods each return one JSON object matching the Rust response model, with the
+`stale` flag inside that object. `ForgeMatchInstalledMod` returns the refreshed workspace directly.
 
 ## Wire contract (`backend/models`)
 
@@ -112,11 +122,16 @@ type BulkUpdateModsInput struct{ LibraryID string; ModIDs []string; Action BulkA
 type SyncModsInput struct{ TaskID, LibraryID string }
 type InstallModArchivesInput struct{ TaskID, LibraryID string; ArchivePaths []string }
 type RebuildLibraryCacheInput struct{ TaskID, LibraryID string }
-type ForgeDownloadVersionInput struct{ /* mirror src-tauri/src/models/forge.rs */ }
+type ForgeDownloadVersionInput struct{ TaskID, LibraryID string; Kind ForgeKind; ItemID, VersionID uint64 }
+type ForgeMatchInstalledModInput struct{ LibraryID, InstalledModID string; Kind ForgeKind; ItemID, VersionID uint64 }
 ```
 
 Extend the existing `models.Mod` (manifest.toml fields) rather than replacing it; keep
 `json:"isActive"` and `json:"type"` and the `source` default of `local`.
+
+Library manifests are decoded strictly like Rust's `LibraryDTO`, and legacy Go manifests that lack
+`repoRoot` are invalid and receive no migration because Rust has required `repo_root` since before
+v0.1.0 and no Wails release shipped.
 
 `backend.Error` becomes `type Error = models.Error` and `failure` delegates to `models.Fail`.
 
@@ -179,8 +194,8 @@ func (s *Service) Start() error   // startup recovery + background load; never b
 
 ### `forge` (WB)
 
-Extend the existing client; add a `Service` with the five command methods above plus
-`MatchInstalledMod` if needed by library ops (WD may call `forge.Service.DownloadVersion` directly).
+Extend the existing client; add a `Service` with the six command methods above, including
+`MatchInstalledMod` (WD may call `forge.Service.DownloadVersion` directly).
 
 ## Rust test parity groups
 
@@ -298,8 +313,20 @@ added SPT layout and metadata inspection; `wails/wg-frontend` added the Wails br
 `wails/wq-process` added process checks; `wails/wx-platform` added platform abstraction.
 
 Remaining gaps: Windows junction behavior is not proven equivalent; inspecting a real SPT
-installation remains opt-in; the Wails runtime has no openPath or file-drop API, so those
-actions are console output or no-ops rather than native integrations.
+installation remains opt-in; the server build has no user desktop, so `OpenPath` returns a typed
+error there. Wails applies the Windows backdrop when it creates the window, so later theme changes
+do not re-apply it.
+
+Known follow-up (not fixed): `sendWorkspaceSnapshot` in `backend/library/ops.go` calls
+`Workspace()`, which takes `libraryMu.RLock` while the task goroutine already holds that read lock.
+Go's `RWMutex` is not reentrant, so a queued writer can deadlock a task-completion event. Assemble
+the snapshot outside the task's read lock, or pass it in, rather than adding a recursive lock.
+
+macOS backdrop decision: the macOS backdrop/translucency is intentionally omitted and the window
+keeps a solid background. Wails v3.1.0 needs `-tags private_mac_apis` for webview transparency
+(`mac_public_api_darwin.go` makes the transparency call a no-op without it), no build path passes
+that tag, and the effect cannot be verified on macOS hardware here. Keep the solid background until
+a tagged macOS build is proven end to end.
 
 ## Work protocol
 

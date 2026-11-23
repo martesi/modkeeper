@@ -1,4 +1,4 @@
-import type { Result, SError } from '@gen/bindings'
+import type { Result, SError } from '@/wails/contract'
 import { translateError } from '../lib/error'
 
 /**

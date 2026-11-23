@@ -1,34 +1,12 @@
 /*
  * Frozen type surface for the redesign (consolidated-spec.md §9).
  *
- * The UI and repositories type against THIS module, never `@gen/bindings` directly, so the redesign
- * has one stable vocabulary even as the generated bindings churn. The generated shapes already match
- * §9 (camelCase via tauri-specta), so we re-export them here rather than redefine — a single source,
- * no drift. The UI consumes serialized output; deserialization types also accept legacy aliases
- * and omitted defaults that do not describe returned state. Names/ids are the spec's; the mapping
- * to generated names lives only in this file.
+ * The UI and repositories type against THIS module, never the generated bindings directly, so the
+ * redesign has one stable vocabulary. `@/wails/contract` is the single source: it owns the Wails
+ * normalization (string unions, non-null arrays, `LibraryEntry`) and the hand-owned Rust shapes.
+ * Names here are the spec's; the aliases below preserve the existing vocabulary.
  */
-import type {
-  LibraryWorkspace_Serialize as LibraryWorkspace,
-  LibraryEntry_Serialize as LibraryEntry,
-  LibrarySummary_Serialize as LibrarySummary,
-  LibraryStub,
-  ModSummary_Serialize as ModSummary,
-  ModType_Serialize as ModType,
-  ToolSummary_Serialize as ToolSummary,
-  CacheStatus_Serialize as CacheStatus,
-  CacheState,
-  AppSettings_Serialize as AppSettings,
-  BulkModAction,
-  OperationAccepted,
-  WorkspaceEvent_Serialize as WorkspaceEvent,
-  TaskOperation,
-  TaskProgressEvent_Deserialize as TaskProgressEvent,
-  TaskProgressKind,
-  TaskProgressLog,
-  TaskProgressStage,
-  SError,
-} from '@gen/bindings'
+import type { LibraryEntry, LibrarySummary } from '@/wails/contract'
 
 export type {
   LibraryWorkspace,
@@ -41,7 +19,7 @@ export type {
   CacheStatus,
   CacheState,
   AppSettings,
-  BulkModAction,
+  BulkAction as BulkModAction,
   OperationAccepted,
   WorkspaceEvent,
   TaskOperation,
@@ -50,7 +28,9 @@ export type {
   TaskProgressLog,
   TaskProgressStage,
   SError,
-}
+  ArchiveFailure,
+  ModFailure,
+} from '@/wails/contract'
 
 export type LibraryId = string
 export type ModId = string

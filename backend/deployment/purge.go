@@ -77,7 +77,7 @@ func planPurge(l Layout) ([]purgeLink, error) {
 				return err
 			}
 			if !utf8.ValidString(path) {
-				return &Error{"Unexpected", nil}
+				return models.Fail(models.Unexpected)
 			}
 			if d.Type()&os.ModeSymlink == 0 {
 				return nil

@@ -1,15 +1,15 @@
 /*
  * File-explorer opener (consolidated-spec.md §10): UI never imports the opener plugin directly —
- * it calls these wrappers, which no-op with a console note in the browser prototype.
+ * it calls these wrappers, which no-op with a console note when no desktop host can open the path.
  */
-import { openPath as platformOpenPath, platformKind } from '@/platform'
+import { canOpenPath, openPath as platformOpenPath } from '@/platform'
 import { toast } from 'sonner'
 import type { LibrarySummary, ModSummary } from '../../data/redesign-types'
 import { commonText } from '../../i18n/common-text'
 
 async function openPath(path: string): Promise<void> {
-  if (platformKind() === 'browser') {
-    // MOCK-FALLBACK: no runtime to open a file explorer in the browser prototype.
+  if (!canOpenPath()) {
+    // MOCK-FALLBACK: browser and server pages have no desktop file manager.
     console.info('[redesign] would open in file explorer:', path)
     return
   }

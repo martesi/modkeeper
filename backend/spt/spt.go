@@ -9,11 +9,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/martes/modkeeper/backend/models"
 )
 
 // Rules are paths relative to a game root.
 type Rules struct {
-	ServerMods, ServerExe, ServerRegistry, ClientPlugins, ClientConfig string
+	ServerMods, ServerExe, ServerRegistry, ClientPlugins, ClientConfig, ClientExe string
 }
 
 func defaults(server string) Rules {
@@ -23,6 +25,7 @@ func defaults(server string) Rules {
 		ServerRegistry: filepath.Join(server, "user", "sptRegistry", "registry.json"),
 		ClientPlugins:  filepath.Join("BepInEx", "plugins"),
 		ClientConfig:   filepath.Join("BepInEx", "config"),
+		ClientExe:      "EscapeFromTarkov.exe",
 	}
 }
 
@@ -42,14 +45,8 @@ func Discover(gameRoot string) (Rules, error) {
 	return defaults("SPT"), nil
 }
 
-// Fail is a local error type kept independent of the foundation models package.
-type Fail struct {
-	Code string
-	Data any
-}
-
-func (e *Fail) Error() string          { return fmt.Sprintf("%s: %v", e.Code, e.Data) }
-func fail(code string, data any) error { return &Fail{Code: code, Data: data} }
+// fail keeps local call sites terse while emitting the shared wire contract.
+func fail(code string, data any) error { return models.Fail(code, data) }
 
 var versionRE = regexp.MustCompile(`(\d+\.\d+\.\d+)`)
 

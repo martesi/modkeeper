@@ -63,7 +63,7 @@ func content(t *testing.T, p, want string) {
 }
 func code(t *testing.T, e error, want string) {
 	t.Helper()
-	var got *Error
+	var got *models.Error
 	if !errors.As(e, &got) || got.Code != want {
 		t.Fatalf("error %v, want %s", e, want)
 	}

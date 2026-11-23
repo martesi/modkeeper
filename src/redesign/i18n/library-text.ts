@@ -187,6 +187,21 @@ export const libraryText = {
       id: 'library.empty.dropBrowse',
       message: 'or click to browse local files',
     }),
+  pathEntryTitle: () =>
+    t({
+      id: 'library.empty.pathEntryTitle',
+      message: 'Add mod archives to this library',
+    }),
+  pathEntryAction: () =>
+    t({
+      id: 'library.empty.pathEntryAction',
+      message: 'Enter archive paths',
+    }),
+  pathEntryServerAction: () =>
+    t({
+      id: 'library.empty.pathEntryServerAction',
+      message: 'Enter archive paths on the server host',
+    }),
   dropSupported: () =>
     t({ id: 'library.empty.dropSupported', message: 'SUPPORTED: .zip, .7z' }),
   manageLibraries: () =>
@@ -266,6 +281,9 @@ export const libraryText = {
     t({ id: 'library.toolbar.searchPlaceholder', message: 'Search mods…' }),
   searchLabel: () =>
     t({ id: 'library.toolbar.searchLabel', message: 'Search mods' }),
+  locateMod: () => t({ id: 'library.palette.locate', message: 'Locate' }),
+  noPaletteResults: () =>
+    t({ id: 'library.palette.noResults', message: 'No matching mods' }),
   sortLabel: () => t({ id: 'library.toolbar.sortLabel', message: 'Sort' }),
   sortNameAsc: () =>
     t({ id: 'library.toolbar.sortNameAsc', message: 'Name (A-Z)' }),

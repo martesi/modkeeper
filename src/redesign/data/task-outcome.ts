@@ -3,7 +3,7 @@ import type {
   CacheStatus,
   ModFailure,
   SError,
-} from '../../gen/bindings'
+} from '@/wails/contract'
 
 export type ArchiveTaskFailure = { path: string; error: SError }
 export type SyncTaskFailure = { modId: string; error: SError }

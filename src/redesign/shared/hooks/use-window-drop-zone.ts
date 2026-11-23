@@ -1,10 +1,11 @@
 /*
  * Global window drop zone: the whole window accepts supported archive drops for the active library.
  * Unsupported files are rejected with a toast and NO backend call. Mounted once
- * by the initializers; in the browser prototype there is no window drop source, so this is inert.
+ * by the initializers; server and browser pages have no window drop source, so this is inert there.
  */
 import { useEffect } from 'react'
-import { onFileDrop, platformKind } from '@/platform'
+import { onFileDrop } from '@/platform'
+import { useNativeDesktopShell } from '@/platform/use-native-desktop-shell'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import { activeLibraryIdAtom } from '../../state/library-state'
@@ -14,9 +15,12 @@ import { libraryText } from '../../i18n/library-text'
 
 export function useWindowDropZone(): void {
   const activeLibraryId = useAtomValue(activeLibraryIdAtom)
+  const nativeDesktop = useNativeDesktopShell()
 
   useEffect(() => {
-    if (platformKind() === 'browser' || !activeLibraryId) return
+    // Server and browser pages have no OS drop source; only a desktop shell
+    // receives window drops. Subscribe after Wails injects its environment.
+    if (!nativeDesktop || !activeLibraryId) return
     let disposed = false
     const unlistenPromise = onFileDrop((paths) => {
       const { archives, rejected } = splitArchivePaths(paths)
@@ -31,5 +35,5 @@ export function useWindowDropZone(): void {
         if (disposed) unlisten()
       })
     }
-  }, [activeLibraryId])
+  }, [activeLibraryId, nativeDesktop])
 }

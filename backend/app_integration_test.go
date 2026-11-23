@@ -638,12 +638,13 @@ func TestStartRecoversInterruptedInstallArtifacts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Source: models.ModSourceLocal}
-	newMod := models.Mod{ID: "RecoverMe", Name: "new", Source: models.ModSourceLocal}
+	oldMod := models.Mod{ID: "RecoverMe", Name: "old", Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	newMod := models.Mod{ID: "RecoverMe", Name: "new", Type: models.ModTypeServer, Source: models.ModSourceLocal}
 	var diskManifest struct {
 		ID         string                `toml:"id"`
 		Name       string                `toml:"name"`
 		GameRoot   string                `toml:"gameRoot"`
+		RepoRoot   string                `toml:"repoRoot"`
 		SPTVersion string                `toml:"sptVersion"`
 		Mods       map[string]models.Mod `toml:"mods"`
 		IsDirty    bool                  `toml:"isDirty"`
@@ -860,7 +861,7 @@ func TestPurgeProcessT2CrashAfterQuarantine(t *testing.T) {
 		t.Fatal(err)
 	}
 	retryErr := restarted.Library.DeleteLibrary(libraryID, true)
-	var purgeError *deployment.Error
+	var purgeError *models.Error
 	if !errors.As(retryErr, &purgeError) || purgeError.Code != "InvalidLibrary" ||
 		!strings.Contains(retryErr.Error(), "Purge recovery is pending; explicit recovery is required before retrying") {
 		t.Fatalf("restarted app purge retry error=%v; want retained-journal refusal", retryErr)

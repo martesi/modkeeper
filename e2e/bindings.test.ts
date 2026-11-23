@@ -30,6 +30,7 @@ test('generated commands preserve the settings arguments and result contract', a
     accentColor: '#e91e63',
     language: 'en-US',
     enableModsOnInstall: true,
+    forgeEndpoint: '',
   }
   mockIPC((command, args) => {
     expect(command).toBe('save_settings')
@@ -69,6 +70,7 @@ test('generated workspace events preserve their name and payload', async () => {
         accentColor: '#e91e63',
         language: 'en-US',
         enableModsOnInstall: true,
+        forgeEndpoint: '',
       },
     },
   }
