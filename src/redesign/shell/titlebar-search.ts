@@ -1,5 +1,34 @@
 export type TitlebarSearchKind = 'library' | 'registry'
 
+export interface PendingLibraryReveal {
+  id: string
+  libraryId: string | null
+  screen: object | null
+  cancelled: boolean
+}
+
+export interface LibraryRevealSnapshot {
+  libraryId: string | null
+  screen: object | null
+  modIds: readonly string[]
+}
+
+export interface RevealFocusTarget {
+  scrollIntoView(options?: ScrollIntoViewOptions): void
+  focus(options?: FocusOptions): void
+}
+
+export function getTitlebarSearchResults<T extends { name: string }>(
+  items: readonly T[],
+  query: string,
+): T[] {
+  const normalized = query.trim().toLocaleLowerCase()
+  if (!normalized) return [...items]
+  return items.filter((item) =>
+    item.name.toLocaleLowerCase().includes(normalized),
+  )
+}
+
 export function getTitlebarSearchKind(
   pathname: string,
 ): TitlebarSearchKind | null {
@@ -83,4 +112,42 @@ export function focusTitlebarPaletteInput(
   event.preventDefault()
   input?.focus()
   if (selectQuery) input?.select()
+}
+
+export function clampTitlebarActiveIndex(
+  resultCount: number,
+  activeIndex: number,
+): number {
+  if (resultCount <= 0) return 0
+  return Math.min(Math.max(activeIndex, 0), resultCount - 1)
+}
+
+export function stepTitlebarActiveIndex(
+  resultCount: number,
+  activeIndex: number,
+  step: -1 | 1,
+): number {
+  const base = clampTitlebarActiveIndex(resultCount, activeIndex)
+  return clampTitlebarActiveIndex(resultCount, base + step)
+}
+
+export function isPendingLibraryRevealLive(
+  request: PendingLibraryReveal,
+  snapshot: LibraryRevealSnapshot,
+): boolean {
+  if (request.cancelled || !request.screen || !request.libraryId) return false
+  if (snapshot.libraryId !== request.libraryId) return false
+  if (snapshot.screen !== request.screen) return false
+  return snapshot.modIds.includes(request.id)
+}
+
+export function resolvePaletteCloseFocus<
+  TRevealTarget extends RevealFocusTarget,
+>(
+  request: PendingLibraryReveal | null,
+  snapshot: LibraryRevealSnapshot,
+  findCard: (modId: string) => TRevealTarget | null,
+): TRevealTarget | null {
+  if (!request || !isPendingLibraryRevealLive(request, snapshot)) return null
+  return findCard(request.id)
 }

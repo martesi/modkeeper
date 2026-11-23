@@ -286,6 +286,9 @@ export const libraryText = {
     t({ id: 'library.toolbar.searchPlaceholder', message: 'Search mods…' }),
   searchLabel: () =>
     t({ id: 'library.toolbar.searchLabel', message: 'Search mods' }),
+  locateMod: () => t({ id: 'library.palette.locate', message: 'Locate' }),
+  noPaletteResults: () =>
+    t({ id: 'library.palette.noResults', message: 'No matching mods' }),
   sortLabel: () => t({ id: 'library.toolbar.sortLabel', message: 'Sort' }),
   sortNameAsc: () =>
     t({ id: 'library.toolbar.sortNameAsc', message: 'Name (A-Z)' }),
