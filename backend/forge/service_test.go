@@ -151,16 +151,47 @@ func TestCommandsRequireActiveLibrary(t *testing.T) {
 func TestVersionsPaginationParams(t *testing.T) {
 	s := testService(t, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("page") != "1" || q.Get("per_page") != "50" || q.Get("include") != "dependencies" || q.Get("filter[spt_version]") != "4.0.11" {
+		if q.Get("page") != "2" || q.Get("per_page") != "50" || q.Get("include") != "dependencies" || q.Get("filter[spt_version]") != "4.0.11" {
 			t.Error(q)
 		}
 		fmt.Fprint(w, `{"data":[{"id":2,"version":"1","link":"https://example.test/a.zip","content_length":3}]}`)
 	})
 	for _, kind := range []string{"mod", "addon"} {
-		body, err := s.Versions(kind, 1, 1)
+		body, err := s.Versions(kind, 1, 2)
 		if err != nil || !strings.Contains(string(body), `"contentLength":3`) {
 			t.Fatalf("%s %v", body, err)
 		}
+	}
+}
+
+func TestEndpointIsResolvedForEachRequestAndEmptyUsesDefault(t *testing.T) {
+	var hosts []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hosts = append(hosts, r.Host)
+		fmt.Fprint(w, `{"data":[{"id":1,"guid":"g","name":"n"}]}`)
+	})
+	first := httptest.NewServer(handler)
+	defer first.Close()
+	second := httptest.NewServer(handler)
+	defer second.Close()
+
+	endpoint := first.URL
+	s := NewService(NewClient(), func() (string, error) { return "4.0.11", nil })
+	s.Endpoint = func() string { return endpoint }
+	if _, err := s.Search("", 1, 1, 20); err != nil {
+		t.Fatal(err)
+	}
+	endpoint = second.URL
+	if _, err := s.Search("", 2, 2, 20); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 4 || hosts[0] != strings.TrimPrefix(first.URL, "http://") || hosts[2] != strings.TrimPrefix(second.URL, "http://") {
+		t.Fatalf("requests did not use endpoint per call: %v", hosts)
+	}
+
+	s.Endpoint = func() string { return "" }
+	if s.endpoint() != APIBase {
+		t.Fatalf("empty endpoint fallback: %q", s.endpoint())
 	}
 }
 func TestDownloadWritesBytesAndReportsProgressWithoutTouchingSourceArchive(t *testing.T) {

@@ -16,6 +16,7 @@ const FALLBACK_SETTINGS: AppSettings = {
   accentColor: DEFAULT_ACCENT,
   language: 'en-US',
   enableModsOnInstall: true,
+  forgeEndpoint: '',
 }
 
 /**
@@ -42,6 +43,24 @@ export function SettingsScreen() {
           checked={settings.enableModsOnInstall}
           onCheckedChange={(enableModsOnInstall) =>
             save({ enableModsOnInstall })
+          }
+        />
+      ),
+    },
+    {
+      key: 'forge-endpoint',
+      label: 'Forge endpoint',
+      description: `Empty uses the default endpoint (${import.meta.env.VITE_FORGE_API_BASE ?? 'https://sp-mod.com/api/v0'}).`,
+      control: (
+        <input
+          aria-label="Forge endpoint"
+          className="w-72 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+          placeholder={
+            import.meta.env.VITE_FORGE_API_BASE ?? 'https://sp-mod.com/api/v0'
+          }
+          value={settings.forgeEndpoint}
+          onChange={(event) =>
+            save({ forgeEndpoint: event.currentTarget.value })
           }
         />
       ),

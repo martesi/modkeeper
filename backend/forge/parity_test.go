@@ -107,6 +107,20 @@ func TestMatchInstalledModPassesSelectedIdentityAndAddonConstraint(t *testing.T)
 		t.Fatal(err)
 	}
 }
+
+func TestMatchInstalledModFailsClosedWithoutMatchHook(t *testing.T) {
+	s := testService(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "versions") {
+			fmt.Fprint(w, `{"data":[{"id":2,"version":"1.2.0","link":"url","content_length":0}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"data":{"id":1,"guid":"a","name":"mod"}}`)
+	})
+	s.Hooks.AssertLibrary = func(string) error { return nil }
+	_, err := s.MatchInstalledMod(ForgeMatchInstalledModInput{LibraryID: "l", InstalledModID: "local", Kind: "mod", ItemID: 1, VersionID: 2})
+	assertCode(t, err, "Unexpected")
+}
+
 func TestStaleMetadataCannotInstallOrMatch(t *testing.T) {
 	s := testService(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
 	u := s.BaseURL + "/mod/1"

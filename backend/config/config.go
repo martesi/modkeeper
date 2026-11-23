@@ -27,6 +27,7 @@ type AppSettings struct {
 	AccentColor         string    `toml:"accentColor" json:"accentColor"`
 	Language            string    `toml:"language" json:"language"`
 	EnableModsOnInstall bool      `toml:"enableModsOnInstall" json:"enableModsOnInstall"`
+	ForgeEndpoint       string    `toml:"forgeEndpoint" json:"forgeEndpoint"`
 }
 
 type ThemeMode string

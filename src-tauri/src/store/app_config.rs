@@ -38,6 +38,7 @@ pub struct AppSettings {
     pub accent_color: String,
     pub language: String,
     pub enable_mods_on_install: bool,
+    pub forge_endpoint: String,
 }
 
 impl Default for AppSettings {
@@ -49,6 +50,7 @@ impl Default for AppSettings {
             // dynamic-imports `locales/<language>.po` from this value verbatim.
             language: "en-US".to_string(),
             enable_mods_on_install: true,
+            forge_endpoint: String::new(),
         }
     }
 }
