@@ -6,7 +6,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 
 if [ "${MODKEEPER_BUILD_SHELL:-0}" != 1 ] && command -v nix >/dev/null 2>&1; then
-  exec nix develop .#default -c env MODKEEPER_BUILD_SHELL=1 sh scripts/build-windows.sh "$@"
+  exec nix develop .#windows-release -c env MODKEEPER_BUILD_SHELL=1 sh scripts/build-windows.sh "$@"
 fi
 
 bun run build:wails

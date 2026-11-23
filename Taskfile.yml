@@ -104,8 +104,7 @@ tasks:
   package:windows:
     summary: Builds both Windows executables and machine/user NSIS installers
     cmds:
-      - bun run build:wails
-      - task: windows:package
+      - sh scripts/build-windows.sh
 
   run:
     cmds:

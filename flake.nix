@@ -30,7 +30,7 @@
           goPackages = [ pkgs.go pkgs.go-task pkgs.wails3 pkgs.xvfb-run ];
           # curl: the Taskfile readiness polls and the CI server smoke test use
           # it, and the dev shell must not depend on a host-provided curl.
-          basePackages = [ pkgs.bun pkgs.curl pkgs.nsis ] ++ webviewLibs ++ goPackages;
+          basePackages = [ pkgs.bun pkgs.curl ] ++ webviewLibs ++ goPackages;
           webviewHook = ''
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath webviewLibs}:$LD_LIBRARY_PATH"
             export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-${pkgs.mesa}/share/glvnd/egl_vendor.d}"
@@ -63,6 +63,11 @@
         {
           default = pkgs.mkShell {
             packages = basePackages;
+            shellHook = commonHook;
+          };
+
+          windows-release = pkgs.mkShell {
+            packages = basePackages ++ [ pkgs.nsis ];
             shellHook = commonHook;
           };
 
