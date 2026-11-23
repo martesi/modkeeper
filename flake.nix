@@ -52,6 +52,26 @@
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
           '';
           commonHook = cargoCacheHook + tauriHook;
+          e2ePackages = basePackages ++ (with pkgs; [
+            chromium
+            imagemagick
+            xdpyinfo
+            xdotool
+            xvfb
+          ]);
+          e2eHook = commonHook + ''
+            export PLAYWRIGHT_FIREFOX_EXECUTABLE="''${PLAYWRIGHT_FIREFOX_EXECUTABLE:-${pkgs.firefox}/bin/firefox}"
+            export PLAYWRIGHT_CHROMIUM_EXECUTABLE="''${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-${pkgs.chromium}/bin/chromium}"
+            export DISPLAY="''${DISPLAY:-:99}"
+            export FONTCONFIG_FILE="''${FONTCONFIG_FILE:-${
+              pkgs.makeFontsConf {
+                fontDirectories = with pkgs; [ dejavu_fonts liberation_ttf ];
+              }
+            }}"
+          '';
+          wslGpuChromium = pkgs.writeShellScript "chromium-wsl-gpu" ''
+            exec ${pkgs.chromium}/bin/chromium --ozone-platform=x11 --use-gl=angle --use-angle=gl "$@"
+          '';
           winCrossToolchain = pkgs.rust-bin.stable.latest.default.override {
             extensions = [ "rust-src" ];
             targets = [ "x86_64-pc-windows-gnu" ];
@@ -65,22 +85,18 @@
           };
 
           e2e = pkgs.mkShell {
-            packages = basePackages ++ (with pkgs; [
-              chromium
-              imagemagick
-              xdpyinfo
-              xdotool
-              xvfb
-            ]);
-            shellHook = commonHook + ''
-              export PLAYWRIGHT_FIREFOX_EXECUTABLE="''${PLAYWRIGHT_FIREFOX_EXECUTABLE:-${pkgs.firefox}/bin/firefox}"
-              export PLAYWRIGHT_CHROMIUM_EXECUTABLE="''${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-${pkgs.chromium}/bin/chromium}"
-              export DISPLAY="''${DISPLAY:-:99}"
-              export FONTCONFIG_FILE="''${FONTCONFIG_FILE:-${
-                pkgs.makeFontsConf {
-                  fontDirectories = with pkgs; [ dejavu_fonts liberation_ttf ];
-                }
-              }}"
+            packages = e2ePackages;
+            shellHook = e2eHook;
+          };
+
+          e2e-wsl-gpu = pkgs.mkShell {
+            packages = e2ePackages;
+            shellHook = e2eHook + ''
+              export GALLIUM_DRIVER=d3d12
+              export LD_LIBRARY_PATH="/run/opengl-driver/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
+              export __EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d
+              unset WAYLAND_DISPLAY
+              export PLAYWRIGHT_CHROMIUM_EXECUTABLE=${wslGpuChromium}
             '';
           };
 
