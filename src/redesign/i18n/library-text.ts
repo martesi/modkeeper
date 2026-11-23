@@ -157,11 +157,6 @@ export const libraryText = {
       id: 'library.taskResult.cacheDiagnostic',
       message: 'Backend message',
     }),
-  subtitleEmpty: () =>
-    t({
-      id: 'library.header.subtitleEmpty',
-      message: 'Click to create or activate a library',
-    }),
   subtitleModsInstalled: (count: number) =>
     t({
       id: 'library.header.subtitleModsInstalled',

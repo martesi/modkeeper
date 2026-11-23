@@ -18,6 +18,36 @@ msgstr ""
 #~ msgid "library.status.taskItemsFailed"
 #~ msgstr "{count} item(s) failed"
 
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:26
+#~ msgid "library.task.history.clear"
+#~ msgstr "Clear history"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/library-text.ts:148
+#~ msgid "library.header.subtitleEmpty"
+#~ msgstr "Click to create or activate a library"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:9
+#~ msgid "library.task.history.operation.forgeInstall"
+#~ msgstr "Forge install"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:7
+#~ msgid "library.task.history.operation.install"
+#~ msgstr "Import"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:28
+#~ msgid "library.task.history.empty"
+#~ msgstr "No completed tasks yet."
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:22
+#~ msgid "library.task.history.title"
+#~ msgstr "Recent tasks ({count})"
+
 #: src/utils/translation.ts:4
 msgid ", "
 msgstr ", "
@@ -33,7 +63,7 @@ msgid "registry.item.downloadsCount"
 msgstr "{count} downloads"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:166
+#: src/redesign/i18n/library-text.ts:161
 msgid "library.header.subtitleModsInstalled"
 msgstr "{count} mods installed"
 
@@ -63,7 +93,7 @@ msgid "library.task.progressValue"
 msgstr "{stage}: {percent}% of this stage"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:490
+#: src/redesign/i18n/library-text.ts:485
 msgid "library.tools.registerNewTool"
 msgstr "+ Register New Tool"
 
@@ -110,27 +140,27 @@ msgid "settings.accent.label"
 msgstr "Accent Color"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:339
+#: src/redesign/i18n/library-text.ts:334
 msgid "library.toolbar.actions"
 msgstr "Actions · {count}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:449
+#: src/redesign/i18n/library-text.ts:444
 msgid "library.manage.activate"
 msgstr "Activate"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:191
+#: src/redesign/i18n/library-text.ts:186
 msgid "library.empty.activateTitle"
 msgstr "Activate a library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:445
+#: src/redesign/i18n/library-text.ts:440
 msgid "library.manage.rebuildNeedsActive"
 msgstr "Activate this library to rebuild its cache"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:450
+#: src/redesign/i18n/library-text.ts:445
 msgid "library.manage.activated"
 msgstr "Activated"
 
@@ -140,7 +170,7 @@ msgid "library.task.activeLabel"
 msgstr "Active tasks"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:406
+#: src/redesign/i18n/library-text.ts:401
 msgid "library.manage.addLibraryTab"
 msgstr "Add library"
 
@@ -149,12 +179,12 @@ msgstr "Add library"
 #~ msgstr "Add Library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:189
+#: src/redesign/i18n/library-text.ts:184
 msgid "library.actions.addMod"
 msgstr "Add mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:209
+#: src/redesign/i18n/library-text.ts:204
 msgid "library.empty.pathEntryTitle"
 msgstr "Add mod archives to this library"
 
@@ -183,12 +213,12 @@ msgid "registry.toolbar.filterAll"
 msgstr "All Items"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:321
+#: src/redesign/i18n/library-text.ts:316
 msgid "library.toolbar.filterAll"
 msgstr "All mods"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:329
+#: src/redesign/i18n/library-text.ts:324
 msgid "library.toolbar.typeFilterAll"
 msgstr "All types"
 
@@ -198,7 +228,7 @@ msgid "registry.toolbar.sortName"
 msgstr "Alphabetical"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:461
+#: src/redesign/i18n/library-text.ts:456
 msgid "library.manage.deleteFilesLabel"
 msgstr "Also delete the library files on disk"
 
@@ -272,7 +302,7 @@ msgid "Archive"
 msgstr "Archive"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:252
+#: src/redesign/i18n/library-text.ts:247
 msgid "library.import.pathsLabel"
 msgstr "Archive paths"
 
@@ -335,12 +365,12 @@ msgstr "Backend message"
 #~ msgstr "Backups"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:335
+#: src/redesign/i18n/library-text.ts:330
 msgid "library.toolbar.typeFilterBoth"
 msgstr "Both"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:538
+#: src/redesign/i18n/library-text.ts:533
 msgid "library.tools.browse"
 msgstr "Browse"
 
@@ -360,12 +390,12 @@ msgid "registry.item.byAuthor"
 msgstr "by {author}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:254
+#: src/redesign/i18n/library-text.ts:249
 msgid "library.import.pathsPlaceholder"
 msgstr "C:\\mods\\example.zip"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:271
+#: src/redesign/i18n/library-text.ts:266
 msgid "library.manage.gameRootPathPlaceholder"
 msgstr "C:\\SPT"
 
@@ -405,7 +435,7 @@ msgid "common.action.cancel"
 msgstr "Cancel"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:278
+#: src/redesign/i18n/library-text.ts:273
 msgid "library.pathInput.cancel"
 msgstr "Cancel"
 
@@ -477,17 +507,17 @@ msgid "library.task.stage.syncCleanup"
 msgstr "Cleaning up"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:375
+#: src/redesign/i18n/task-history-text.ts:25
+msgid "library.task.history.clearAll"
+msgstr "Clear all"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/library-text.ts:370
 msgid "library.grid.clearFilters"
 msgstr "Clear filters"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:26
-msgid "library.task.history.clear"
-msgstr "Clear history"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:373
+#: src/redesign/i18n/library-text.ts:368
 msgid "library.grid.clearSearch"
 msgstr "Clear search"
 
@@ -501,22 +531,17 @@ msgstr "Clear Search"
 #~ msgstr "Click to add library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:161
-msgid "library.header.subtitleEmpty"
-msgstr "Click to create or activate a library"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:331
+#: src/redesign/i18n/library-text.ts:326
 msgid "library.toolbar.typeFilterClient"
 msgstr "Client"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:356
+#: src/redesign/i18n/library-text.ts:351
 msgid "library.list.typeClient"
 msgstr "Client"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:359
+#: src/redesign/i18n/library-text.ts:354
 msgid "library.list.typeBoth"
 msgstr "Client + Server"
 
@@ -579,27 +604,27 @@ msgid "registry.detail.compatibleOnly"
 msgstr "Compatible with this SPT version"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:39
+#: src/redesign/i18n/task-history-text.ts:43
 msgid "library.task.history.status.success"
 msgstr "Completed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:44
+#: src/redesign/i18n/task-history-text.ts:48
 msgid "library.task.history.status.partialFailure"
 msgstr "Completed with errors"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:494
+#: src/redesign/i18n/library-text.ts:489
 msgid "library.tools.configure"
 msgstr "Configure {name}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:401
+#: src/redesign/i18n/library-text.ts:396
 msgid "library.manage.dialogDescription"
 msgstr "Configure paths for your modding libraries."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:506
+#: src/redesign/i18n/library-text.ts:501
 msgid "library.tools.dialogTitle"
 msgstr "Configure Tool"
 
@@ -608,7 +633,7 @@ msgid "Confirm"
 msgstr "Confirm"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:434
+#: src/redesign/i18n/library-text.ts:429
 msgid "library.manage.copyPath"
 msgstr "Copy path"
 
@@ -623,7 +648,7 @@ msgid "error.unableToDetermineModId"
 msgstr "Could not determine an identity for this mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:498
+#: src/redesign/i18n/library-text.ts:493
 msgid "library.tools.launchFailed"
 msgstr "Could not launch {name}"
 
@@ -648,7 +673,7 @@ msgid "common.error.fileOpenerFailed"
 msgstr "Could not open this location."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:234
+#: src/redesign/i18n/library-text.ts:229
 msgid "library.import.actionFailed"
 msgstr "Could not start the archive import. Check file access and try again."
 
@@ -669,7 +694,7 @@ msgstr "Could not start the archive import. Check file access and try again."
 #~ msgstr "Create Library from Game Root"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:193
+#: src/redesign/i18n/library-text.ts:188
 msgid "library.empty.activateBody"
 msgstr "Create or select a modding profile to start managing installed mods."
 
@@ -692,32 +717,32 @@ msgstr "Dark"
 #~ msgstr "Dark"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:395
+#: src/redesign/i18n/library-text.ts:390
 msgid "library.bulk.deleteConfirm"
 msgstr "Delete"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:385
+#: src/redesign/i18n/library-text.ts:380
 msgid "library.bulk.deleteModsTitle"
 msgstr "Delete {count} mod(s)?"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:454
+#: src/redesign/i18n/library-text.ts:449
 msgid "library.manage.deleteLibraryTitle"
 msgstr "Delete {name}?"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:452
+#: src/redesign/i18n/library-text.ts:447
 msgid "library.manage.deleteLibrary"
 msgstr "Delete Library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:383
+#: src/redesign/i18n/library-text.ts:378
 msgid "library.bulk.deleteSelected"
 msgstr "Delete selected"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:549
+#: src/redesign/i18n/library-text.ts:544
 msgid "library.tools.deleteTool"
 msgstr "Delete Tool"
 
@@ -744,12 +769,12 @@ msgid "library.task.stage.syncDeploy"
 msgstr "Deploying files"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:173
+#: src/redesign/i18n/library-text.ts:168
 msgid "library.status.deployStale"
 msgstr "Deployment out of date — sync now"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:178
+#: src/redesign/i18n/library-text.ts:173
 msgid "library.status.deployUpToDate"
 msgstr "Deployment up to date"
 
@@ -764,19 +789,24 @@ msgid "registry.detail.heading"
 msgstr "Details"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:185
+#: src/redesign/i18n/library-text.ts:180
 msgid "library.card.disableMod"
 msgstr "Disable {name}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:381
+#: src/redesign/i18n/library-text.ts:376
 msgid "library.bulk.disableSelected"
 msgstr "Disable selected"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:325
+#: src/redesign/i18n/library-text.ts:320
 msgid "library.toolbar.filterDisabled"
 msgstr "Disabled only"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:27
+msgid "library.task.history.dismiss"
+msgstr "Dismiss {operation} for {library}"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:352
@@ -794,6 +824,11 @@ msgid "registry.install.incompatible.dontShow"
 msgstr "Do not show this warning again"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:9
+msgid "library.task.history.operation.download"
+msgstr "Download"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:296
 msgid "registry.errors.contentLengthMismatch"
 msgstr "Download size mismatch: received {actual} bytes, expected {expected} bytes."
@@ -804,7 +839,7 @@ msgid "library.task.stage.forgeDownload"
 msgstr "Downloading"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:199
+#: src/redesign/i18n/library-text.ts:194
 msgid "library.empty.dropTitle"
 msgstr "Drag and drop mod archives here to install"
 
@@ -813,7 +848,7 @@ msgstr "Drag and drop mod archives here to install"
 #~ msgstr "Effects"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:183
+#: src/redesign/i18n/library-text.ts:178
 msgid "library.card.enableMod"
 msgstr "Enable {name}"
 
@@ -823,17 +858,17 @@ msgid "settings.install.enable.label"
 msgstr "Enable mods after installation"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:379
+#: src/redesign/i18n/library-text.ts:374
 msgid "library.bulk.enableSelected"
 msgstr "Enable selected"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:355
+#: src/redesign/i18n/library-text.ts:350
 msgid "library.list.columnStatus"
 msgstr "Enabled"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:323
+#: src/redesign/i18n/library-text.ts:318
 msgid "library.toolbar.filterEnabled"
 msgstr "Enabled only"
 
@@ -842,47 +877,47 @@ msgstr "Enabled only"
 #~ msgstr "Enter a new name for this library."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:214
+#: src/redesign/i18n/library-text.ts:209
 msgid "library.empty.pathEntryAction"
 msgstr "Enter archive paths"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:219
+#: src/redesign/i18n/library-text.ts:214
 msgid "library.empty.pathEntryServerAction"
 msgstr "Enter archive paths on the server host"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:280
+#: src/redesign/i18n/library-text.ts:275
 msgid "library.pathInput.required"
 msgstr "Enter at least one path."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:529
+#: src/redesign/i18n/library-text.ts:524
 msgid "library.tools.executablePathDialogTitle"
 msgstr "Enter executable path"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:259
+#: src/redesign/i18n/library-text.ts:254
 msgid "library.manage.gameRootPathTitle"
 msgstr "Enter game root path"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:245
+#: src/redesign/i18n/library-text.ts:240
 msgid "library.import.pathsTitle"
 msgstr "Enter mod archive paths"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:247
+#: src/redesign/i18n/library-text.ts:242
 msgid "library.import.pathsDescription"
 msgstr "Enter one path per line, or separate paths with commas."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:264
+#: src/redesign/i18n/library-text.ts:259
 msgid "library.manage.gameRootPathDescription"
 msgstr "Enter the path to the SPT game folder."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:534
+#: src/redesign/i18n/library-text.ts:529
 msgid "library.tools.executablePathDialogDescription"
 msgstr "Enter the path to the tool executable."
 
@@ -896,17 +931,17 @@ msgstr "Error"
 #~ msgstr "Excludes"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:553
+#: src/redesign/i18n/library-text.ts:548
 msgid "library.tools.executable"
 msgstr "Executable"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:522
+#: src/redesign/i18n/library-text.ts:517
 msgid "library.tools.executablePath"
 msgstr "Executable Path"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:483
+#: src/redesign/i18n/library-text.ts:478
 msgid "library.tools.section"
 msgstr "Executable Tools"
 
@@ -929,12 +964,12 @@ msgid "registry.badge.extends"
 msgstr "Extends {parentName}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:508
+#: src/redesign/i18n/library-text.ts:503
 msgid "library.tools.dialogDescription"
 msgstr "External executable and launch parameters."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:49
+#: src/redesign/i18n/task-history-text.ts:53
 msgid "library.task.history.status.failure"
 msgstr "Failed"
 
@@ -953,7 +988,7 @@ msgid "File conflicts detected. Some mods may have conflicting files."
 msgstr "File conflicts detected. Some mods may have conflicting files."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:320
+#: src/redesign/i18n/library-text.ts:315
 msgid "library.toolbar.filterLabel"
 msgstr "Filter"
 
@@ -986,11 +1021,6 @@ msgstr "Finishing with some errors"
 #: src/redesign/i18n/registry-text.ts:108
 msgid "registry.toolbar.sortForgeDefault"
 msgstr "Forge Default"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:9
-msgid "library.task.history.operation.forgeInstall"
-msgstr "Forge install"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-progress-text.ts:8
@@ -1033,7 +1063,7 @@ msgid "library.taskResult.fullPaths"
 msgstr "Full paths"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:431
+#: src/redesign/i18n/library-text.ts:426
 msgid "library.manage.gameRootLabel"
 msgstr "Game root"
 
@@ -1042,12 +1072,12 @@ msgstr "Game root"
 #~ msgstr "Game Root"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:269
+#: src/redesign/i18n/library-text.ts:264
 msgid "library.manage.gameRootPathLabel"
 msgstr "Game root path"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:349
+#: src/redesign/i18n/library-text.ts:344
 msgid "library.toolbar.viewModeGrid"
 msgstr "Grid view"
 
@@ -1062,19 +1092,14 @@ msgid "common.nav.home"
 msgstr "Home"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:517
+#: src/redesign/i18n/library-text.ts:512
 msgid "library.tools.iconPlaceholder"
 msgstr "Icon URL (optional)"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:351
+#: src/redesign/i18n/library-text.ts:346
 msgid "library.toolbar.viewModeIcons"
 msgstr "Icon view"
-
-#. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:7
-msgid "library.task.history.operation.install"
-msgstr "Import"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-progress-text.ts:6
@@ -1134,7 +1159,7 @@ msgid "registry.actions.installParentFirst"
 msgstr "Install Parent Mod First"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:424
+#: src/redesign/i18n/library-text.ts:419
 msgid "library.manage.pathsSection"
 msgstr "Installation Paths"
 
@@ -1186,22 +1211,22 @@ msgid "library.taskResult.label"
 msgstr "Latest task result"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:492
+#: src/redesign/i18n/library-text.ts:487
 msgid "library.tools.launch"
 msgstr "Launch {name}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:542
+#: src/redesign/i18n/library-text.ts:537
 msgid "library.tools.launchArgs"
 msgstr "Launch Arguments"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:485
+#: src/redesign/i18n/library-text.ts:480
 msgid "library.tools.description"
 msgstr "Launch utilities specific to this profile's configuration."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:496
+#: src/redesign/i18n/library-text.ts:491
 msgid "library.tools.launching"
 msgstr "Launching {name}…"
 
@@ -1220,12 +1245,12 @@ msgid "common.status.libraryBusy"
 msgstr "Library busy"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:413
+#: src/redesign/i18n/library-text.ts:408
 msgid "library.manage.identitySection"
 msgstr "Library Identity"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:433
+#: src/redesign/i18n/library-text.ts:428
 msgid "library.manage.libraryRootLabel"
 msgstr "Library root"
 
@@ -1258,7 +1283,7 @@ msgstr "Linked the local mod to Forge metadata."
 #~ msgstr "Links"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:347
+#: src/redesign/i18n/library-text.ts:342
 msgid "library.toolbar.viewModeList"
 msgstr "List view"
 
@@ -1278,12 +1303,12 @@ msgid "registry.detail.matchExistingInstallLabel"
 msgstr "Local mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:302
+#: src/redesign/i18n/library-text.ts:297
 msgid "library.palette.locate"
 msgstr "Locate"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:226
+#: src/redesign/i18n/library-text.ts:221
 msgid "library.actions.manageLibraries"
 msgstr "Manage libraries"
 
@@ -1293,7 +1318,7 @@ msgid "registry.empty.manageLibrary"
 msgstr "Manage Libraries"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:399
+#: src/redesign/i18n/library-text.ts:394
 msgid "library.manage.dialogTitle"
 msgstr "Manage Library"
 
@@ -1338,12 +1363,12 @@ msgid "registry.badge.mod"
 msgstr "Mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:341
+#: src/redesign/i18n/library-text.ts:336
 msgid "library.toolbar.actionsLabel"
 msgstr "Mod actions"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:227
+#: src/redesign/i18n/library-text.ts:222
 msgid "library.import.archive"
 msgstr "Mod archive"
 
@@ -1374,7 +1399,7 @@ msgid "Mod related process is currently running. Please close it and try again."
 msgstr "Mod related process is currently running. Please close it and try again."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:345
+#: src/redesign/i18n/library-text.ts:340
 msgid "library.toolbar.viewModeLabel"
 msgstr "Mod view"
 
@@ -1399,7 +1424,7 @@ msgid "registry.toolbar.paginationMods"
 msgstr "Mods pages"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:343
+#: src/redesign/i18n/library-text.ts:338
 msgid "library.toolbar.moreOptions"
 msgstr "More options"
 
@@ -1409,22 +1434,22 @@ msgid "registry.toolbar.sortDownloads"
 msgstr "Most Downloaded"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:352
+#: src/redesign/i18n/library-text.ts:347
 msgid "library.list.columnName"
 msgstr "Name"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:419
+#: src/redesign/i18n/library-text.ts:414
 msgid "library.manage.nameLabel"
 msgstr "Name"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:307
+#: src/redesign/i18n/library-text.ts:302
 msgid "library.toolbar.sortNameAsc"
 msgstr "Name (A-Z)"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:309
+#: src/redesign/i18n/library-text.ts:304
 msgid "library.toolbar.sortNameDesc"
 msgstr "Name (Z-A)"
 
@@ -1453,9 +1478,9 @@ msgstr "No Active SPT Library"
 #~ msgstr "No backups yet"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:28
-msgid "library.task.history.empty"
-msgstr "No completed tasks yet."
+#: src/redesign/i18n/task-history-text.ts:32
+msgid "library.task.history.emptyState"
+msgstr "No events yet."
 
 #: src/modules/mod-list/instance-switcher.tsx:88
 #~ msgid "No Library"
@@ -1476,7 +1501,7 @@ msgid "registry.detail.matchNoLocalMods"
 msgstr "No local mods are available to match."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:304
+#: src/redesign/i18n/library-text.ts:299
 msgid "library.palette.noResults"
 msgstr "No matching mods"
 
@@ -1485,12 +1510,12 @@ msgstr "No matching mods"
 #~ msgstr "No mods installed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:363
+#: src/redesign/i18n/library-text.ts:358
 msgid "library.grid.noVisibleMods"
 msgstr "No mods match the current filter"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:368
+#: src/redesign/i18n/library-text.ts:363
 msgid "library.grid.noSearchOrFiltersResults"
 msgstr "No mods match your search or filters."
 
@@ -1529,18 +1554,18 @@ msgid "error.fileOrDirectoryNotFound"
 msgstr "Not found: {path}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:318
+#: src/redesign/i18n/library-text.ts:313
 msgid "library.toolbar.sortInstalledAsc"
 msgstr "Oldest installed"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: SUPPORTED_ARCHIVE_EXTENSIONS.map((extension) => `.${extension}`).join(' or ')
-#: src/redesign/i18n/library-text.ts:285
+#: src/redesign/i18n/library-text.ts:280
 msgid "library.pathInput.unsupported"
 msgstr "One or more paths do not use a supported archive extension ({0})."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:240
+#: src/redesign/i18n/library-text.ts:235
 msgid "library.import.unsupportedArchiveRejected"
 msgstr "Only .zip and .7z archives can be imported"
 
@@ -1549,7 +1574,7 @@ msgstr "Only .zip and .7z archives can be imported"
 #~ msgstr "Open"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:438
+#: src/redesign/i18n/library-text.ts:433
 msgid "library.manage.openInExplorer"
 msgstr "Open in file explorer"
 
@@ -1559,12 +1584,12 @@ msgid "registry.parentGate.search"
 msgstr "Open Parent Mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:204
+#: src/redesign/i18n/library-text.ts:199
 msgid "library.empty.dropBrowse"
 msgstr "or click to browse local files"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:54
+#: src/redesign/i18n/task-history-text.ts:58
 msgid "library.task.history.status.unknown"
 msgstr "Outcome unknown"
 
@@ -1608,12 +1633,12 @@ msgid "registry.status.parentInstalled"
 msgstr "Parent v{version} installed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:436
+#: src/redesign/i18n/library-text.ts:431
 msgid "library.manage.pathCopied"
 msgstr "Path copied"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:471
+#: src/redesign/i18n/library-text.ts:466
 msgid "library.manage.pathUnreachable"
 msgstr "Path unreachable"
 
@@ -1662,7 +1687,7 @@ msgid "library.task.stage.forgeMetadata"
 msgstr "Reading Forge details"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:443
+#: src/redesign/i18n/library-text.ts:438
 msgid "library.manage.rebuildCache"
 msgstr "Rebuild Cache"
 
@@ -1677,16 +1702,16 @@ msgstr "Recent task history"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-history-text.ts:22
-msgid "library.task.history.title"
-msgstr "Recent tasks ({count})"
+msgid "library.task.history.heading"
+msgstr "Recent tasks"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:313
+#: src/redesign/i18n/library-text.ts:308
 msgid "library.toolbar.sortInstalledDesc"
 msgstr "Recently installed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:311
+#: src/redesign/i18n/library-text.ts:306
 msgid "library.toolbar.sortUpdatedDesc"
 msgstr "Recently updated"
 
@@ -1738,7 +1763,7 @@ msgstr "Reload"
 #~ msgstr "Remove Backup"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:479
+#: src/redesign/i18n/library-text.ts:474
 msgid "library.manage.removeEntry"
 msgstr "Remove entry"
 
@@ -1761,7 +1786,7 @@ msgstr "Remove entry"
 #~ msgstr "Rename Library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:426
+#: src/redesign/i18n/library-text.ts:421
 msgid "library.manage.pathsDescription"
 msgstr "Required locations for game files and mod deployments."
 
@@ -1843,12 +1868,12 @@ msgid "registry.status.retrySearch"
 msgstr "Retry Search"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:420
+#: src/redesign/i18n/library-text.ts:415
 msgid "library.manage.saveName"
 msgstr "Save"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:551
+#: src/redesign/i18n/library-text.ts:546
 msgid "library.tools.saveChanges"
 msgstr "Save Changes"
 
@@ -1883,12 +1908,12 @@ msgid "registry.search.placeholder"
 msgstr "Search Forge mods & addons…"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:301
+#: src/redesign/i18n/library-text.ts:296
 msgid "library.toolbar.searchLabel"
 msgstr "Search mods"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:299
+#: src/redesign/i18n/library-text.ts:294
 msgid "library.toolbar.searchPlaceholder"
 msgstr "Search mods…"
 
@@ -1903,7 +1928,7 @@ msgid "registry.status.searching"
 msgstr "Searching Forge…"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:187
+#: src/redesign/i18n/library-text.ts:182
 msgid "library.card.selectMod"
 msgstr "Select {name}"
 
@@ -1913,17 +1938,17 @@ msgid "registry.detail.matchSelectPlaceholder"
 msgstr "Select a local mod…"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:292
+#: src/redesign/i18n/library-text.ts:287
 msgid "library.toolbar.selectAll"
 msgstr "Select all"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:294
+#: src/redesign/i18n/library-text.ts:289
 msgid "library.toolbar.selectAllVisible"
 msgstr "Select all visible mods"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:540
+#: src/redesign/i18n/library-text.ts:535
 msgid "library.tools.selectExecutable"
 msgstr "Select executable"
 
@@ -1932,7 +1957,7 @@ msgstr "Select executable"
 #~ msgstr "Select Game Root Directory"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:229
+#: src/redesign/i18n/library-text.ts:224
 msgid "library.import.selectModArchives"
 msgstr "Select mod archives"
 
@@ -1950,7 +1975,7 @@ msgid "registry.empty.noLibraryDescription"
 msgstr "Select or create an SPT library to browse compatible mods."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:408
+#: src/redesign/i18n/library-text.ts:403
 msgid "library.manage.selectGameRoot"
 msgstr "Select the SPT game folder"
 
@@ -1960,12 +1985,12 @@ msgid "library.path.selectFolder"
 msgstr "Select this folder"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:333
+#: src/redesign/i18n/library-text.ts:328
 msgid "library.toolbar.typeFilterServer"
 msgstr "Server"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:357
+#: src/redesign/i18n/library-text.ts:352
 msgid "library.list.typeServer"
 msgstr "Server"
 
@@ -1990,7 +2015,7 @@ msgid "registry.empty.showIncompatible"
 msgstr "Show Incompatible Versions"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:61
+#: src/redesign/i18n/task-history-text.ts:65
 msgid "library.task.history.log"
 msgstr "Show log ({count})"
 
@@ -2010,7 +2035,7 @@ msgid "common.status.somethingWentWrong"
 msgstr "Something went wrong"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:305
+#: src/redesign/i18n/library-text.ts:300
 msgid "library.toolbar.sortLabel"
 msgstr "Sort"
 
@@ -2020,7 +2045,7 @@ msgid "registry.toolbar.sortLabel"
 msgstr "Sort Registry"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:422
+#: src/redesign/i18n/library-text.ts:417
 msgid "library.manage.sptVersion"
 msgstr "SPT {version}"
 
@@ -2049,17 +2074,17 @@ msgid "library.task.stage.started"
 msgstr "Starting"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:544
+#: src/redesign/i18n/library-text.ts:539
 msgid "library.tools.launchArgsHint"
 msgstr "Stored, but not passed yet — launch uses the OS handler"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:224
+#: src/redesign/i18n/library-text.ts:219
 msgid "library.empty.dropSupported"
 msgstr "SUPPORTED: .zip, .7z"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:170
+#: src/redesign/i18n/library-text.ts:165
 msgid "library.actions.sync"
 msgstr "Sync"
 
@@ -2084,7 +2109,7 @@ msgid "library.taskResult.syncSucceeded"
 msgstr "Sync completed."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:171
+#: src/redesign/i18n/library-text.ts:166
 msgid "library.status.syncing"
 msgstr "Syncing…"
 
@@ -2098,7 +2123,7 @@ msgstr "System"
 #~ msgstr "System"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:524
+#: src/redesign/i18n/library-text.ts:519
 msgid "library.tools.executablePathPlaceholder"
 msgstr "System path to the target file"
 
@@ -2146,7 +2171,7 @@ msgid "The archive format is not supported. Please extract them to a folder manu
 msgstr "The archive format is not supported. Please extract them to a folder manually."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:415
+#: src/redesign/i18n/library-text.ts:410
 msgid "library.manage.identityDescription"
 msgstr "The display name for this library in your dashboard."
 
@@ -2160,7 +2185,7 @@ msgid "error.invalidLibrary"
 msgstr "The library at {path} could not be opened: {reason}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:456
+#: src/redesign/i18n/library-text.ts:451
 msgid "library.manage.deleteLibraryDescription"
 msgstr "The library entry is removed from Modkeeper."
 
@@ -2178,7 +2203,7 @@ msgid "The requested file or directory was not found. Please check the path and 
 msgstr "The requested file or directory was not found. Please check the path and try again."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:390
+#: src/redesign/i18n/library-text.ts:385
 msgid "library.bulk.deleteModsDescription"
 msgstr "The selected mods are removed from the library on disk."
 
@@ -2198,7 +2223,7 @@ msgid "error.taskIdInUse"
 msgstr "This operation is already in progress"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:473
+#: src/redesign/i18n/library-text.ts:468
 msgid "library.manage.unreadableLibraryHint"
 msgstr "This registered library could not be read. It can only be removed from the list."
 
@@ -2208,32 +2233,32 @@ msgid "error.unsupportedSptVersion"
 msgstr "This SPT version is not supported: {version}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:504
+#: src/redesign/i18n/library-text.ts:499
 msgid "library.tools.deleted"
 msgstr "Tool deleted"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:513
+#: src/redesign/i18n/library-text.ts:508
 msgid "library.tools.identity"
 msgstr "Tool Identity"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:515
+#: src/redesign/i18n/library-text.ts:510
 msgid "library.tools.namePlaceholder"
 msgstr "Tool name"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:502
+#: src/redesign/i18n/library-text.ts:497
 msgid "library.tools.saved"
 msgstr "Tool saved"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:327
+#: src/redesign/i18n/library-text.ts:322
 msgid "library.toolbar.typeFilterLabel"
 msgstr "Type"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:353
+#: src/redesign/i18n/library-text.ts:348
 msgid "library.list.columnType"
 msgstr "Type"
 
@@ -2252,12 +2277,12 @@ msgid "Unable to determine the mod ID. Please check the mod files and try again.
 msgstr "Unable to determine the mod ID. Please check the mod files and try again."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:337
+#: src/redesign/i18n/library-text.ts:332
 msgid "library.toolbar.typeFilterUnknown"
 msgstr "Unknown"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:361
+#: src/redesign/i18n/library-text.ts:356
 msgid "library.list.typeUnknown"
 msgstr "Unknown"
 
@@ -2280,12 +2305,12 @@ msgid "Unknown mod"
 msgstr "Unknown mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:31
+#: src/redesign/i18n/task-history-text.ts:35
 msgid "library.task.history.operation.unknown"
 msgstr "Unknown task"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:466
+#: src/redesign/i18n/library-text.ts:461
 msgid "library.manage.unreadableLibrary"
 msgstr "Unreadable library"
 
@@ -2309,12 +2334,17 @@ msgid "registry.actions.update"
 msgstr "Update to v{version}"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:7
+msgid "library.task.history.operation.upload"
+msgstr "Upload"
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/settings-text.ts:52
 msgid "settings.accent.swatch"
 msgstr "Use {name} accent"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/library-text.ts:276
+#: src/redesign/i18n/library-text.ts:271
 msgid "library.pathInput.confirm"
 msgstr "Use path"
 
