@@ -366,6 +366,7 @@ type Service struct {
 	installMarkerWriter    func(string, installTransaction) error
 	installTaskHook        func(string)
 	modWrites              sync.Mutex
+	settingsMu             sync.RWMutex
 }
 
 // DeriveLibraryRoot returns the default library location for a game install.
@@ -756,8 +757,14 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	}
 	return nil
 }
-func (s *Service) GetSettings() config.AppSettings { return s.Store.Config.Settings }
+func (s *Service) GetSettings() config.AppSettings {
+	s.settingsMu.RLock()
+	defer s.settingsMu.RUnlock()
+	return s.Store.Config.Settings
+}
 func (s *Service) SaveSettings(v config.AppSettings) (config.AppSettings, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	old := s.Store.Config.Settings
 	s.Store.Config.Settings = v
 	if e := s.Store.Save(); e != nil {
