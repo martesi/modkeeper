@@ -18,6 +18,7 @@ const expectedSettings = {
   language: 'en-US',
   enableModsOnInstall: true,
   warnIncompatibleForgeInstall: true,
+  forgeEndpoint: '',
 }
 
 export async function startNativeSmoke() {

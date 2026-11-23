@@ -66,6 +66,7 @@ export function emptyWorkspace(): LibraryWorkspace {
       language: 'en-US',
       enableModsOnInstall: true,
       warnIncompatibleForgeInstall: true,
+      forgeEndpoint: '',
     },
   }
 }
@@ -106,6 +107,7 @@ function seedWorkspace(): LibraryWorkspace {
       language: 'en-US',
       enableModsOnInstall: true,
       warnIncompatibleForgeInstall: true,
+      forgeEndpoint: '',
     },
   }
 }

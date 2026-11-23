@@ -17,6 +17,7 @@ const FALLBACK_SETTINGS: AppSettings = {
   language: 'en-US',
   enableModsOnInstall: true,
   warnIncompatibleForgeInstall: true,
+  forgeEndpoint: '',
 }
 
 /**

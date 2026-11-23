@@ -28,6 +28,7 @@ type AppSettings struct {
 	Language                     string    `toml:"language" json:"language"`
 	EnableModsOnInstall          bool      `toml:"enableModsOnInstall" json:"enableModsOnInstall"`
 	WarnIncompatibleForgeInstall bool      `toml:"warnIncompatibleForgeInstall" json:"warnIncompatibleForgeInstall"`
+	ForgeEndpoint                string    `toml:"forgeEndpoint" json:"forgeEndpoint"`
 }
 
 type ThemeMode string

@@ -85,6 +85,7 @@ export function createInMemoryWailsMock(): WailsMock {
             language: 'en-US',
             enableModsOnInstall: true,
             warnIncompatibleForgeInstall: true,
+            forgeEndpoint: '',
           }
         )
       } catch {
@@ -94,6 +95,7 @@ export function createInMemoryWailsMock(): WailsMock {
           language: 'en-US',
           enableModsOnInstall: true,
           warnIncompatibleForgeInstall: true,
+          forgeEndpoint: '',
         }
       }
     })(),

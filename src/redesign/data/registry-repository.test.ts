@@ -81,6 +81,7 @@ const workspace = {
     language: 'en-US',
     enableModsOnInstall: true,
     warnIncompatibleForgeInstall: true,
+    forgeEndpoint: '',
   },
 }
 

@@ -7,6 +7,7 @@ export interface AppSettings {
   language: string
   enableModsOnInstall: boolean
   warnIncompatibleForgeInstall: boolean
+  forgeEndpoint: string
 }
 
 export enum ThemeMode {

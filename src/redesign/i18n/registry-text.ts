@@ -137,6 +137,11 @@ export const registryText = {
       id: 'registry.detail.compatibleOnly',
       message: 'Compatible with this SPT version',
     }),
+  noCompatibleVersions: () =>
+    t({
+      id: 'registry.detail.noCompatibleVersions',
+      message: 'No versions on this page support the active SPT version.',
+    }),
   incompatibleInstallTitle: () =>
     t({
       id: 'registry.install.incompatible.title',
@@ -156,6 +161,12 @@ export const registryText = {
     t({
       id: 'registry.install.incompatible.confirm',
       message: 'Install anyway',
+    }),
+  installLibraryChanged: () =>
+    t({
+      id: 'registry.install.libraryChanged',
+      message:
+        'The active library changed. Reopen the version before installing.',
     }),
   dependenciesHeader: () =>
     t({ id: 'registry.detail.dependenciesHeader', message: 'Dependencies' }),

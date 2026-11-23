@@ -14,6 +14,7 @@ func TestWarnIncompatibleForgeInstallDefaultsAndPersists(t *testing.T) {
 	}
 
 	settings.WarnIncompatibleForgeInstall = false
+	settings.ForgeEndpoint = "https://forge.example/api/v0"
 	var encoded bytes.Buffer
 	if err := toml.NewEncoder(&encoded).Encode(settings); err != nil {
 		t.Fatal(err)
@@ -24,5 +25,8 @@ func TestWarnIncompatibleForgeInstallDefaultsAndPersists(t *testing.T) {
 	}
 	if decoded.WarnIncompatibleForgeInstall {
 		t.Fatal("disabled incompatible Forge install warning was not persisted")
+	}
+	if decoded.ForgeEndpoint != settings.ForgeEndpoint {
+		t.Fatalf("Forge endpoint %q was not persisted", decoded.ForgeEndpoint)
 	}
 }
