@@ -6,7 +6,6 @@ import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
 import { installWailsMock } from '@/wails/mock'
 import { installLinguiMacroMock } from '../testing/lingui-macro'
 import { settingsAtom } from '../state/settings-state'
-import { saveSettings } from '../data/settings-repository'
 
 installLinguiMacroMock()
 
@@ -42,6 +41,8 @@ let container: HTMLDivElement
 let removeMock: (() => void) | undefined
 let savedSettings: unknown
 let settingsSaveHistory: unknown[]
+let deferFirstSave = false
+let completeFirstSave: (() => void) | undefined
 
 beforeEach(async () => {
   getDefaultStore().set(settingsAtom, {
@@ -56,12 +57,19 @@ beforeEach(async () => {
   document.body.append(container)
   savedSettings = undefined
   settingsSaveHistory = []
+  deferFirstSave = false
+  completeFirstSave = undefined
   removeMock = installWailsMock({
     events: { on: () => () => {} },
     commands: {
       saveSettings: (settings) => {
         savedSettings = settings
         settingsSaveHistory.push(settings)
+        if (deferFirstSave && settingsSaveHistory.length === 1) {
+          return new Promise((resolve) => {
+            completeFirstSave = () => resolve({ status: 'ok', data: settings })
+          })
+        }
         return { status: 'ok', data: settings }
       },
     },
@@ -88,6 +96,19 @@ afterAll(() => {
   browserWindow.happyDOM.abort()
 })
 
+function editEndpoint(input: HTMLInputElement, value: string) {
+  const previousValue = input.value
+  const setValue = Object.getOwnPropertyDescriptor(
+    browserWindow.HTMLInputElement.prototype,
+    'value',
+  )?.set
+  setValue?.call(input, value)
+  const tracker = Reflect.get(input, '_valueTracker') as
+    { setValue(value: string): void } | undefined
+  tracker?.setValue(previousValue)
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 test('typing a Forge endpoint and saving persists the complete value', async () => {
   const input = container.querySelector<HTMLInputElement>(
     '[aria-label="Forge endpoint"]',
@@ -97,17 +118,7 @@ test('typing a Forge endpoint and saving persists the complete value', async () 
   )
   if (!input || !save) throw new Error('Forge endpoint controls are missing')
 
-  await act(async () => {
-    const setValue = Object.getOwnPropertyDescriptor(
-      browserWindow.HTMLInputElement.prototype,
-      'value',
-    )?.set
-    setValue?.call(input, 'https://forge.example/api/v0')
-    const tracker = Reflect.get(input, '_valueTracker') as
-      { setValue(value: string): void } | undefined
-    tracker?.setValue('')
-    input.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  await act(async () => editEndpoint(input, 'https://forge.example/api/v0'))
   expect(save.disabled).toBe(false)
   await act(async () => save.click())
 
@@ -117,7 +128,43 @@ test('typing a Forge endpoint and saving persists the complete value', async () 
   })
 })
 
+test('editing back during a pending save keeps the newer draft', async () => {
+  deferFirstSave = true
+  const input = container.querySelector<HTMLInputElement>(
+    '[aria-label="Forge endpoint"]',
+  )
+  const save = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Save',
+  )
+  if (!input || !save) throw new Error('Forge endpoint controls are missing')
+
+  await act(async () => editEndpoint(input, 'https://forge.example/api/v0'))
+  await act(async () => {
+    save.click()
+    await Promise.resolve()
+  })
+  if (!completeFirstSave)
+    throw new Error('The first settings save did not start')
+
+  await act(async () => editEndpoint(input, ''))
+  expect(input.value).toBe('')
+  await act(async () => {
+    completeFirstSave?.()
+    await Promise.resolve()
+  })
+
+  expect(input.value).toBe('')
+  const saveDraft = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Save',
+  )
+  if (!saveDraft) throw new Error('Save control is missing after completion')
+  expect(saveDraft.disabled).toBe(false)
+  await act(async () => saveDraft.click())
+  expect(settingsSaveHistory[1]).toMatchObject({ forgeEndpoint: '' })
+})
+
 test('overlapping settings saves preserve both patches', async () => {
+  const { saveSettings } = await import('../data/settings-repository')
   await Promise.all([
     saveSettings({ theme: 'dark' }),
     saveSettings({ forgeEndpoint: 'https://forge.example/api/v0' }),

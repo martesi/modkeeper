@@ -82,7 +82,9 @@ export function SettingsScreen() {
               const nextEndpoint = event.currentTarget.value
               forgeEndpointDraftRef.current = nextEndpoint
               setForgeEndpointDraft(
-                nextEndpoint === settings.forgeEndpoint ? null : nextEndpoint,
+                savingForgeEndpoint || nextEndpoint !== settings.forgeEndpoint
+                  ? nextEndpoint
+                  : null,
               )
             }}
           />
