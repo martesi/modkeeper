@@ -11,6 +11,8 @@ import {
   clearLibrarySearchAtom,
   libraryBusyAtom,
   librarySearchAtom,
+  libraryRevealModIdAtom,
+  locateLibraryModAtom,
   librarySortAtom,
   libraryStatusFilterAtom,
   libraryTypeFilterAtom,
@@ -254,6 +256,49 @@ describe('library type filtering and recovery', () => {
 })
 
 describe('default library store helpers', () => {
+  test('locating a mod hidden only by type keeps its matching search and status filters', () => {
+    const { store } = setupLibrary()
+    store.set(librarySearchAtom, 'Zeta')
+    store.set(libraryStatusFilterAtom, 'enabled')
+    store.set(libraryTypeFilterAtom, 'client')
+
+    store.set(locateLibraryModAtom, 'new-server')
+
+    expect(store.get(librarySearchAtom)).toBe('Zeta')
+    expect(store.get(libraryStatusFilterAtom)).toBe('enabled')
+    expect(store.get(libraryTypeFilterAtom)).toBe('all')
+    expect(store.get(libraryRevealModIdAtom)).toBe('new-server')
+  })
+
+  test('locating a mod clears every filter that hides it', () => {
+    const { store } = setupLibrary()
+    store.set(librarySearchAtom, 'not found')
+    store.set(libraryStatusFilterAtom, 'disabled')
+    store.set(libraryTypeFilterAtom, 'client')
+
+    store.set(locateLibraryModAtom, 'new-server')
+
+    expect(store.get(librarySearchAtom)).toBe('')
+    expect(store.get(libraryStatusFilterAtom)).toBe('all')
+    expect(store.get(libraryTypeFilterAtom)).toBe('all')
+  })
+
+  test('locating clears only hiding filters and preserves bulk selection', () => {
+    const { store } = setupLibrary()
+    store.set(librarySearchAtom, 'not found')
+    store.set(libraryStatusFilterAtom, 'disabled')
+    store.set(libraryTypeFilterAtom, 'client')
+    store.set(selectedModIdsAtom, new Set(['selected-mod']))
+
+    store.set(locateLibraryModAtom, 'new-server')
+
+    expect(store.get(librarySearchAtom)).toBe('')
+    expect(store.get(libraryStatusFilterAtom)).toBe('all')
+    expect(store.get(libraryTypeFilterAtom)).toBe('all')
+    expect(store.get(selectedModIdsAtom)).toEqual(new Set(['selected-mod']))
+    expect(store.get(libraryRevealModIdAtom)).toBe('new-server')
+  })
+
   test('setWorkspace prunes selection when a mod disappears', () => {
     const store = getDefaultStore()
     const { workspace } = setupLibrary()

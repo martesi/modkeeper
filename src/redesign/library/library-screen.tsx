@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useAtomValue } from 'jotai'
+import { useLayoutEffect, useState } from 'react'
+import { useAtomValue, useStore } from 'jotai'
 import { Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -7,6 +7,8 @@ import {
   activeLibraryIdAtom,
   libraryBusyAtom,
   modListAtom,
+  libraryScreenInstanceAtom,
+  libraryRevealModIdAtom,
   pendingTasksAtom,
 } from '../state/library-state'
 import { syncMods } from '../data/library-repository'
@@ -23,6 +25,17 @@ import { LibraryActionIconButton } from './library-action-icon-button'
  * Library screen with named library actions and the active workspace content.
  */
 export function LibraryScreen() {
+  const store = useStore()
+  useLayoutEffect(() => {
+    const instance = {}
+    store.set(libraryScreenInstanceAtom, instance)
+    return () => {
+      if (store.get(libraryScreenInstanceAtom) === instance) {
+        store.set(libraryScreenInstanceAtom, null)
+        store.set(libraryRevealModIdAtom, null)
+      }
+    }
+  }, [store])
   const activeLibrary = useAtomValue(activeLibraryAtom)
   const mods = useAtomValue(modListAtom)
   const [manageOpen, setManageOpen] = useState(false)
