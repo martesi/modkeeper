@@ -11,6 +11,9 @@ import { FidelityButton } from './fidelity-button'
 import { FidelityInput } from './fidelity-input'
 import { libraryText } from '../../i18n/library-text'
 import { parsePathInput, type PathInputMode } from '../utils/path-input'
+import { isWails } from '@/wails/runtime'
+import { getWailsMock } from '@/wails/mock'
+import { PathBrowser } from './path-browser'
 
 export interface PathInputDialogOptions {
   mode: PathInputMode
@@ -18,6 +21,7 @@ export interface PathInputDialogOptions {
   description: string
   label: string
   placeholder: string
+  selectDirectory?: boolean
 }
 
 interface PathInputDialogProps {
@@ -101,6 +105,19 @@ export function PathInputDialog({
               >
                 {error}
               </p>
+            )}
+            {(isWails() || getWailsMock()?.commands?.listDirectory) && (
+              <PathBrowser
+                selectDirectory={options.selectDirectory ?? false}
+                onSelect={(path) => {
+                  setValue((current) =>
+                    options.mode === 'archives' && current
+                      ? `${current}\n${path}`
+                      : path,
+                  )
+                  setError(null)
+                }}
+              />
             )}
           </div>
           <DialogFooter className="mt-5">

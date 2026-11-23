@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test'
 
 test('serves the app favicon', async ({ page, request }) => {
   await page.goto('/')
+  const legacyResponse = await request.get('/mod_keeper.svg')
+  expect(legacyResponse.status()).toBe(200)
+  expect(legacyResponse.headers()['content-type']).toContain('image/svg+xml')
   const icon = page.locator('link[rel~="icon"]')
   const href = await icon.getAttribute('href')
   expect(href).toBeTruthy()
