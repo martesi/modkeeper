@@ -37,13 +37,13 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Install frontend dependencies
-        run: nix develop .#windows -c bun ci --ignore-scripts
+        run: nix develop .#default -c bun ci --ignore-scripts
 
       - name: Generate Wails bindings
-        run: nix develop .#windows -c bun run bindings:wails
+        run: nix develop .#default -c bun run bindings:wails
 
       - name: Build Windows NSIS installers
-        run: nix develop .#windows -c sh scripts/build-windows.sh
+        run: sh scripts/build-windows.sh
 
       - name: Upload Windows installers
         env:
