@@ -11,6 +11,19 @@ const unknownTaskLabel = () =>
   t({ id: 'library.task.operation.unknown', message: 'Task' })
 
 export const libraryText = {
+  browseFolders: () =>
+    t({ id: 'library.path.browseFolders', message: 'Browse folders' }),
+  hideFolders: () =>
+    t({ id: 'library.path.hideFolders', message: 'Hide folders' }),
+  parentFolder: () =>
+    t({ id: 'library.path.parentFolder', message: 'Parent folder' }),
+  selectFolder: () =>
+    t({ id: 'library.path.selectFolder', message: 'Select this folder' }),
+  browseFoldersFailed: () =>
+    t({
+      id: 'library.path.browseFailed',
+      message: 'Could not browse this folder. You can enter a path manually.',
+    }),
   title: () => t({ id: 'library.header.title', message: 'Library' }),
   workspaceLoading: () =>
     t({ id: 'library.status.workspaceLoading', message: 'Loading workspace…' }),

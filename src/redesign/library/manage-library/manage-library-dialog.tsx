@@ -77,6 +77,7 @@ export function ManageLibraryDialog({
         (
           await requestPathInput({
             mode: 'single',
+            selectDirectory: true,
             title: libraryText.gameRootPathTitle(),
             description: libraryText.gameRootPathDescription(),
             label: libraryText.gameRootPathLabel(),
