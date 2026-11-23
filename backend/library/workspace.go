@@ -15,7 +15,7 @@ var manifestFields = []string{"id", "name", "gameRoot", "repoRoot", "sptVersion"
 var modFields = []string{"id", "isActive", "type", "name"}
 
 // Workspace assembles the frontend-facing state from the registered libraries'
-// files. It mirrors Rust's assemble_workspace: manifests are read only, version
+// files. It mirrors current implementation's assemble_workspace: manifests are read only, version
 // validation never runs, and an unreadable manifest becomes a path-only stub
 // instead of disappearing from the list. It does not wait for startup or
 // consume the config warning; those belong to the commands that own them.
@@ -68,7 +68,7 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 }
 
 // workspaceManifest prefers the active library's in-memory state because it is
-// fresher than its files, matching Rust's assemble_workspace.
+// fresher than its files, matching current implementation's assemble_workspace.
 func (s *Service) workspaceManifest(known config.KnownLibrary) (manifest, bool) {
 	if s.active != nil && s.active.manifest.ID == known.ID {
 		return s.active.manifest, true
@@ -77,9 +77,9 @@ func (s *Service) workspaceManifest(known config.KnownLibrary) (manifest, bool) 
 	return m, err == nil
 }
 
-// readStrictManifest applies the field requirements of Rust's LibraryDTO and
+// readStrictManifest applies the field requirements of current implementation's LibraryDTO and
 // Mod. TOML decoding alone fills missing values with zeroes, which would turn a
-// manifest Rust rejects into a plausible library.
+// manifest current implementation rejects into a plausible library.
 func readStrictManifest(path string) (manifest, error) {
 	var raw map[string]any
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
@@ -117,7 +117,7 @@ func readStrictManifest(path string) (manifest, error) {
 	return m, nil
 }
 
-// workspaceCacheStatus mirrors Rust's per-library cache probe. The active
+// workspaceCacheStatus mirrors current implementation's per-library cache probe. The active
 // library is trusted without a file read; every other library reports a failed
 // state with the reason instead of hiding itself behind a stub.
 func (s *Service) workspaceCacheStatus(known config.KnownLibrary) models.CacheStatus {
@@ -132,7 +132,7 @@ func (s *Service) workspaceCacheStatus(known config.KnownLibrary) models.CacheSt
 	return models.CacheStatus{State: models.CacheStateReady, LastRebuiltAt: &rebuilt}
 }
 
-// readStrictCache applies the field requirements of Rust's LibraryCache and
+// readStrictCache applies the field requirements of current implementation's LibraryCache and
 // ModFS: `mods` is mandatory and every entry needs id, modType, files and
 // executables with the expected types.
 func readStrictCache(path string) error {
@@ -181,7 +181,7 @@ func missingFields(table map[string]any, fields []string) error {
 	return nil
 }
 
-// validModType accepts Rust's exact lowercase values and the named aliases from
+// validModType accepts current implementation's exact lowercase values and the named aliases from
 // its serde attributes; arbitrary casing is not accepted.
 func validModType(value any) bool {
 	text, ok := value.(string)
@@ -234,7 +234,7 @@ func modSummary(libraryID, installed, libraryUpdatedAt string, m models.Mod) mod
 	}
 }
 
-// mtimeISO matches Rust's mtime_iso: the file's modification time in UTC, or
+// mtimeISO matches current implementation's mtime_iso: the file's modification time in UTC, or
 // now when the file cannot be inspected.
 func mtimeISO(path string) string {
 	info, err := os.Stat(path)
@@ -244,7 +244,7 @@ func mtimeISO(path string) string {
 	return isoUTC(info.ModTime())
 }
 
-// fileCreatedAt matches Rust's file_created_at: creation time when the
+// fileCreatedAt matches current implementation's file_created_at: creation time when the
 // filesystem records one, otherwise the modification time.
 func fileCreatedAt(path string) *string {
 	if created, ok := createdTime(path); ok {
@@ -259,6 +259,6 @@ func fileCreatedAt(path string) *string {
 	return &stamp
 }
 
-// isoUTC matches Rust's to_iso8601_utc: whole seconds, UTC, Z suffix.
+// isoUTC matches current implementation's to_iso8601_utc: whole seconds, UTC, Z suffix.
 // RFC3339 emits exactly that shape because it has no fractional seconds.
 func isoUTC(t time.Time) string { return t.UTC().Format(time.RFC3339) }

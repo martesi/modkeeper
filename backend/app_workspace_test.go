@@ -13,8 +13,8 @@ import (
 	"github.com/martes/modkeeper/backend/testenv"
 )
 
-// Rust hands the startup warning only to get_library_workspace. Plain commands
-// that return a workspace, including successful transitions, must not consume it.
+// The workspace query returns any startup warning. Plain commands that return a
+// workspace, including successful transitions, must not consume it.
 func TestPendingConfigWarningSurvivesPlainWorkspaceCommands(t *testing.T) {
 	env := testenv.New(t)
 	app := NewAppAt(filepath.Join(env.Root, "config.toml"))

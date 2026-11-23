@@ -30,9 +30,8 @@ type TaskRegistry struct {
 	startupOnce sync.Once
 }
 
-// StartupLoadTimeout bounds the initial library handshake, matching Rust's
-// INITIAL_LIBRARY_LOAD_TIMEOUT. It is exported as public parity API so callers
-// and tests can derive the timeout error message.
+// StartupLoadTimeout bounds the initial library handshake. It is exported so
+// callers and tests can derive the timeout error message.
 const StartupLoadTimeout = 10 * time.Second
 
 type taskEntry struct {

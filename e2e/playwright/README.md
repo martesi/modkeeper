@@ -9,11 +9,11 @@ bus. A reused server must set the relevant variable before it starts.
 
 For Wails v3 native development, run `nix develop -c wails3 dev
 -config ./build/config.yml`. The app uses Wails v3.1.0 services and
-`@wailsio/runtime` events. Generate Go service bindings with:
+`@wailsio/runtime` events. The Go service bindings are generated, not
+committed. Generate them with:
 
 ```sh
-nix develop -c wails3 generate bindings -ts -i -dir . -d frontend/bindings ./...
-bun scripts/prune-wails-bindings.ts
+nix develop -c bun run bindings:wails
 ```
 
 The Playwright suite runs against the frontend and uses the in-memory Wails
@@ -31,5 +31,5 @@ bun "$ARCA_E2E_HARNESS" stop --config .config/arca.toml
 
 The task-center spec installs a Wails in-memory event mock before app startup.
 It exercises frontend routing and event delivery, but not real IPC, backend
-sync, native window behavior, or persisted settings. Retain native smoke tests
-for those paths.
+sync, native window behavior, or persisted settings. Issue [#15](https://github.com/martesi/modkeeper/issues/15)
+tracks adding real-backend journeys to CI.

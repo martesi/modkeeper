@@ -1,4 +1,4 @@
-name: 'publish'
+name: publish
 
 on:
   push:
@@ -6,62 +6,93 @@ on:
       - 'v*'
   workflow_dispatch:
 
-jobs:
-  publish-tauri:
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - target: 'x86_64-pc-windows-msvc'
-            os: windows-latest
-            args: '--target x86_64-pc-windows-msvc --bundles nsis'
-            binary: false
-          - target: 'aarch64-pc-windows-msvc'
-            os: windows-latest
-            args: '--target aarch64-pc-windows-msvc --bundles nsis'
-            binary: false
-          - target: 'x86_64-unknown-linux-gnu'
-            os: ubuntu-22.04
-            args: '--target x86_64-unknown-linux-gnu --no-bundle'
-            binary: true
-            assetName: 'Modkeeper_[version]_linux_x86_64'
+permissions:
+  contents: write
 
-    runs-on: ${{ matrix.settings.os }}
+jobs:
+  create-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          fi
+
+  publish-windows:
+    needs: create-release
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Install Nix
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32
         with:
-          bun-version: 1.4.4
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        with:
-          targets: ${{ matrix.settings.target }}
+      - name: Install frontend dependencies
+        run: nix develop .#windows -c bun ci --ignore-scripts
 
-      - name: install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Generate Wails bindings
+        run: nix develop .#windows -c bun run bindings:wails
 
-      - name: install frontend dependencies
-        run: bun ci --ignore-scripts
+      - name: Build Windows NSIS installers
+        run: nix develop .#windows -c sh scripts/build-windows.sh
 
-      - name: build and release
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+      - name: Upload Windows installers
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
+            build/bin/modkeeper-amd64-machine-installer.exe \
+            build/bin/modkeeper-amd64-user-installer.exe \
+            build/bin/modkeeper-arm64-machine-installer.exe \
+            build/bin/modkeeper-arm64-user-installer.exe
+
+  publish-linux:
+    needs: create-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          tagName: v__VERSION__
-          releaseName: 'v__VERSION__'
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.settings.args }} --locked
-          uploadPlainBinary: ${{ matrix.settings.binary }}
-          releaseAssetNamePattern: ${{ matrix.settings.assetName }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Install frontend dependencies
+        run: nix develop .#default -c bun ci --ignore-scripts
+
+      - name: Generate Wails bindings
+        run: nix develop .#default -c bun run bindings:wails
+
+      - name: Build embedded frontend
+        run: nix develop .#default -c bun run build:wails
+
+      - name: Build Linux binary
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          nix develop .#default -c bash -c '
+            set -euo pipefail
+            version="${TAG#v}"
+            mkdir -p build/release
+            go build -trimpath -o "build/release/Modkeeper_${version}_linux_x86_64" .
+          '
+
+      - name: Upload Linux binary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" "build/release/Modkeeper_${TAG#v}_linux_x86_64"

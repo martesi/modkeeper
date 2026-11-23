@@ -2,7 +2,7 @@ package deployment
 
 import "github.com/BurntSushi/toml"
 
-// Cache preserves the Rust LibraryCache/ModFS TOML representation. Cache rebuild
+// Cache preserves the LibraryCache/ModFS TOML representation. Cache rebuild
 // and manifest persistence belong to the library service, not deployment.
 type Cache struct {
 	Mods map[string]CachedMod `toml:"mods"`

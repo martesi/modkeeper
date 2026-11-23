@@ -1432,9 +1432,8 @@ func trimExt(name string) string {
 	return name
 }
 
-// TestInstallUpgradeLeavesNoSnapshot ports the Rust upgrade-path contract at the
-// library layer: a second install replaces the mod content and never creates a
-// backup snapshot.
+// TestInstallUpgradeLeavesNoSnapshot verifies that a second install replaces
+// the mod content without creating a backup snapshot.
 func TestInstallUpgradeLeavesNoSnapshot(t *testing.T) {
 	env := testenv.New(t)
 	app := NewAppAt(filepath.Join(t.TempDir(), "config.toml"))

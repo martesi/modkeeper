@@ -245,7 +245,7 @@ func (s *Service) validateForgeAddonParent(constraint *forge.AddonConstraint) er
 	return models.Fail(models.ParseError, fmt.Sprintf("Forge addon requires installed parent %d (%s)", parentID, parentGUID))
 }
 
-// forgeVersionMatches evaluates the addon parent constraint with the Rust
+// forgeVersionMatches evaluates the addon parent constraint with the current implementation
 // semver requirement grammar used by library_service::forge_version_matches.
 func forgeVersionMatches(version, constraint string) (bool, error) {
 	requirement, err := semverreq.ParseRequirement(constraint)

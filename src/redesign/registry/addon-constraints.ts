@@ -6,7 +6,7 @@ import type {
   ModSummary,
 } from '@/wails/contract'
 
-function parseRustSemver(version: string): string | null {
+function parseSemverVersion(version: string): string | null {
   const parsed = semver.parse(version)
   if (!parsed) return null
   const prerelease = parsed.prerelease.length
@@ -17,7 +17,7 @@ function parseRustSemver(version: string): string | null {
   return canonical === version ? version : null
 }
 
-function normalizeRustVersionReq(constraint: string): string | null {
+function normalizeVersionReq(constraint: string): string | null {
   const comparators = constraint.split(',').map((part) => part.trim())
   if (comparators.some((part) => part === '')) return null
 
@@ -26,7 +26,7 @@ function normalizeRustVersionReq(constraint: string): string | null {
     if (!match) return ''
     const [, operator = '', version] = match
     if (operator || /[*xX]/.test(version)) return `${operator}${version}`
-    // Rust VersionReq treats an omitted operator as a caret requirement.
+    // A bare version requirement means the compatible caret range.
     // npm semver treats a bare complete version as exact and partials as x-ranges.
     return `^${version}`
   })
@@ -183,8 +183,8 @@ export function evaluateAddonParentConstraint({
     }
   }
 
-  const validVersion = parseRustSemver(installedVersion)
-  const validConstraint = normalizeRustVersionReq(constraint)
+  const validVersion = parseSemverVersion(installedVersion)
+  const validConstraint = normalizeVersionReq(constraint)
 
   if (!validVersion) {
     return {

@@ -11,24 +11,23 @@ afterEach(() => {
 })
 
 describe('Wails browser mock', () => {
-  test('dispatches mock before Wails and Wails before Tauri', async () => {
+  test('dispatches the browser mock before Wails', async () => {
     const calls: string[] = []
     await dispatchCommand(
       () => calls.push('mock'),
       () => calls.push('wails'),
-      () => calls.push('tauri'),
     )
     expect(calls).toEqual(['mock'])
     calls.length = 0
     await dispatchCommand(
       undefined,
       () => calls.push('wails'),
-      () => calls.push('tauri'),
     )
     expect(calls).toEqual(['wails'])
     calls.length = 0
-    await dispatchCommand(undefined, undefined, () => calls.push('tauri'))
-    expect(calls).toEqual(['tauri'])
+    await expect(dispatchCommand(undefined, undefined)).rejects.toThrow(
+      'Command is not available in this runtime',
+    )
   })
 
   test('wraps Wails return values in the shared command result shape', async () => {
@@ -36,7 +35,6 @@ describe('Wails browser mock', () => {
       dispatchCommand(
         undefined,
         () => ({ activeLibraryId: 'library' }),
-        () => null,
       ),
     ).resolves.toEqual({
       status: 'ok',
@@ -44,10 +42,10 @@ describe('Wails browser mock', () => {
     })
   })
 
-  test('wraps raw Tauri return values in the same command result shape', async () => {
+  test('rejects commands without a Wails runtime or browser mock', async () => {
     await expect(
-      dispatchCommand(undefined, undefined, () => undefined),
-    ).resolves.toEqual({ status: 'ok', data: undefined })
+      dispatchCommand(undefined, undefined),
+    ).rejects.toThrow('Command is not available in this runtime')
   })
 
   test('keeps structured Wails domain errors on the typed command path', async () => {
@@ -59,7 +57,6 @@ describe('Wails browser mock', () => {
       dispatchCommand(
         undefined,
         () => Promise.reject(runtimeError),
-        () => null,
       ),
     ).resolves.toEqual({ status: 'error', error: failure })
   })
@@ -73,7 +70,6 @@ describe('Wails browser mock', () => {
       dispatchCommand(
         undefined,
         () => Promise.reject(runtimeError),
-        () => null,
       ),
     ).resolves.toEqual({ status: 'error', error: failure })
 
@@ -82,7 +78,6 @@ describe('Wails browser mock', () => {
       dispatchCommand(
         undefined,
         () => Promise.reject(transportError),
-        () => null,
       ),
     ).rejects.toBe(transportError)
   })

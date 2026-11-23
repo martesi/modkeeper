@@ -103,7 +103,7 @@ describe('addon parent constraint evaluation', () => {
     }
   }
 
-  it('uses Rust caret semantics for bare partial versions', () => {
+  it('uses caret semantics for bare partial versions', () => {
     const result = evaluateAddonParentConstraint({
       addon: addonWithConstraint('1.21'),
       installedMods: [{ ...installedMods[0], version: '1.22.0' }],

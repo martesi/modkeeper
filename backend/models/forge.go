@@ -1,13 +1,9 @@
 package models
 
-// Forge response records mirror src-tauri/src/models/forge.rs so the Wails
-// bindings, not the Tauri Specta file, can type Forge reads. Optional fields
-// stay pointers without omitempty: Rust's Option serializes as an explicit
-// null, and the frontend contract requires the key to be present.
-//
-// Numeric widths follow the Rust specta overrides: id fields are u32 so Wails
-// emits `number`, and content length stays uint64 because the Rust value is a
-// u64 exposed to TypeScript as f64.
+// Forge response records define the wire shape used by the Wails bindings.
+// Optional fields stay pointers without omitempty so the frontend contract
+// receives each key with either a value or explicit null. Numeric widths keep
+// identifiers within uint32 and content lengths within uint64.
 
 type ForgePageInfo struct {
 	CurrentPage *uint32 `json:"currentPage"`

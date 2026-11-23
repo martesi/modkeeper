@@ -2,7 +2,7 @@
  * Registry repository (registry-ui-design.md §3, §6).
  *
  * The UI calls these functions, never the generated bindings directly. The
- * Wails bridge routes each command to Wails, the in-memory mock, or Tauri, and
+ * Wails bridge routes each command to Wails, the in-memory mock, or Wails, and
  * normalizes both transports to the shared CommandResult shape.
  * Provides browser mock fallback for dev/testing when platformKind() === 'browser'.
  */
@@ -367,7 +367,7 @@ export async function installForgeVersion({
   ensureInstallListener()
   const key = `${kind}:${itemId}:${versionId}`
   return runRegistryInstallTask({
-    isTauri: platformKind() !== 'browser',
+    isNative: platformKind() !== 'browser',
     ensureReady: ensureWorkspaceEventBus,
     onNotReady: () => toast.error(libraryText.taskUpdatesUnavailable()),
     canStart: () =>

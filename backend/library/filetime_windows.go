@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// createdTime reads the creation timestamp, matching Rust's metadata.created().
+// createdTime reads the creation timestamp, matching current implementation's metadata.created().
 func createdTime(path string) (time.Time, bool) {
 	info, err := os.Stat(path)
 	if err != nil {

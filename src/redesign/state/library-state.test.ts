@@ -499,7 +499,7 @@ describe('default library store helpers', () => {
     remount()
 
     const completed = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => {
         addPendingTask({
           taskId: 'fast-sync',
@@ -536,7 +536,7 @@ describe('default library store helpers', () => {
     expect(store.get(pendingTasksAtom)).toEqual([])
 
     const rejected = await runTrackedCommand({
-      isTauri: true,
+      isNative: true,
       registerPending: () => {
         addPendingTask({
           taskId: 'rejected-add',

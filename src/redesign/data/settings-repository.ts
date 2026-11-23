@@ -37,7 +37,7 @@ export async function saveSettings(
       ...patch,
     }
     return runPlainCommand({
-      isTauri: hasNativeRuntime(),
+      isNative: hasNativeRuntime(),
       invoke: () => commands.saveSettings(settings),
       mock: () => {
         const workspace = structuredClone(getMockWorkspace())

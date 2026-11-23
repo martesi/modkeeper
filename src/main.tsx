@@ -27,10 +27,6 @@ declare global {
 const root = document.getElementById('root')
 const bootFallback = document.getElementById('boot-fallback')
 window.__MODKEEPER_REPORT_BOOT_ERROR__ = reportBootError
-if (new URLSearchParams(window.location.search).has('native-smoke')) {
-  void import('./native_smoke')
-}
-
 const previousBootError = readBootError()
 if (previousBootError) {
   logBootError('previous boot failure', new Error(previousBootError))

@@ -12,13 +12,13 @@ import (
 	"github.com/martes/modkeeper/backend/testenv"
 )
 
-func TestForgeVersionMatchesUsesRustRequirementSyntax(t *testing.T) {
+func TestForgeVersionMatchesUsesRequirementSyntax(t *testing.T) {
 	for _, test := range []struct {
 		version    string
 		constraint string
 		want       bool
 	}{
-		// Rust fixture: a bare version is a caret requirement.
+		// A bare version is a compatible caret requirement.
 		{"1.21.0", "1.21", true},
 		{"1.20.9", "1.21", false},
 		{"1.22.0", "1.21", true},
@@ -38,7 +38,7 @@ func TestForgeVersionMatchesUsesRustRequirementSyntax(t *testing.T) {
 	for _, constraint := range []string{"||", "1.0 - 2.0", ">=1.0 <2.0"} {
 		var coded *models.Error
 		if _, err := forgeVersionMatches("1.0.0", constraint); !errors.As(err, &coded) || coded.Code != models.ParseError {
-			t.Errorf("Rust-rejected constraint %q: %v", constraint, err)
+			t.Errorf("rejected constraint %q: %v", constraint, err)
 		}
 	}
 	var coded *models.Error

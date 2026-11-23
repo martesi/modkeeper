@@ -1,18 +1,7 @@
-import { commands as tauriCommands } from '@gen/bindings'
 import * as wailsApp from '../../frontend/bindings/github.com/martes/modkeeper/backend/app'
 import type { Commands } from './contract'
 import { isWails } from './runtime'
 import { getWailsMock } from './mock'
-
-/**
- * Tauri stays a runtime-only fallback: its command map is opaque here, so no
- * caller inherits a Specta type. The app-facing command types come from the
- * Wails contract.
- */
-const tauriFallback = tauriCommands as unknown as Record<
-  string,
-  (...args: unknown[]) => unknown
->
 
 interface WireError {
   code: string
@@ -48,7 +37,6 @@ function decodeWailsDomainError(error: unknown): Promise<WireError | null> {
 export function dispatchCommand(
   mock: (() => unknown) | undefined,
   wails: (() => unknown) | undefined,
-  tauri: () => unknown,
 ): Promise<unknown> {
   if (mock)
     return Promise.resolve(mock()).then((value) =>
@@ -71,36 +59,32 @@ export function dispatchCommand(
               : Promise.reject(error),
           ),
       )
-  return Promise.resolve(tauri()).then((value) =>
-    value && typeof value === 'object' && 'status' in value
-      ? value
-      : { status: 'ok', data: value },
-  )
+  return Promise.reject(new Error('Command is not available in this runtime'))
 }
 
 /**
- * Tauri and Wails service methods share this positional-argument adapter.
  * Wails v3 bindings are generated in frontend/bindings by `wails3 generate bindings`.
  */
 export const commands: Commands = Object.fromEntries(
-  Object.entries(tauriFallback).map(([name, tauriCall]) => [
-    name,
+  Object.entries(wailsApp)
+    .filter(
+      ([methodName]) => !['Log', 'OpenPath', 'Start'].includes(methodName),
+    )
+    .map(([methodName, appMethod]) => [
+    methodName[0]!.toLowerCase() + methodName.slice(1),
     (...args: unknown[]) => {
+      const name = methodName[0]!.toLowerCase() + methodName.slice(1)
       const mock = getWailsMock()?.commands?.[name]
       let method: (() => unknown) | undefined
       if (isWails()) {
-        const appMethod = wailsApp[
-          (name[0]!.toUpperCase() + name.slice(1)) as keyof typeof wailsApp
-        ] as ((...args: unknown[]) => unknown) | undefined
-        if (appMethod) method = () => appMethod(...args)
+        method = () => (appMethod as (...args: unknown[]) => unknown)(...args)
       }
       return dispatchCommand(
         mock ? () => mock(...args) : undefined,
         method,
-        () => Reflect.apply(tauriCall, undefined, args),
       )
     },
-  ]),
+    ]),
 ) as unknown as Commands
 
 export function cancelInstallTask(
@@ -116,7 +100,7 @@ export function cancelInstallTask(
 
 /**
  * Opens a file or directory with the platform opener. Wails has no JavaScript
- * opener, so this bound Go method replaces the Tauri opener plugin. The browser
+ * opener, so this bound Go method replaces the Wails opener plugin. The browser
  * mock never reaches this path because `platformKind()` stays `browser`.
  */
 export function openPathWithPlatformOpener(path: string): Promise<void> {
@@ -126,7 +110,7 @@ export function openPathWithPlatformOpener(path: string): Promise<void> {
 
 /**
  * Writes a frontend diagnostic through the Wails application logger. main.go
- * points that logger at the config directory, replacing Tauri's log plugin.
+ * points that logger at the config directory, replacing Wails's log plugin.
  */
 export function logToFile(message: string): Promise<void> {
   if (isWails()) return Promise.resolve(wailsApp.Log(message))

@@ -10,7 +10,7 @@ function createTaskInput(
   let canceledTimeouts = 0
 
   const input = {
-    isTauri: true,
+    isNative: true,
     ensureReady: async () => {
       events.push('listener-ready')
       return true

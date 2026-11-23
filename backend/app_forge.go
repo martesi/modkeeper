@@ -8,8 +8,8 @@ import (
 )
 
 // forgeResponse decodes a Forge service body into the response model that
-// mirrors src-tauri/src/models/forge.rs. A body that does not match the wire
-// shape is a coded ParseError, never a panic.
+// decodes the Forge response wire shape. Invalid input returns a coded
+// ParseError instead of panicking.
 func forgeResponse[T any](body json.RawMessage) (*T, error) {
 	var value T
 	if err := json.Unmarshal(body, &value); err != nil {
@@ -19,8 +19,8 @@ func forgeResponse[T any](body json.RawMessage) (*T, error) {
 }
 
 // ForgeSearch returns the single response object shaped like
-// src-tauri/src/models/forge.rs. Wails packs multiple Go return values into an
-// array, so the stale flag must stay inside each response.
+// Wails packs multiple Go return values into an array, so the stale flag stays
+// inside each response.
 func (a *App) ForgeSearch(query string, modPage, addonPage, perPage uint32) (*models.ForgeSearchResponse, error) {
 	if a.Forge == nil {
 		return nil, a.initFailure()

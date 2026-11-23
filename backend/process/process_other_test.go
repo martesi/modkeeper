@@ -4,7 +4,7 @@ package process
 
 import "testing"
 
-// Unsupported platforms mirror the Rust shell: native process-image inspection
+// Unsupported platforms mirror the current implementation shell: native process-image inspection
 // is unavailable, so the guard reports a documented absence instead of failing
 // every destructive command.
 func TestUnsupportedReportsNotRunning(t *testing.T) {

@@ -14,7 +14,7 @@ func (a *App) GetLibraryWorkspace() (*models.LibraryWorkspace, error) {
 		return nil, err
 	}
 	workspace := a.Library.Workspace()
-	// Rust hands the startup warning to this command only.
+	// current implementation hands the startup warning to this command only.
 	workspace.ConfigWarning = a.Library.TakeStartupWarning()
 	return workspace, nil
 }

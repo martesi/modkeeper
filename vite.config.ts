@@ -3,12 +3,9 @@ import path from 'node:path'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import router from '@tanstack/router-plugin/vite'
-import autoImports from 'unplugin-auto-import/vite'
 import tailwindcss from '@tailwindcss/vite'
 import { lingui } from '@lingui/vite-plugin'
 
-const host = process.env.TAURI_DEV_HOST
-const wails = process.env.WAILS_DEV === 'true'
 const wailsApp = process.env.WAILS_APP === 'true'
 const serverDevelopment = process.env.MODKEEPER_SERVER_DEV === '1'
 const serverBackend =
@@ -23,31 +20,6 @@ export default defineConfig(() => ({
     lingui({ macroTransform: true }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
-    autoImports({
-      include: [/\.tsx?$/],
-      imports: [
-        'react',
-        {
-          clsx: [['default', 'c']],
-          '@tanstack/react-router': [
-            'Link',
-            'Outlet',
-            'Navigate',
-            'useParams',
-            'useLoaderDeps',
-            'useLoaderData',
-            'useRouter',
-            'useNavigate',
-            'useBlocker',
-            'useSearch',
-            'useMatches',
-            'redirect',
-            'notFound',
-          ],
-        },
-      ],
-      dts: 'src/gen/auto-imports.d.ts',
-    }),
     tailwindcss(),
     router({
       generatedRouteTree: 'src/gen/routes.ts',
@@ -65,16 +37,8 @@ export default defineConfig(() => ({
     },
   },
   server: {
-    port: wails ? Number(process.env.WAILS_VITE_PORT || 34115) : 1420,
+    port: Number(process.env.WAILS_VITE_PORT || 34115),
     strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: 'ws',
-          host,
-          port: 1421,
-        }
-      : undefined,
     ...(serverDevelopment
       ? {
           proxy: {
@@ -85,8 +49,5 @@ export default defineConfig(() => ({
           },
         }
       : {}),
-    watch: {
-      ignored: ['**/src-tauri/**'],
-    },
   },
 }))

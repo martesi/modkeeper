@@ -1,6 +1,6 @@
-// Package semverreq implements the subset of Rust's semver VersionReq grammar
+// Package semverreq implements the subset of current implementation's semver VersionReq grammar
 // that Forge addon constraints use. It intentionally omits npm-style syntax
-// (OR groups, hyphen ranges, space-separated comparators) because Rust rejects
+// (OR groups, hyphen ranges, space-separated comparators) because current implementation rejects
 // it. A bare version is a caret requirement, matching semver::VersionReq.
 package semverreq
 
@@ -95,7 +95,7 @@ func ParseVersion(text string) (Version, error) {
 	return v, nil
 }
 
-// ParseRequirement parses a Rust semver requirement. The default operator is
+// ParseRequirement parses a current implementation semver requirement. The default operator is
 // caret, so "1.21" means >=1.21.0, <2.0.0.
 func ParseRequirement(text string) (Requirement, error) {
 	text = trimSpaces(text)
@@ -113,7 +113,7 @@ func ParseRequirement(text string) (Requirement, error) {
 	return Requirement{Comparators: comparators}, nil
 }
 
-// Matches reports whether v satisfies the requirement, including Rust's
+// Matches reports whether v satisfies the requirement, including current implementation's
 // prerelease rule: a prerelease version only matches when a comparator carries
 // a prerelease for the same major.minor.patch.
 func (r Requirement) Matches(v Version) bool {

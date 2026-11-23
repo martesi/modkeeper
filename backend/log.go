@@ -7,7 +7,7 @@ import (
 
 // Log writes a frontend diagnostic through the Wails application logger. The
 // desktop entrypoint points that logger at a file in the config directory, so
-// this replaces Tauri's log plugin.
+// this provides the application's logging integration.
 func (a *App) Log(message string) error {
 	app := application.Get()
 	if app == nil || app.Logger == nil {

@@ -3,7 +3,7 @@
  *
  * The UI and repositories type against THIS module, never the generated bindings directly, so the
  * redesign has one stable vocabulary. `@/wails/contract` is the single source: it owns the Wails
- * normalization (string unions, non-null arrays, `LibraryEntry`) and the hand-owned Rust shapes.
+ * normalization (string unions, non-null arrays, `LibraryEntry`) and hand-owned app shapes.
  * Names here are the spec's; the aliases below preserve the existing vocabulary.
  */
 import type { LibraryEntry, LibrarySummary } from '@/wails/contract'

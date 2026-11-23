@@ -43,7 +43,7 @@ type Library struct {
 
 func layout(root string) (manifest, cache, string, string, string, error) {
 	var c cache
-	// repo_root *is* the library root (`game/.mod_keeper`), matching Rust's
+	// repo_root *is* the library root (`game/.mod_keeper`), matching current implementation's
 	// LibPathRules::new(repo_root).
 	base := root
 	manifestPath := filepath.Join(base, "manifest.toml")
@@ -364,7 +364,6 @@ type Service struct {
 	copyMod                func(src, dst string) error
 	installTransactionHook func(string)
 	installMarkerWriter    func(string, installTransaction) error
-	installTaskHook        func(string)
 	modWrites              sync.Mutex
 	configMu               sync.RWMutex
 }
@@ -432,7 +431,7 @@ func (s *Service) Start() error {
 			defer s.libraryMu.Unlock()
 			l, err := Load(startupLibraryRoot)
 			if err != nil {
-				// Rust clears the active id on a load failure so the next
+				// current implementation clears the active id on a load failure so the next
 				// launch does not repeat it, and persists the cleared config.
 				s.clearActiveLibrarySelection()
 				return
@@ -451,7 +450,7 @@ func (s *Service) Start() error {
 }
 
 // clearActiveLibrarySelection deselects the library whose load failed and
-// persists the cleared config. Only a save failure is surfaced, matching Rust's
+// persists the cleared config. Only a save failure is surfaced, matching current implementation's
 // startup path; the load error itself stays out of the workspace warning.
 func (s *Service) clearActiveLibrarySelection() {
 	s.configMu.Lock()
@@ -485,7 +484,7 @@ func (s *Service) updateConfigAndSave(update func(*config.AppConfig)) error {
 	return nil
 }
 
-// WaitForInitialLoad blocks on the startup handshake for the commands Rust
+// WaitForInitialLoad blocks on the startup handshake for the commands current implementation
 // waits in (get_library_workspace and bulk_update_mods). Other callers assemble
 // immediately.
 func (s *Service) WaitForInitialLoad() error {
@@ -510,7 +509,7 @@ func (s *Service) setWarning(message string) {
 }
 
 // TakeStartupWarning consumes the pending warning. Only the
-// get_library_workspace command calls it, matching Rust's one-shot handoff.
+// get_library_workspace command calls it, matching current implementation's one-shot handoff.
 func (s *Service) TakeStartupWarning() *string {
 	s.warningMu.Lock()
 	defer s.warningMu.Unlock()
@@ -528,10 +527,10 @@ func (s *Service) tryBeginLibraryTransition() error {
 }
 
 // assertGameOrServerStopped blocks destructive work while the game or server
-// runs, mirroring the Rust command guards. Callers hold libraryMu.
+// runs, mirroring the current implementation command guards. Callers hold libraryMu.
 func (s *Service) assertGameOrServerStopped() error {
 	if s.active == nil {
-		// Without an active library the Rust shell cannot resolve canonical
+		// Without an active library the current implementation shell cannot resolve canonical
 		// executable paths, so the command reaches its own NoActiveLibrary
 		// check instead.
 		return nil
@@ -699,7 +698,7 @@ func (s *Service) RenameLibrary(id, name string) error {
 	if libraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
-	// Rust renames the live instance from memory and inactive libraries from
+	// current implementation renames the live instance from memory and inactive libraries from
 	// manifest.toml alone; neither path reads cache.toml.
 	if s.active != nil && s.active.manifest.ID == id {
 		s.active.manifest.Name = name
@@ -745,7 +744,7 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
 	// Validate the purge and every recorded deployment artifact BEFORE touching
-	// config or disk, matching the Rust delete ordering.
+	// config or disk, matching the current implementation delete ordering.
 	var depLayout deployment.Layout
 	var mods []models.Mod
 	if deleteFiles {
