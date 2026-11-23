@@ -5,18 +5,6 @@ test('browses server folders and creates a library from the selected path', asyn
   page,
 }) => {
   await bootMockApp(page)
-  await page.evaluate(() => {
-    const commands = window.__MK_WAILS_MOCK__?.commands
-    if (!commands) throw new Error('Mock commands missing')
-    commands.homeDirectory = () => '/home/test'
-    commands.listDirectory = (path) =>
-      path === '/home/test'
-        ? [
-            { Name: 'game', IsDir: true },
-            { Name: 'file.zip', IsDir: false },
-          ]
-        : []
-  })
   await page.getByRole('button', { name: /manage libraries/i }).click()
   await page.getByRole('button', { name: /add library/i }).click()
   const dialog = page
@@ -24,12 +12,16 @@ test('browses server folders and creates a library from the selected path', asyn
     .filter({ has: page.getByLabel('Game root path') })
   await dialog.getByRole('button', { name: 'Browse folders' }).click()
   await dialog.getByRole('button', { name: 'game/' }).click()
-  await expect(dialog.getByText('/home/test/game')).toBeVisible()
+  await expect(dialog.getByText('/mock/home/game')).toBeVisible()
   await dialog.getByRole('button', { name: 'Parent folder' }).click()
   await dialog.getByRole('button', { name: 'game/' }).click()
   await dialog.getByRole('button', { name: 'Select this folder' }).click()
+  await page.screenshot({
+    path: test.info().outputPath('path-browser-selected.png'),
+    fullPage: true,
+  })
   await expect(dialog.getByLabel('Game root path')).toHaveValue(
-    '/home/test/game',
+    '/mock/home/game',
   )
   await dialog.getByRole('button', { name: 'Use path' }).click()
   await expect(page.getByRole('tab', { name: 'game' })).toBeVisible()

@@ -16,8 +16,8 @@ The server build serves the same frontend bundle as the desktop app, but a brows
 
 In server mode these work end to end:
 
-- Create the first library by entering the game root path.
-- Add mod archives by entering one archive path per line or separating paths with commas.
+- Create the first library by entering the game root path or browsing folders on the server host.
+- Add mod archives by entering one archive path per line or separating paths with commas, or browse server-host folders and select archive files.
 - Browse, search and install from the Forge registry.
 - Enable, disable, delete, sync and rebuild the library cache.
 
@@ -28,7 +28,11 @@ These need the desktop app:
 - Opening a file or folder in the OS file manager.
 - Window minimize, maximize and close controls.
 
-Paths come from the server host filesystem, not from the browser machine. A remote browser user must enter paths exactly as the server host sees them. This branch supports path entry only, not file upload from the browser.
+Paths and folder listings come from the server host filesystem, not from the browser machine. A remote browser user must use paths exactly as the server host sees them. This branch supports path entry and server-host directory browsing, not file upload from the browser.
+
+### Server trust boundary
+
+Treat every server-mode client as trusted with the server process's filesystem permissions. The Wails RPC can list any absolute directory that the server process can read; other backend operations can also access paths using that process's permissions. Server mode does not provide user authentication or authorization. The default bind is loopback, but `MODKEEPER_SERVER_HOST` can expose it on another interface. If you bind beyond loopback, put the service behind an external access-control boundary and allow only trusted users. Origin checks are not authentication.
 
 Assumption: the person who configures a library can name paths that exist on the server host.
 

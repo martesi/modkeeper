@@ -24,6 +24,17 @@ test('uses defaults and keeps settings in memory without storage', () => {
   expect(commands?.getSettings()).toMatchObject({ theme: 'dark' })
 })
 
+test('default mock supports filesystem browsing for server-mode forms', async () => {
+  const commands = createInMemoryWailsMock().commands
+  expect(commands?.homeDirectory).toBeFunction()
+  expect(commands?.listDirectory).toBeFunction()
+  expect(await commands?.homeDirectory?.()).toBe('/mock/home')
+  expect(await commands?.listDirectory?.('/mock/home')).toEqual([
+    { Name: 'game', IsDir: true },
+    { Name: 'mods.zip', IsDir: false },
+  ])
+})
+
 test('reads and persists browser storage', () => {
   const storage = new Window({ url: 'https://example.test' }).localStorage
   Object.defineProperty(globalThis, 'localStorage', {

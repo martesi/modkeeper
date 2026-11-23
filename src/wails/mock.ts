@@ -141,6 +141,14 @@ export function createInMemoryWailsMock(): WailsMock {
     })(),
   }
   const now = () => new Date().toISOString()
+  const mockHomeDirectory = '/mock/home'
+  const mockDirectories: Record<string, { Name: string; IsDir: boolean }[]> = {
+    [mockHomeDirectory]: [
+      { Name: 'game', IsDir: true },
+      { Name: 'mods.zip', IsDir: false },
+    ],
+    [`${mockHomeDirectory}/game`]: [],
+  }
   const complete = (type: string, input: any) => {
     const event: Record<string, unknown> = {
       type,
@@ -158,6 +166,9 @@ export function createInMemoryWailsMock(): WailsMock {
   }
   const commands: Record<string, (...args: any[]) => unknown> = {
     getLibraryWorkspace: () => structuredClone(workspace),
+    homeDirectory: () => mockHomeDirectory,
+    listDirectory: (path: string) =>
+      structuredClone(mockDirectories[path] ?? []),
     createLibrary: ({ gameRoot, libraryRoot, name }: any) => {
       const id = `mock-${Date.now()}`
       workspace.libraries.push({
