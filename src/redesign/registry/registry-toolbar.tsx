@@ -32,6 +32,7 @@ type RegistryToolbarProps = {
   addonTotalPages: number
   onModPageChange: (page: number) => void
   onAddonPageChange: (page: number) => void
+  onAllPageChange: (page: number) => void
   isBusy?: boolean
   isRateLimited?: boolean
 }
@@ -88,6 +89,7 @@ export function RegistryToolbar({
   addonTotalPages,
   onModPageChange,
   onAddonPageChange,
+  onAllPageChange,
   isBusy = false,
   isRateLimited = false,
 }: RegistryToolbarProps) {
@@ -226,9 +228,17 @@ export function RegistryToolbar({
         {/* View Mode Selector */}
         <RegistryViewModeSelector />
 
-        {/* Pagination: each kind paginates independently against its own total */}
+        {/* All advances both result sets with one page cursor. */}
         <div className="flex items-center gap-2">
-          {kindFilter !== 'addons' && (
+          {kindFilter === 'all' ? (
+            <RegistryPager
+              label={`${registryText.filterAll()} pages`}
+              page={modPage}
+              totalPages={Math.max(modTotalPages, addonTotalPages)}
+              onPageChange={onAllPageChange}
+              isBusy={isBusy}
+            />
+          ) : kindFilter === 'mods' ? (
             <RegistryPager
               label={registryText.paginationModsGroup()}
               page={modPage}
@@ -236,8 +246,7 @@ export function RegistryToolbar({
               onPageChange={onModPageChange}
               isBusy={isBusy}
             />
-          )}
-          {kindFilter !== 'mods' && (
+          ) : (
             <RegistryPager
               label={registryText.paginationAddonsGroup()}
               page={addonPage}

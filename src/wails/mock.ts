@@ -34,7 +34,10 @@ export function installWailsMock(mock: WailsMock): () => void {
 export function createInMemoryWailsMock(): WailsMock {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   const workspace: any = {
-    activeLibraryId: 'mock-library',
+    activeLibraryId:
+      localStorage.getItem('mk-e2e-no-active-library') === '1'
+        ? null
+        : 'mock-library',
     libraries: [
       {
         id: 'mock-library',

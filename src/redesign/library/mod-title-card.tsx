@@ -81,7 +81,7 @@ export function ModTitleCard({
   if (viewMode === 'list') {
     return (
       <tr className="h-9 text-[13px]">
-        <td className="border-y border-border bg-card py-1 align-middle pl-2 first:rounded-l-md">
+        <td className="border-y border-border bg-card py-1 align-middle pl-2 first:border-l first:rounded-l-md">
           {selection}
         </td>
         <td className="border-y border-border bg-card px-2 py-1 align-middle">
@@ -100,7 +100,7 @@ export function ModTitleCard({
         <td className="border-y border-border bg-card px-2 py-1 align-middle whitespace-nowrap text-muted-foreground">
           {typeLabel(mod.type)}
         </td>
-        <td className="border-y border-border bg-card px-2 py-1 align-middle last:rounded-r-md">
+        <td className="border-y border-border bg-card px-2 py-1 align-middle last:border-r last:rounded-r-md">
           {statusToggle}
         </td>
       </tr>

@@ -28,18 +28,19 @@ export function LibraryScreen() {
   const [manageOpen, setManageOpen] = useState(false)
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <div
+      className={
+        activeLibrary ? 'flex flex-col gap-3' : 'flex h-full min-h-0 flex-col'
+      }
+    >
+      {activeLibrary && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-[13px] text-muted-foreground">
-            {activeLibrary
-              ? libraryText.subtitleModsInstalled(mods.length)
-              : libraryText.subtitleEmpty()}
+            {libraryText.subtitleModsInstalled(mods.length)}
           </p>
+          <LibraryHeaderToolbar onManageLibraries={() => setManageOpen(true)} />
         </div>
-
-        <LibraryHeaderToolbar onManageLibraries={() => setManageOpen(true)} />
-      </div>
+      )}
 
       {activeLibrary ? (
         mods.length === 0 ? (
@@ -51,9 +52,11 @@ export function LibraryScreen() {
           </div>
         )
       ) : (
-        <LibraryActivateEmptyState
-          onManageLibraries={() => setManageOpen(true)}
-        />
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <LibraryActivateEmptyState
+            onManageLibraries={() => setManageOpen(true)}
+          />
+        </div>
       )}
 
       <ManageLibraryDialog open={manageOpen} onOpenChange={setManageOpen} />

@@ -33,6 +33,7 @@ import { RegistryNoLibraryEmptyState } from './registry-no-library-empty-state'
 import { RegistryParentDialog } from './registry-parent-dialog'
 import { resolveRegistryNoResults } from './registry-no-results'
 import { classifyRegistryRequestFailure } from '../data/registry-errors'
+import { allPageItems, allPageNumber } from './registry-pagination'
 
 export function RegistryScreen() {
   const activeLibrary = useAtomValue(activeLibraryAtom)
@@ -79,6 +80,17 @@ export function RegistryScreen() {
     searchResult?.key === requestKey ? searchResult.response : null
   const paginationResponse =
     searchResult?.scopeKey === scopeKey ? searchResult.response : null
+  const requestedModPage = Math.max(
+    1,
+    Math.min(modPage, paginationResponse?.mods.pagination.lastPage ?? modPage),
+  )
+  const requestedAddonPage = Math.max(
+    1,
+    Math.min(
+      addonPage,
+      paginationResponse?.addons.pagination.lastPage ?? addonPage,
+    ),
+  )
   const requestFailure =
     failedRequest?.key === requestKey ? failedRequest.kind : null
   const isOfflineError = requestFailure === 'offline'
@@ -120,8 +132,8 @@ export function RegistryScreen() {
 
     void searchForge({
       query: debouncedSearch,
-      modPage,
-      addonPage,
+      modPage: requestedModPage,
+      addonPage: requestedAddonPage,
       perPage: 20,
     })
       .then((data) => {
@@ -153,6 +165,8 @@ export function RegistryScreen() {
     isRateLimited,
     requestKey,
     scopeKey,
+    requestedModPage,
+    requestedAddonPage,
   ])
 
   // Merge items based on kind filter
@@ -160,7 +174,16 @@ export function RegistryScreen() {
     if (!searchResponse) return []
     let list: ForgeSearchItem[] = []
     if (kindFilter === 'all') {
-      list = [...searchResponse.mods.items, ...searchResponse.addons.items]
+      list = allPageItems(modPage, {
+        mods: {
+          items: searchResponse.mods.items,
+          lastPage: searchResponse.mods.pagination.lastPage ?? 1,
+        },
+        addons: {
+          items: searchResponse.addons.items,
+          lastPage: searchResponse.addons.pagination.lastPage ?? 1,
+        },
+      })
     } else if (kindFilter === 'mods') {
       list = [...searchResponse.mods.items]
     } else {
@@ -171,7 +194,7 @@ export function RegistryScreen() {
       list.sort((a, b) => a.name.localeCompare(b.name))
     }
     return list
-  }, [searchResponse, kindFilter, sort])
+  }, [searchResponse, kindFilter, sort, modPage])
 
   const modTotalPages = Math.max(
     1,
@@ -195,6 +218,12 @@ export function RegistryScreen() {
 
   function handleAddonPageChange(page: number) {
     setAddonPage(Math.min(Math.max(page, 1), addonTotalPages))
+  }
+
+  function handleAllPageChange(page: number) {
+    const nextPage = allPageNumber(page, modTotalPages, addonTotalPages)
+    setModPage(nextPage)
+    setAddonPage(nextPage)
   }
 
   // 1. No Active Library
@@ -278,6 +307,7 @@ export function RegistryScreen() {
         addonTotalPages={addonTotalPages}
         onModPageChange={handleModPageChange}
         onAddonPageChange={handleAddonPageChange}
+        onAllPageChange={handleAllPageChange}
         isBusy={isLoading || isRateLimited}
         isRateLimited={isRateLimited}
       />
