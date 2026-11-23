@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { getDefaultStore } from 'jotai'
+import { toast } from 'sonner'
 import { installWailsMock } from '@/wails/mock'
-import { pendingTasksAtom } from '../state/library-state'
+import {
+  activeLibraryIdAtom,
+  pendingTasksAtom,
+  setWorkspace,
+} from '../state/library-state'
 import {
   registryInstallingMapAtom,
   registryMatchingMapAtom,
@@ -23,6 +28,7 @@ const {
 
 const originalWindow = globalThis.window
 const calls: Array<[string, ...unknown[]]> = []
+const eventListeners = new Map<string, Set<(...args: unknown[]) => void>>()
 
 const searchResponse = {
   sptVersion: '4.0.11',
@@ -74,6 +80,8 @@ const workspace = {
     accentColor: 'teal',
     language: 'en-US',
     enableModsOnInstall: true,
+    warnIncompatibleForgeInstall: true,
+    forgeEndpoint: '',
   },
 }
 
@@ -82,8 +90,19 @@ function installBridge() {
   // Wails platform; the in-memory mock then owns every command.
   // @ts-expect-error Test supplies a minimal browser global.
   globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+  setWorkspace(workspace)
   return installWailsMock({
-    events: { on: () => () => {} },
+    events: {
+      on: (name, callback) => {
+        const listeners = eventListeners.get(name) ?? new Set()
+        listeners.add(callback)
+        eventListeners.set(name, listeners)
+        return () => listeners.delete(callback)
+      },
+      emit: (name, ...args) => {
+        eventListeners.get(name)?.forEach((callback) => callback(...args))
+      },
+    },
     commands: {
       forgeSearch: (...args: unknown[]) => {
         calls.push(['forgeSearch', ...args])
@@ -171,6 +190,7 @@ describe('registry repository Wails bridge', () => {
     }
     // @ts-expect-error Test supplies a minimal browser global.
     globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+    setWorkspace(workspace)
     const remove = installWailsMock({
       events: { on: () => () => {} },
       commands: { forgeSearch: () => staleResponse },
@@ -180,6 +200,22 @@ describe('registry repository Wails bridge', () => {
     expect(result.mods.stale).toBe(true)
     expect(result.addons.stale).toBe(false)
     expect(result.sptVersion).toBe(searchResponse.sptVersion)
+    remove()
+  })
+
+  test('versions preserve stale metadata for the stale-data banner', async () => {
+    // @ts-expect-error Test supplies a minimal browser global.
+    globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+    const remove = installWailsMock({
+      events: { on: () => () => {} },
+      commands: {
+        forgeModVersions: () => ({ ...versionsResponse, stale: true }),
+      },
+    })
+    await expect(getForgeModVersions('mod', 7, 2)).resolves.toMatchObject({
+      stale: true,
+      pagination: { currentPage: 2 },
+    })
     remove()
   })
 
@@ -230,6 +266,80 @@ describe('registry repository Wails bridge', () => {
         versionId: 2,
       },
     ])
+    remove()
+  })
+
+  test('mod_install_completed clears the matching installing state', async () => {
+    const remove = installBridge()
+    await installForgeVersion({
+      libraryId: 'library',
+      kind: 'mod',
+      itemId: 7,
+      versionId: 2,
+    })
+    const store = getDefaultStore()
+    expect(store.get(registryInstallingMapAtom)['mod:7:2']).toBeDefined()
+    const taskId = store.get(registryInstallingMapAtom)['mod:7:2']
+    eventListeners.get('workspace-event')?.forEach((callback) =>
+      callback({
+        type: 'mod_install_completed',
+        taskId,
+        libraryId: 'library',
+        failures: [],
+        workspace,
+      }),
+    )
+    expect(store.get(registryInstallingMapAtom)).toEqual({})
+    remove()
+  })
+
+  test('detached addon parent validation surfaces the parent-missing toast', async () => {
+    // @ts-expect-error Test supplies a minimal browser global.
+    globalThis.window = { _wails: { environment: { OS: 'linux' } } }
+    const toastError = spyOn(toast, 'error').mockImplementation(
+      () => '' as never,
+    )
+    const remove = installWailsMock({
+      events: { on: () => () => {} },
+      commands: {
+        forgeDownloadVersion: () => ({
+          status: 'error',
+          error: { code: 'IOError', data: 'Addon requires installed parent' },
+        }),
+      },
+    })
+    await installForgeVersion({
+      libraryId: 'library',
+      kind: 'addon',
+      itemId: 9,
+      versionId: 2,
+    })
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining('parent mod is not installed'),
+    )
+    expect(getDefaultStore().get(registryInstallingMapAtom)).toEqual({})
+    toastError.mockRestore()
+    remove()
+  })
+
+  test('switching libraries before admission aborts the stale install request', async () => {
+    const remove = installBridge()
+    setWorkspace({ ...workspace, activeLibraryId: 'other-library' })
+    const toastError = spyOn(toast, 'error').mockImplementation(
+      () => '' as never,
+    )
+    await expect(
+      installForgeVersion({
+        libraryId: 'library',
+        kind: 'mod',
+        itemId: 7,
+        versionId: 2,
+      }),
+    ).resolves.toEqual({ accepted: false })
+    expect(calls).toEqual([])
+    expect(toastError).toHaveBeenCalled()
+    expect(getDefaultStore().get(activeLibraryIdAtom)).toBe('other-library')
+    toastError.mockRestore()
     remove()
   })
 })

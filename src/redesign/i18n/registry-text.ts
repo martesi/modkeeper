@@ -132,6 +132,42 @@ export const registryText = {
       id: 'registry.detail.versionsHeader',
       message: 'Versions & Compatibility',
     }),
+  compatibleVersionsOnly: () =>
+    t({
+      id: 'registry.detail.compatibleOnly',
+      message: 'Compatible with this SPT version',
+    }),
+  noCompatibleVersions: () =>
+    t({
+      id: 'registry.detail.noCompatibleVersions',
+      message: 'No versions on this page support the active SPT version.',
+    }),
+  incompatibleInstallTitle: () =>
+    t({
+      id: 'registry.install.incompatible.title',
+      message: 'Version may be incompatible',
+    }),
+  incompatibleInstallDescription: (version: string, spt: string) =>
+    t({
+      id: 'registry.install.incompatible.description',
+      message: `Version ${version} does not list support for SPT ${spt}. Install it anyway?`,
+    }),
+  dontShowIncompatibleWarning: () =>
+    t({
+      id: 'registry.install.incompatible.dontShow',
+      message: 'Do not show this warning again',
+    }),
+  installAnyway: () =>
+    t({
+      id: 'registry.install.incompatible.confirm',
+      message: 'Install anyway',
+    }),
+  installLibraryChanged: () =>
+    t({
+      id: 'registry.install.libraryChanged',
+      message:
+        'The active library changed. Reopen the version before installing.',
+    }),
   dependenciesHeader: () =>
     t({ id: 'registry.detail.dependenciesHeader', message: 'Dependencies' }),
   archiveSafetyNote: () =>

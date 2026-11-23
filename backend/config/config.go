@@ -23,10 +23,12 @@ type AppState struct {
 }
 
 type AppSettings struct {
-	Theme               ThemeMode `toml:"theme" json:"theme"`
-	AccentColor         string    `toml:"accentColor" json:"accentColor"`
-	Language            string    `toml:"language" json:"language"`
-	EnableModsOnInstall bool      `toml:"enableModsOnInstall" json:"enableModsOnInstall"`
+	Theme                        ThemeMode `toml:"theme" json:"theme"`
+	AccentColor                  string    `toml:"accentColor" json:"accentColor"`
+	Language                     string    `toml:"language" json:"language"`
+	EnableModsOnInstall          bool      `toml:"enableModsOnInstall" json:"enableModsOnInstall"`
+	WarnIncompatibleForgeInstall bool      `toml:"warnIncompatibleForgeInstall" json:"warnIncompatibleForgeInstall"`
+	ForgeEndpoint                string    `toml:"forgeEndpoint" json:"forgeEndpoint"`
 }
 
 type ThemeMode string
@@ -38,7 +40,7 @@ const (
 )
 
 func DefaultSettings() AppSettings {
-	return AppSettings{Theme: ThemeSystem, AccentColor: "default", Language: "en-US", EnableModsOnInstall: true}
+	return AppSettings{Theme: ThemeSystem, AccentColor: "default", Language: "en-US", EnableModsOnInstall: true, WarnIncompatibleForgeInstall: true}
 }
 
 func Default() AppConfig {

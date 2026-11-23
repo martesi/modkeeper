@@ -6,6 +6,8 @@ export interface AppSettings {
   accentColor: string
   language: string
   enableModsOnInstall: boolean
+  warnIncompatibleForgeInstall: boolean
+  forgeEndpoint: string
 }
 
 export enum ThemeMode {

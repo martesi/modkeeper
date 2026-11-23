@@ -22,14 +22,23 @@ var modFields = []string{"id", "isActive", "type", "name"}
 func (s *Service) Workspace() *models.LibraryWorkspace {
 	s.libraryMu.RLock()
 	defer s.libraryMu.RUnlock()
+	s.configMu.RLock()
+	knownLibraries := append([]config.KnownLibrary(nil), s.Store.Config.KnownLibraries...)
+	activeLibraryID := s.Store.Config.AppState.ActiveLibraryID
+	if activeLibraryID != nil {
+		activeID := *activeLibraryID
+		activeLibraryID = &activeID
+	}
+	settings := s.Store.Config.Settings
+	s.configMu.RUnlock()
 	w := &models.LibraryWorkspace{
-		ActiveLibraryID:  s.Store.Config.AppState.ActiveLibraryID,
+		ActiveLibraryID:  activeLibraryID,
 		Libraries:        []models.LibraryEntry{},
 		ModsByLibraryID:  map[string][]models.ModSummary{},
 		ToolsByLibraryID: map[string][]models.ToolSummary{},
-		Settings:         s.Store.Config.Settings,
+		Settings:         settings,
 	}
-	for _, known := range s.Store.Config.KnownLibraries {
+	for _, known := range knownLibraries {
 		m, ok := s.workspaceManifest(known)
 		if !ok {
 			w.Libraries = append(w.Libraries, models.StubEntry(known.LibraryRoot))

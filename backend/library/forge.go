@@ -154,7 +154,7 @@ func (s *Service) installForgeArchive(input forge.ForgeDownloadVersionInput, arc
 	}
 	progress(models.TaskStageForgeInstall, nil)
 	l := modmanager.Library{Root: s.active.ModsDir, Mods: s.active.manifest.Mods}
-	enable := s.Store.Config.Settings.EnableModsOnInstall
+	enable := s.GetSettings().EnableModsOnInstall
 	return s.installStagedMod(context.Background(), archive, item, &l, enable, forgeIdentity(metadata), nil)
 }
 
