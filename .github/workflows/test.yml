@@ -81,7 +81,7 @@ jobs:
             set -euo pipefail
             mkdir -p build/ci
             go build -trimpath -o build/ci/modkeeper .
-            # Wails' Linux CGO support files otherwise link GTK/WebKit in server builds.
+            # Wails Linux CGO support files otherwise link GTK/WebKit in server builds.
             CGO_ENABLED=0 go build -trimpath -tags server -o build/ci/modkeeper-server .
           '
 
