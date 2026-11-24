@@ -89,6 +89,9 @@
         "path": "locales/{locale}",
         "include": [
           "src"
+        ],
+        "exclude": [
+          "**/*.test.{ts,tsx}"
         ]
       }
     ],

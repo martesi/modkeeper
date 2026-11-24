@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, vi, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest'
 import { i18n } from '@lingui/core'
 import { initializeStartupLocale } from './i18n'
 
 afterEach(() => vi.restoreAllMocks())
 
 describe('initializeStartupLocale', () => {
+  beforeEach(() => {
+    i18n.loadAndActivate({
+      locale: 'en-US',
+      messages: { stale: 'translation' },
+    })
+    i18n.loadAndActivate({ locale: 'fr', messages: {} })
+  })
+
   test('activates source text when locale loading fails', async () => {
     const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
     await initializeStartupLocale(
@@ -13,6 +21,7 @@ describe('initializeStartupLocale', () => {
     )
 
     expect(i18n.locale).toBe('en-US')
+    expect(i18n.messages).toEqual({})
     expect(logError).toHaveBeenCalledWith(
       '[startup] locale initialization failed; using source text',
       expect.any(Error),
@@ -24,6 +33,7 @@ describe('initializeStartupLocale', () => {
     await initializeStartupLocale(() => new Promise(() => {}), 1)
 
     expect(i18n.locale).toBe('en-US')
+    expect(i18n.messages).toEqual({})
     expect(logError).toHaveBeenCalledWith(
       '[startup] locale initialization failed; using source text',
       expect.any(Error),

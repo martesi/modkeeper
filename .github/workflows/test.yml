@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # The dev shell carries the pinned Go, Bun, wails3 and the GTK4 plus
+      # The dev shell carries the pinned Go, Bun, Node, wails3 and the GTK4 plus
       # WebKitGTK 6.0 headers the cgo build needs, so CI uses the same
       # toolchain the repository pins instead of the runner's packages.
       - name: Install Nix
@@ -65,7 +65,7 @@ jobs:
         run: nix develop .#default -c go vet ./...
 
       - name: Frontend tests
-        run: nix develop .#default -c bun run test
+        run: nix develop .#default --ignore-environment -c bun run test
 
       - name: Go tests
         run: nix develop .#default -c go test ./...

@@ -1081,14 +1081,6 @@ msgstr "Game root path"
 msgid "library.toolbar.viewModeGrid"
 msgstr "Grid view"
 
-#: src/redesign/testing/lingui-transform.test.tsx:10
-msgid "Hello {name}"
-msgstr "Hello {name}"
-
-#: src/redesign/testing/lingui-transform.test.tsx:14
-msgid "Hello <0>{name}</0>"
-msgstr "Hello <0>{name}</0>"
-
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:17
 msgid "library.path.hideFolders"
