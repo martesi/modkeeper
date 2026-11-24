@@ -51,7 +51,8 @@ tasks:
     internal: true
     cmds:
       - mkdir -p build/bin
-      - go build -tags server -buildvcs=false -o build/bin/modkeeper-server .
+      # Wails' Linux CGO support files otherwise link GTK/WebKit even with the server tag.
+      - CGO_ENABLED=0 go build -tags server -buildvcs=false -o build/bin/modkeeper-server .
 
   build:server:
     summary: Builds the application in Wails server mode

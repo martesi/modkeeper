@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, vi, test } from 'vitest'
 import { isNativeDesktopShell } from '@/wails/runtime'
 import * as platform from './index'
 
@@ -56,7 +56,7 @@ describe('platform capability dispatch', () => {
   test('opens browser URLs in a local tab', async () => {
     setWailsBuildFlag('false')
     setWindow({})
-    const open = mock(() => null)
+    const open = vi.fn(() => null)
     window.open = open
     await platform.openUrl('https://example.test')
     expect(open).toHaveBeenCalledWith(

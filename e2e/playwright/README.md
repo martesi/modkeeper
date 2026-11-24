@@ -18,8 +18,27 @@ frontend. To generate them separately, run:
 nix develop -c bun run bindings:wails
 ```
 
-The Playwright suite runs against the frontend and uses the in-memory Wails
-mock; it does not exercise native IPC or native window behavior.
+`e2e/playwright/` uses the in-memory Wails mock; it does not exercise real IPC
+or native window behavior. `e2e/server/` uses the real server binary and its
+embedded Wails frontend. To build and run those journeys on Linux:
+
+```sh
+nix develop .#default -c bun run build:wails
+nix develop .#default -c go build -tags server -o build/ci/modkeeper-server .
+nix develop .#e2e -c bun run test:e2e:server
+```
+
+Build the frontend without `VITE_E2E_MOCK` and `VITE_E2E_TASK_PROGRESS` set.
+Each test starts its own server on a loopback port and owns a temporary home,
+configuration, game roots, and archive. The fixture removes that state after
+the server exits. `MODKEEPER_E2E_BINARY` may point to a prebuilt server; the
+default is `build/ci/modkeeper-server` (with `.exe` on Windows). The fixture
+uses platform paths and sets both Windows and XDG configuration variables for
+future Windows CI; Windows execution has not yet been verified. Tests do not
+reuse a running server. The settings journey restarts its server with the same
+state directory and opens a fresh browser context. The archive journey checks
+the imported file bytes in the library; it does not test deployment to the game.
+Native window behavior is outside server-mode coverage.
 
 For agent exploration, set `ARCA_E2E_HARNESS` to the bundled E2E skill's
 `scripts/harness.ts` path. Then run:
@@ -33,5 +52,4 @@ bun "$ARCA_E2E_HARNESS" stop --config .config/arca.toml
 
 The task-center spec installs a Wails in-memory event mock before app startup.
 It exercises frontend routing and event delivery, but not real IPC, backend
-sync, native window behavior, or persisted settings. Issue [#15](https://github.com/martesi/modkeeper/issues/15)
-tracks adding real-backend journeys to CI.
+sync, native window behavior, or persisted settings.

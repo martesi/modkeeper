@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, vi } from 'vitest'
 import { getDefaultStore } from 'jotai'
 import type { TaskProgressLog } from './redesign-types'
 import {
@@ -55,7 +55,8 @@ describe('completed task history', () => {
       configurable: true,
       value: { localStorage: storage },
     })
-    const freshHistory = await import(`./task-history.ts?fresh=${Date.now()}`)
+    vi.resetModules()
+    const freshHistory = await import('./task-history')
     const initialEntries = getDefaultStore().get(freshHistory.taskHistoryAtom)
     if (windowDescriptor) {
       Object.defineProperty(globalThis, 'window', windowDescriptor)

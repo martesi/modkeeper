@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterEach, describe, expect, vi, test } from 'vitest'
 import { getDefaultStore } from 'jotai'
 import { toast } from 'sonner'
 import { installWailsMock } from '@/wails/mock'
@@ -12,10 +12,7 @@ import {
   registryMatchingMapAtom,
   registryRateLimitedUntilAtom,
 } from '../state/registry-state'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
 import { clearRegistryInstallTimeout } from './registry-install-task'
-
-installLinguiMacroMock()
 
 const repo = await import('./registry-repository')
 const {
@@ -296,9 +293,9 @@ describe('registry repository Wails bridge', () => {
   test('detached addon parent validation surfaces the parent-missing toast', async () => {
     // @ts-expect-error Test supplies a minimal browser global.
     globalThis.window = { _wails: { environment: { OS: 'linux' } } }
-    const toastError = spyOn(toast, 'error').mockImplementation(
-      () => '' as never,
-    )
+    const toastError = vi
+      .spyOn(toast, 'error')
+      .mockImplementation(() => '' as never)
     const remove = installWailsMock({
       events: { on: () => () => {} },
       commands: {
@@ -325,9 +322,9 @@ describe('registry repository Wails bridge', () => {
   test('switching libraries before admission aborts the stale install request', async () => {
     const remove = installBridge()
     setWorkspace({ ...workspace, activeLibraryId: 'other-library' })
-    const toastError = spyOn(toast, 'error').mockImplementation(
-      () => '' as never,
-    )
+    const toastError = vi
+      .spyOn(toast, 'error')
+      .mockImplementation(() => '' as never)
     await expect(
       installForgeVersion({
         libraryId: 'library',

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'vitest'
 import { commands, dispatchCommand } from './bridge'
 import { createInMemoryWailsMock, installWailsMock } from './mock'
 import { events } from './events'
@@ -19,10 +19,7 @@ describe('Wails browser mock', () => {
     )
     expect(calls).toEqual(['mock'])
     calls.length = 0
-    await dispatchCommand(
-      undefined,
-      () => calls.push('wails'),
-    )
+    await dispatchCommand(undefined, () => calls.push('wails'))
     expect(calls).toEqual(['wails'])
     calls.length = 0
     await expect(dispatchCommand(undefined, undefined)).rejects.toThrow(
@@ -32,10 +29,7 @@ describe('Wails browser mock', () => {
 
   test('wraps Wails return values in the shared command result shape', async () => {
     await expect(
-      dispatchCommand(
-        undefined,
-        () => ({ activeLibraryId: 'library' }),
-      ),
+      dispatchCommand(undefined, () => ({ activeLibraryId: 'library' })),
     ).resolves.toEqual({
       status: 'ok',
       data: { activeLibraryId: 'library' },
@@ -43,9 +37,9 @@ describe('Wails browser mock', () => {
   })
 
   test('rejects commands without a Wails runtime or browser mock', async () => {
-    await expect(
-      dispatchCommand(undefined, undefined),
-    ).rejects.toThrow('Command is not available in this runtime')
+    await expect(dispatchCommand(undefined, undefined)).rejects.toThrow(
+      'Command is not available in this runtime',
+    )
   })
 
   test('keeps structured Wails domain errors on the typed command path', async () => {
@@ -54,10 +48,7 @@ describe('Wails browser mock', () => {
     runtimeError.name = 'RuntimeError'
     runtimeError.cause = JSON.stringify(failure)
     await expect(
-      dispatchCommand(
-        undefined,
-        () => Promise.reject(runtimeError),
-      ),
+      dispatchCommand(undefined, () => Promise.reject(runtimeError)),
     ).resolves.toEqual({ status: 'error', error: failure })
   })
 
@@ -67,18 +58,12 @@ describe('Wails browser mock', () => {
     runtimeError.name = 'RuntimeError'
     runtimeError.cause = failure
     await expect(
-      dispatchCommand(
-        undefined,
-        () => Promise.reject(runtimeError),
-      ),
+      dispatchCommand(undefined, () => Promise.reject(runtimeError)),
     ).resolves.toEqual({ status: 'error', error: failure })
 
     const transportError = new Error('connection closed')
     await expect(
-      dispatchCommand(
-        undefined,
-        () => Promise.reject(transportError),
-      ),
+      dispatchCommand(undefined, () => Promise.reject(transportError)),
     ).rejects.toBe(transportError)
   })
   test('dispatches generated commands to the injected mock', async () => {

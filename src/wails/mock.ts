@@ -4,8 +4,21 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ForgeKind, ForgeVersionsPage } from './contract'
+import type {
+  HomeDirectory,
+  ListDirectory,
+} from '../../frontend/bindings/github.com/martes/modkeeper/backend/app'
+import type { DirectoryEntry } from '../../frontend/bindings/github.com/martes/modkeeper/backend/models'
+
+type MockCommand<T extends (...args: never[]) => unknown> = (
+  ...args: Parameters<T>
+) => Awaited<ReturnType<T>> | Promise<Awaited<ReturnType<T>>>
+
 export type WailsMock = {
-  commands?: Record<string, (...args: unknown[]) => unknown>
+  commands?: Record<string, (...args: any[]) => unknown> & {
+    listDirectory?: MockCommand<typeof ListDirectory>
+    homeDirectory?: MockCommand<typeof HomeDirectory>
+  }
   events?: {
     on?: (name: string, callback: (...args: unknown[]) => void) => () => void
     emit?: (name: string, ...args: unknown[]) => void
@@ -142,7 +155,7 @@ export function createInMemoryWailsMock(): WailsMock {
   }
   const now = () => new Date().toISOString()
   const mockHomeDirectory = '/mock/home'
-  const mockDirectories: Record<string, { Name: string; IsDir: boolean }[]> = {
+  const mockDirectories: Record<string, DirectoryEntry[]> = {
     [mockHomeDirectory]: [
       { Name: 'game', IsDir: true },
       { Name: 'mods.zip', IsDir: false },
@@ -164,7 +177,7 @@ export function createInMemoryWailsMock(): WailsMock {
     )
     return { accepted: true }
   }
-  const commands: Record<string, (...args: any[]) => unknown> = {
+  const commands: NonNullable<WailsMock['commands']> = {
     getLibraryWorkspace: () => structuredClone(workspace),
     homeDirectory: () => mockHomeDirectory,
     listDirectory: (path: string) =>

@@ -2,10 +2,10 @@ import { getDefaultStore } from 'jotai'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, expect, vi, test } from 'vitest'
 
-mock.module('@tanstack/react-router', () => ({ useNavigate: () => () => {} }))
-mock.module('../i18n/library-text', () => ({
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => () => {} }))
+vi.mock('../i18n/library-text', () => ({
   libraryText: new Proxy(
     {},
     {
@@ -16,16 +16,16 @@ mock.module('../i18n/library-text', () => ({
     },
   ),
 }))
-mock.module('../i18n/registry-text', () => ({
+vi.mock('../i18n/registry-text', () => ({
   registryText: new Proxy({}, { get: () => () => '' }),
 }))
-mock.module('../i18n/common-text', () => ({
+vi.mock('../i18n/common-text', () => ({
   commonText: { close: () => 'Close' },
 }))
-mock.module('../i18n/error-text', () => ({
+vi.mock('../i18n/error-text', () => ({
   errorText: new Proxy({}, { get: () => () => '' }),
 }))
-mock.module('../i18n/task-history-text', () => ({
+vi.mock('../i18n/task-history-text', () => ({
   taskHistoryText: {
     title: () => 'Recent tasks',
     label: () => 'Recent task history',
@@ -43,14 +43,14 @@ mock.module('../i18n/task-history-text', () => ({
     log: () => 'Show log',
   },
 }))
-mock.module('../i18n/task-progress-text', () => ({
+vi.mock('../i18n/task-progress-text', () => ({
   taskProgressText: new Proxy({}, { get: () => () => '' }),
 }))
-mock.module('../data/library-repository', () => ({
+vi.mock('../data/library-repository', () => ({
   syncMods: async () => {},
   retryFailedArchives: async () => {},
 }))
-mock.module('../../wails/bridge', () => ({ cancelInstallTask: async () => {} }))
+vi.mock('../../wails/bridge', () => ({ cancelInstallTask: async () => {} }))
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()

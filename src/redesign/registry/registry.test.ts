@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { getDefaultStore } from 'jotai'
 import type { ForgeSearchItem, ModSummary } from '@/wails/contract'
 import {

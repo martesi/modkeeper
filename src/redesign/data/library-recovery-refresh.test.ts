@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 import { getDefaultStore } from 'jotai'
 import { emptyWorkspace } from './example-data'
 import { runPlainCommand } from './runtime-boundary'

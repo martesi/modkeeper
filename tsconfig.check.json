@@ -14,5 +14,12 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.check.tsbuildinfo"
   },
   "files": [],
-  "include": ["src/main.tsx", "src/redesign", "src/routes", "src/gen", "e2e"]
+  "include": [
+    "src/main.tsx",
+    "src/redesign",
+    "src/routes",
+    "src/gen",
+    "src/wails/fs.test.ts",
+    "e2e"
+  ]
 }

@@ -2,18 +2,8 @@ import { Provider, createStore } from 'jotai'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { pendingTasksAtom, taskResultAtom } from '../state/library-state'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
-
-installLinguiMacroMock()
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()
