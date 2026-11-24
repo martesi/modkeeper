@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test'
+import { describe, expect, it, vi } from 'vitest'
 import type { KeyboardEvent } from 'react'
 import { handleRegistryItemKeyDown } from './registry-item-keyboard'
 
@@ -11,7 +11,7 @@ function keyboardEvent({
   target: EventTarget
   currentTarget: EventTarget
 }) {
-  const preventDefault = mock()
+  const preventDefault = vi.fn()
   const event = {
     key,
     target,
@@ -28,7 +28,7 @@ describe('registry result keyboard activation', () => {
       for (const nestedControl of ['parent link', 'action button']) {
         const row = { role: 'row' } as unknown as EventTarget
         const button = { label: nestedControl } as unknown as EventTarget
-        const activateRow = mock()
+        const activateRow = vi.fn()
         const { event, preventDefault } = keyboardEvent({
           key,
           target: button,
@@ -46,7 +46,7 @@ describe('registry result keyboard activation', () => {
   it('activates the focused result itself with Enter and Space', () => {
     for (const key of ['Enter', ' ']) {
       const row = { role: 'row' } as unknown as EventTarget
-      const activateRow = mock()
+      const activateRow = vi.fn()
       const { event, preventDefault } = keyboardEvent({
         key,
         target: row,

@@ -49,8 +49,8 @@ msgstr ""
 #~ msgstr "Recent tasks ({count})"
 
 #: src/utils/translation.ts:4
-msgid ", "
-msgstr ", "
+#~ msgid ", "
+#~ msgstr ", "
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:102
@@ -298,8 +298,8 @@ msgstr "App Theme"
 #~ msgstr "Appearance"
 
 #: src/utils/translation.ts:8
-msgid "Archive"
-msgstr "Archive"
+#~ msgid "Archive"
+#~ msgstr "Archive"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:247
@@ -335,8 +335,8 @@ msgstr "Archive structure and safety are verified locally upon download."
 #~ msgstr "Are you sure you want to restore backup from {0}? This will replace the current mod state."
 
 #: src/utils/translation.ts:9
-msgid "Auto backup"
-msgstr "Auto backup"
+#~ msgid "Auto backup"
+#~ msgstr "Auto backup"
 
 #: src/routes/library.$id.lazy.tsx:131
 #: src/routes/library.$id.lazy.tsx:150
@@ -1080,6 +1080,14 @@ msgstr "Game root path"
 #: src/redesign/i18n/library-text.ts:344
 msgid "library.toolbar.viewModeGrid"
 msgstr "Grid view"
+
+#: src/redesign/testing/lingui-transform.test.tsx:10
+msgid "Hello {name}"
+msgstr "Hello {name}"
+
+#: src/redesign/testing/lingui-transform.test.tsx:14
+msgid "Hello <0>{name}</0>"
+msgstr "Hello <0>{name}</0>"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:17
@@ -1962,12 +1970,12 @@ msgid "library.import.selectModArchives"
 msgstr "Select mod archives"
 
 #: src/utils/translation.ts:6
-msgid "Select Mod Files"
-msgstr "Select Mod Files"
+#~ msgid "Select Mod Files"
+#~ msgstr "Select Mod Files"
 
 #: src/utils/translation.ts:7
-msgid "Select Mod Folder"
-msgstr "Select Mod Folder"
+#~ msgid "Select Mod Folder"
+#~ msgstr "Select Mod Folder"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:377
@@ -2301,8 +2309,8 @@ msgstr "Unknown library"
 #~ msgstr "Unknown library"
 
 #: src/utils/translation.ts:5
-msgid "Unknown mod"
-msgstr "Unknown mod"
+#~ msgid "Unknown mod"
+#~ msgstr "Unknown mod"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/task-history-text.ts:35

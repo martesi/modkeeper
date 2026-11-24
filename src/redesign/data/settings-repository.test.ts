@@ -1,11 +1,8 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'vitest'
 import { getDefaultStore } from 'jotai'
 import type { AppSettings } from '@/wails/contract'
 import { installWailsMock } from '@/wails/mock'
 import { settingsAtom } from '../state/settings-state'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
-
-installLinguiMacroMock()
 
 const persistedSettings: AppSettings[] = []
 let signalFirstSave: () => void = () => {}

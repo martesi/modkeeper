@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'vitest'
 import { Window } from 'happy-dom'
 import { createInMemoryWailsMock } from './mock'
 
@@ -26,8 +26,8 @@ test('uses defaults and keeps settings in memory without storage', () => {
 
 test('default mock supports filesystem browsing for server-mode forms', async () => {
   const commands = createInMemoryWailsMock().commands
-  expect(commands?.homeDirectory).toBeFunction()
-  expect(commands?.listDirectory).toBeFunction()
+  expect(commands?.homeDirectory).toEqual(expect.any(Function))
+  expect(commands?.listDirectory).toEqual(expect.any(Function))
   expect(await commands?.homeDirectory?.()).toBe('/mock/home')
   expect(await commands?.listDirectory?.('/mock/home')).toEqual([
     { Name: 'game', IsDir: true },

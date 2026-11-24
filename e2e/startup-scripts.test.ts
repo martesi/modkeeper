@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'vitest'
 import {
   chmodSync,
   mkdtempSync,
@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const fixtures: string[] = []
 
@@ -31,22 +32,17 @@ function runScript(script: string, failGeneration = false) {
     )
     chmodSync(executable, 0o755)
   }
-  const result = Bun.spawnSync(
-    [process.execPath, 'run', script, '--', '--example-flag'],
-    {
-      cwd: fixture,
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
-        TEST_LOG: log,
-        GENERATOR_EXIT: failGeneration ? '42' : '0',
-      },
-      stdout: 'pipe',
-      stderr: 'pipe',
+  const result = spawnSync('bun', ['run', script, '--', '--example-flag'], {
+    cwd: fixture,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      TEST_LOG: log,
+      GENERATOR_EXIT: failGeneration ? '42' : '0',
     },
-  )
+  })
   return {
-    exitCode: result.exitCode,
+    exitCode: result.status,
     calls: readFileSync(log, 'utf8').trim().split('\n'),
   }
 }
@@ -55,11 +51,11 @@ for (const script of ['dev', 'dev:wails', 'build', 'build:wails']) {
   test(`${script} generates bindings before frontend commands and forwards arguments`, () => {
     const result = runScript(script)
     expect(result.exitCode).toBe(0)
-    expect(result.calls[0]).toStartWith('wails3 generate bindings ')
+    expect(result.calls[0]).toMatch(/^wails3 generate bindings /)
     expect(
       result.calls.filter((call) => call.startsWith('wails3 ')),
     ).toHaveLength(1)
-    if (script.startsWith('build')) expect(result.calls[1]).toStartWith('tsc ')
+    if (script.startsWith('build')) expect(result.calls[1]).toMatch(/^tsc /)
     expect(result.calls.at(-1)).toContain('vite ')
     expect(result.calls.at(-1)).toContain('--example-flag')
   })
@@ -68,7 +64,7 @@ for (const script of ['dev', 'dev:wails', 'build', 'build:wails']) {
     const result = runScript(script, true)
     expect(result.exitCode).not.toBe(0)
     expect(result.calls).toHaveLength(1)
-    expect(result.calls[0]).toStartWith('wails3 generate bindings ')
+    expect(result.calls[0]).toMatch(/^wails3 generate bindings /)
   })
 }
 

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
@@ -12,6 +12,12 @@ const serverBackend =
   process.env.MODKEEPER_SERVER_URL || 'http://127.0.0.1:8080'
 
 export default defineConfig(() => ({
+  test: {
+    environment: 'happy-dom',
+    include: ['{src,e2e}/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['e2e/playwright/**'],
+    setupFiles: ['./src/redesign/testing/vitest-setup.ts'],
+  },
   envDir: '.config',
   define: {
     'import.meta.env.WAILS': JSON.stringify(String(wailsApp)),
