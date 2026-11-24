@@ -1,27 +1,22 @@
-import { Call } from '@wailsio/runtime'
+import {
+  HomeDirectory,
+  ListDirectory,
+} from '../../frontend/bindings/github.com/martes/modkeeper/backend/app'
+import type { DirectoryEntry } from '../../frontend/bindings/github.com/martes/modkeeper/backend/models'
 import { z } from 'zod'
 import { getWailsMock } from './mock'
 
-const entriesSchema = z.array(
-  z.object({ Name: z.string(), IsDir: z.boolean() }),
-)
-export type DirectoryEntry = z.infer<typeof entriesSchema>[number]
+export type { DirectoryEntry }
 
 export async function listDirectory(path: string): Promise<DirectoryEntry[]> {
   const mock = getWailsMock()?.commands?.listDirectory
-  const result: unknown = mock
-    ? await mock(path)
-    : await Call.ByName(
-        'github.com/martes/modkeeper/backend.App.ListDirectory',
-        path,
-      )
-  return entriesSchema.parse(result)
+  const result = await (mock ? mock(path) : ListDirectory(path))
+  if (result === null) throw new Error('Directory listing must not be null')
+  return result
 }
 
 export async function homeDirectory(): Promise<string> {
   const mock = getWailsMock()?.commands?.homeDirectory
-  const result: unknown = mock
-    ? await mock()
-    : await Call.ByName('github.com/martes/modkeeper/backend.App.HomeDirectory')
+  const result = await (mock ? mock() : HomeDirectory())
   return z.string().min(1).parse(result)
 }
