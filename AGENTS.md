@@ -8,6 +8,7 @@
 - With Nix, `nix develop -c ...` is also valid.
 - Run frontend commands with `bun run ...`.
 - For browser E2E on WSL, when `/dev/dxg` and the WSL GPU driver mounts are available, use `nix develop .#e2e-wsl-gpu -c xvfb-run -a ...`. Check GPU access with `bun scripts/check-wsl-gpu.mjs` inside that profile. Otherwise, use the normal `e2e` profile.
+- For agent-driven Linux native desktop GUI verification, use `nix develop .#e2e` and run `task dev` to start the Wails desktop app. When no usable display is available, run the app and the agent's GUI interactions on the same Xvfb display; `xvfb-run -a` can manage the display for a single command or shell. The `e2e` profile provides `xdpyinfo`, `xdotool`, and ImageMagick `import` for display checks, input, and screenshots. See `.agents/skills/e2e/references/driving.md` for display readiness and cleanup. Verify the app has painted before assessing screenshots. Browser E2E and `test:agent` do not verify native window behavior.
 
 ### Development Guidelines
 - **Testing**: Add tests for new features, refactor existing tests after changes
