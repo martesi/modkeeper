@@ -10,14 +10,20 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/martes/modkeeper/backend"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func TestServerStartupProcess(t *testing.T) {
+	if os.Getenv("MODKEEPER_TEST_SERVER_PROCESS") == "1" {
+		main()
+	}
+}
 
 func TestServerFilesystemMethodsOverWailsTransport(t *testing.T) {
 	root := t.TempDir()
@@ -29,20 +35,21 @@ func TestServerFilesystemMethodsOverWailsTransport(t *testing.T) {
 	}
 
 	port := freeTCPPort(t)
-	options := appOptions(&backend.App{})
-	options.Server = application.ServerOptions{Host: "127.0.0.1", Port: port}
-	app := application.New(options)
-	errCh := make(chan error, 1)
-	go func() { errCh <- app.Run() }()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestServerStartupProcess$")
+	cmd.Env = append(os.Environ(), "MODKEEPER_TEST_SERVER_PROCESS=1", "MODKEEPER_SERVER_HOST=127.0.0.1", "MODKEEPER_SERVER_PORT="+strconv.Itoa(port), "XDG_CONFIG_HOME="+t.TempDir(), "XDG_DATA_HOME="+t.TempDir())
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
-		app.Quit()
-		select {
-		case err := <-errCh:
-			if err != nil {
-				t.Errorf("server exited with error: %v", err)
-			}
-		case <-time.After(3 * time.Second):
-			t.Error("server did not stop")
+		if err := cmd.Process.Kill(); err != nil && err != os.ErrProcessDone {
+			t.Errorf("stop server: %v", err)
+		}
+		_ = cmd.Wait()
+		if t.Failed() {
+			t.Logf("server output: %s", output.String())
 		}
 	})
 

@@ -70,6 +70,9 @@ jobs:
       - name: Go tests
         run: nix develop .#default -c go test ./...
 
+      - name: Server-tagged Go tests
+        run: nix develop .#default -c env CGO_ENABLED=0 go test -tags server . ./backend
+
       # Server mode is a Wails build tag, so the headless binary is a second
       # build of the same source, not a runtime flag.
       - name: Build desktop and server artifacts
@@ -78,7 +81,8 @@ jobs:
             set -euo pipefail
             mkdir -p build/ci
             go build -trimpath -o build/ci/modkeeper .
-            go build -trimpath -tags server -o build/ci/modkeeper-server .
+            # Wails Linux CGO support files otherwise link GTK/WebKit in server builds.
+            CGO_ENABLED=0 go build -trimpath -tags server -o build/ci/modkeeper-server .
           '
 
       - name: Smoke-test server mode
