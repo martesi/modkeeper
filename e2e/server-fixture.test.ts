@@ -7,6 +7,8 @@ const temp = await mkdtemp(path.join(tmpdir(), 'modkeeper-fixture-test-'))
 afterAll(() => rm(temp, { recursive: true, force: true }))
 
 test('cleans its root when the server binary does not exist', async () => {
+  const env = { ...process.env }
+  delete env.JEST_WORKER_ID
   const child = Bun.spawn(
     [
       'bun',
@@ -18,7 +20,7 @@ test('cleans its root when the server binary does not exist', async () => {
     ],
     {
       env: {
-        ...process.env,
+        ...env,
         TMPDIR: temp,
         MODKEEPER_E2E_BINARY: path.join(temp, 'missing-server'),
         MODKEEPER_E2E_STARTUP_PROBE: '1',
