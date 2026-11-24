@@ -98,6 +98,9 @@ jobs:
             grep -q "Server mode enabled" /tmp/server.log
           '
 
+      - name: Playwright real-server journeys
+        run: nix develop .#e2e -c bun run test:e2e:server
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
