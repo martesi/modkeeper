@@ -39,9 +39,6 @@ jobs:
       - name: Install frontend dependencies
         run: nix develop .#default -c bun ci --ignore-scripts
 
-      - name: Generate Wails bindings
-        run: nix develop .#default -c bun run bindings:wails
-
       - name: Build Windows NSIS installers
         run: sh scripts/build-windows.sh
 
@@ -72,9 +69,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: nix develop .#default -c bun ci --ignore-scripts
-
-      - name: Generate Wails bindings
-        run: nix develop .#default -c bun run bindings:wails
 
       - name: Build embedded frontend
         run: nix develop .#default -c bun run build:wails

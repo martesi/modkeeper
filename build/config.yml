@@ -25,7 +25,8 @@ dev_mode:
   executes:
     - cmd: wails3 build DEV=true
       type: blocking
-    - cmd: bun run dev:wails
+    # The blocking build above already generates bindings.
+    - cmd: bun run dev:wails:frontend
       type: background
       readiness:
         http: "http://127.0.0.1:34115/"
