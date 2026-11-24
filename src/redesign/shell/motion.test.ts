@@ -1,28 +1,28 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 
 const sharedStyles = readFileSync(
-  new URL('../../assets/style.css', import.meta.url),
+  'src/redesign/shell/../../assets/style.css',
   'utf8',
 )
 const motionStyles = readFileSync(
-  new URL('./desktop-shell.css', import.meta.url),
+  'src/redesign/shell/./desktop-shell.css',
   'utf8',
 )
 const navigationSource = readFileSync(
-  new URL('./left-navigation.tsx', import.meta.url),
+  'src/redesign/shell/./left-navigation.tsx',
   'utf8',
 )
 const inspectorSource = readFileSync(
-  new URL('../registry/registry-detail-inspector.tsx', import.meta.url),
+  'src/redesign/shell/../registry/registry-detail-inspector.tsx',
   'utf8',
 )
 const libraryEmptyCardSource = readFileSync(
-  new URL('../library/library-empty-card.tsx', import.meta.url),
+  'src/redesign/shell/../library/library-empty-card.tsx',
   'utf8',
 )
 const registryNoLibraryEmptySource = readFileSync(
-  new URL('../registry/registry-no-library-empty-state.tsx', import.meta.url),
+  'src/redesign/shell/../registry/registry-no-library-empty-state.tsx',
   'utf8',
 )
 

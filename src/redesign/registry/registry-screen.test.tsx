@@ -3,10 +3,10 @@ import {
   afterEach,
   beforeEach,
   expect,
-  mock,
-  spyOn,
+  vi,
   test,
-} from 'bun:test'
+  type MockInstance,
+} from 'vitest'
 import { Window } from 'happy-dom'
 import { Provider, createStore } from 'jotai'
 import { act, createElement } from 'react'
@@ -18,11 +18,8 @@ import {
   registryModPageAtom,
   registrySearchAtom,
 } from '../state/registry-state'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
 
-installLinguiMacroMock()
-
-mock.module('./registry-toolbar', () => ({
+vi.mock('./registry-toolbar', () => ({
   RegistryToolbar: ({
     modPage,
     onAllPageChange,
@@ -36,18 +33,18 @@ mock.module('./registry-toolbar', () => ({
       'Next',
     ),
 }))
-mock.module('../library/manage-library/manage-library-dialog', () => ({
+vi.mock('../library/manage-library/manage-library-dialog', () => ({
   ManageLibraryDialog: () => null,
 }))
-mock.module('./registry-parent-dialog', () => ({
+vi.mock('./registry-parent-dialog', () => ({
   RegistryParentDialog: () => null,
 }))
-mock.module('./registry-detail-inspector', () => ({
+vi.mock('./registry-detail-inspector', () => ({
   RegistryDetailInspector: () => null,
 }))
-mock.module('./registry-list-view', () => ({ RegistryListView: () => null }))
-mock.module('./registry-grid-view', () => ({ RegistryGridView: () => null }))
-mock.module('./registry-icons-view', () => ({ RegistryIconsView: () => null }))
+vi.mock('./registry-list-view', () => ({ RegistryListView: () => null }))
+vi.mock('./registry-grid-view', () => ({ RegistryGridView: () => null }))
+vi.mock('./registry-icons-view', () => ({ RegistryIconsView: () => null }))
 
 const repository = await import('../data/registry-repository')
 const browserWindow = new Window()
@@ -107,14 +104,12 @@ function workspace(id: string, sptVersion = '3.10'): LibraryWorkspace {
 let store: ReturnType<typeof createStore>
 let container: HTMLDivElement
 let root: Root
-let search: ReturnType<
-  typeof spyOn<typeof import('../data/registry-repository'), 'searchForge'>
->
+let search: MockInstance<typeof repository.searchForge>
 
 beforeEach(async () => {
   store = createStore()
   store.set(libraryWorkspaceAtom, workspace('one'))
-  search = spyOn(repository, 'searchForge').mockResolvedValue(response)
+  search = vi.spyOn(repository, 'searchForge').mockResolvedValue(response)
   container = document.createElement('div')
   document.body.append(container)
   const { RegistryScreen } = await import('./registry-screen')
@@ -186,7 +181,7 @@ test('stale search metadata shows the stale-cache banner', async () => {
 
 test('initial search does not reset a page selected within the debounce window', async () => {
   await act(async () => root.unmount())
-  const timers = spyOn(globalThis, 'setTimeout')
+  const timers = vi.spyOn(globalThis, 'setTimeout')
   const { RegistryScreen } = await import('./registry-screen')
   root = createRoot(container)
   await act(async () =>

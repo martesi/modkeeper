@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, describe, expect, test } from 'vitest'
 import { Window } from 'happy-dom'
 import { createElement } from 'react'
 import { act } from 'react'
@@ -6,7 +6,6 @@ import { createRoot } from 'react-dom/client'
 import { Provider, createStore } from 'jotai'
 import { libraryWorkspaceAtom } from '../../state/library-state'
 import { emptyWorkspace } from '../../data/example-data'
-import { installLinguiMacroMock } from '../../testing/lingui-macro'
 
 const pickCalls: Array<[unknown, unknown]> = []
 const installCalls: unknown[] = []
@@ -23,7 +22,6 @@ const install = async (input: unknown) => {
   return { accepted: true }
 }
 
-installLinguiMacroMock()
 const { useArchiveFilePicker } = await import('./use-archive-file-picker')
 
 const browserWindow = new Window()
@@ -93,8 +91,8 @@ describe('useArchiveFilePicker', () => {
       await pickAndInstall?.()
     })
     expect(pickCalls).toHaveLength(1)
-    expect(pickCalls[0]?.[0]).toBeFunction()
-    expect(pickCalls[0]?.[1]).toBeFunction()
+    expect(pickCalls[0]?.[0]).toEqual(expect.any(Function))
+    expect(pickCalls[0]?.[1]).toEqual(expect.any(Function))
     expect(installCalls).toHaveLength(0)
 
     pickResults.push(['/local/archive.zip'])

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, test } from 'vitest'
 import { type ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { observeClose, stopServer } from './server/server-process'

@@ -1,7 +1,12 @@
-import { afterEach, expect, spyOn, test } from 'bun:test'
+import { afterEach, expect, test, vi } from 'vitest'
 import { Call } from '@wailsio/runtime'
 import { homeDirectory, listDirectory } from './fs'
 import { installWailsMock, type WailsMock } from './mock'
+
+vi.mock('@wailsio/runtime', async (importOriginal) => {
+  const runtime = await importOriginal<typeof import('@wailsio/runtime')>()
+  return { ...runtime, Call: { ...runtime.Call, ByID: vi.fn() } }
+})
 
 // These assignments also check that ordinary values and promises need no cancellation API.
 const typedCommands: NonNullable<WailsMock['commands']> = {
@@ -23,7 +28,7 @@ afterEach(() => {
 })
 
 test('dispatches to generated bindings when no mock is installed', async () => {
-  const call = spyOn(Call, 'ByID').mockImplementation((_id, ...args) => {
+  const call = vi.spyOn(Call, 'ByID').mockImplementation((_id, ...args) => {
     if (args.length)
       return Promise.resolve([{ Name: 'game', IsDir: true }]) as never
     return Promise.resolve('/home') as never
@@ -58,9 +63,9 @@ test('prefers filesystem mocks and propagates their errors', async () => {
 
 test('propagates generated binding errors', async () => {
   const failure = new Error('transport unavailable')
-  const call = spyOn(Call, 'ByID').mockImplementation(
-    () => Promise.reject(failure) as never,
-  )
+  const call = vi
+    .spyOn(Call, 'ByID')
+    .mockImplementation(() => Promise.reject(failure) as never)
   await expect(listDirectory('/home')).rejects.toBe(failure)
   await expect(homeDirectory()).rejects.toBe(failure)
   call.mockRestore()

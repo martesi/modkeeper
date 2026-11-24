@@ -2,12 +2,9 @@ import { getDefaultStore } from 'jotai'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
-import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, expect, test } from 'vitest'
 import { installWailsMock } from '@/wails/mock'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
 import { settingsAtom } from '../state/settings-state'
-
-installLinguiMacroMock()
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()

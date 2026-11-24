@@ -1,13 +1,15 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import { afterEach, describe, expect, vi, test } from 'vitest'
 import { toast } from 'sonner'
 import { runPickerAction } from './picker-errors'
 
-afterEach(() => mock.restore())
+afterEach(() => vi.restoreAllMocks())
 
 describe('runPickerAction', () => {
   test('shows the caller error toast when the picker rejects', async () => {
-    const errorToast = spyOn(toast, 'error').mockImplementation(() => 'toast')
-    const logError = spyOn(console, 'error').mockImplementation(() => {})
+    const errorToast = vi
+      .spyOn(toast, 'error')
+      .mockImplementation(() => 'toast')
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const failure = new Error('picker unavailable')
 
     await runPickerAction(() => Promise.reject(failure), {
@@ -25,8 +27,10 @@ describe('runPickerAction', () => {
   })
 
   test('does not toast when the picker action succeeds', async () => {
-    const errorToast = spyOn(toast, 'error').mockImplementation(() => 'toast')
-    const logError = spyOn(console, 'error').mockImplementation(() => {})
+    const errorToast = vi
+      .spyOn(toast, 'error')
+      .mockImplementation(() => 'toast')
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
     let ran = false
 
     await runPickerAction(

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, expect, vi, test } from 'vitest'
 import { Window } from 'happy-dom'
 import { Provider, getDefaultStore } from 'jotai'
 import {
@@ -19,11 +19,9 @@ import type {
 import { libraryWorkspaceAtom } from '../state/library-state'
 import { settingsAtom } from '../state/settings-state'
 import { installWailsMock } from '@/wails/mock'
-import { installLinguiMacroMock } from '../testing/lingui-macro'
 
-installLinguiMacroMock()
 const closeDialog = createContext(() => {})
-mock.module('@/components/ui/alert-dialog', () => ({
+vi.mock('@/components/ui/alert-dialog', () => ({
   AlertDialog: ({
     open,
     onOpenChange,
@@ -74,7 +72,7 @@ mock.module('@/components/ui/alert-dialog', () => ({
   AlertDialogTitle: ({ children }: { children: ReactNode }) =>
     createElement('h2', null, children),
 }))
-mock.module('@/components/ui/switch', () => ({
+vi.mock('@/components/ui/switch', () => ({
   Switch: ({
     checked,
     onCheckedChange,

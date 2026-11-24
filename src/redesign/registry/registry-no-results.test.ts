@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { resolveRegistryNoResults } from './registry-no-results'
 
 describe('registry no-results compatibility copy', () => {

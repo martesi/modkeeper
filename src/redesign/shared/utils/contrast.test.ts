@@ -2,7 +2,7 @@
  * Default accents meet normal-text contrast in both themes. Saved/custom swatches remain unchanged
  * and use the better of the two supported foregrounds.
  */
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 import { accentForBackground, contrastOn, contrastRatio } from './contrast'
 import { ACCENT_SWATCHES } from '../../settings/accent-palette'
 

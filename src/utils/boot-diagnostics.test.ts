@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import { afterEach, describe, expect, vi, test } from 'vitest'
 import {
   BOOT_ERROR_STORAGE_KEY,
   clearBootError,
@@ -6,7 +6,7 @@ import {
   storeBootError,
 } from './boot-diagnostics'
 
-afterEach(() => mock.restore())
+afterEach(() => vi.restoreAllMocks())
 
 function createStorage() {
   const values = new Map<string, string>()
@@ -35,7 +35,7 @@ describe('boot error storage', () => {
 
   test('ignores stored boot errors longer than the supported limit', () => {
     const storage = createStorage()
-    const logError = spyOn(console, 'error').mockImplementation(() => {})
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
     storage.setItem(BOOT_ERROR_STORAGE_KEY, 'x'.repeat(2_001))
 
     expect(readBootError(storage)).toBeNull()
