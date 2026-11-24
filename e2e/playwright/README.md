@@ -35,7 +35,10 @@ the server exits. `MODKEEPER_E2E_BINARY` may point to a prebuilt server; the
 default is `build/ci/modkeeper-server` (with `.exe` on Windows). The fixture
 uses platform paths and sets both Windows and XDG configuration variables for
 future Windows CI; Windows execution has not yet been verified. Tests do not
-reuse a running server. Native window behavior is outside server-mode coverage.
+reuse a running server. The settings journey restarts its server with the same
+state directory and opens a fresh browser context. The archive journey checks
+the imported file bytes in the library; it does not test deployment to the game.
+Native window behavior is outside server-mode coverage.
 
 For agent exploration, set `ARCA_E2E_HARNESS` to the bundled E2E skill's
 `scripts/harness.ts` path. Then run:

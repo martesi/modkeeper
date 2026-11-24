@@ -6,7 +6,13 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 interface ServerFixture {
-  server: { url: string; root: string; game: string; archive: string }
+  server: {
+    url: string
+    root: string
+    game: string
+    archive: string
+    restart: () => Promise<void>
+  }
 }
 
 export const test = base.extend<ServerFixture>({
@@ -28,7 +34,7 @@ export const test = base.extend<ServerFixture>({
     await copyFile(path.resolve('e2e/server/fixture-mod.zip'), archive)
     const port = await freePort()
     const url = `http://127.0.0.1:${port}`
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       HOME: root,
       USERPROFILE: root,
@@ -50,25 +56,42 @@ export const test = base.extend<ServerFixture>({
           ? 'modkeeper-server.exe'
           : 'modkeeper-server',
       )
-    const child = spawn(executable, [], { env, stdio: 'inherit' })
-    const closed = new Promise<void>((resolve) => {
-      child.once('error', (error) => {
-        console.error(`Could not start server: ${error.message}`)
-        resolve()
-      })
-      child.once('close', () => resolve())
+    let serverProcess = await startServer(executable, env, url)
+    await run({
+      url,
+      root,
+      game,
+      archive,
+      restart: async () => {
+        await stopServer(serverProcess.child, serverProcess.closed)
+        serverProcess = await startServer(executable, env, url)
+      },
     })
-    const ready = await waitForServer(url, closed)
-    if (!ready) {
-      await stopServer(child, closed)
-      await rm(root, { recursive: true, force: true })
-      throw new Error(`Server failed to start at ${url}`)
-    }
-    await run({ url, root, game, archive })
-    await stopServer(child, closed)
+    await stopServer(serverProcess.child, serverProcess.closed)
     await rm(root, { recursive: true, force: true })
   },
 })
+
+async function startServer(
+  executable: string,
+  env: NodeJS.ProcessEnv,
+  url: string,
+) {
+  const child = spawn(executable, [], { env, stdio: 'inherit' })
+  const closed = new Promise<void>((resolve) => {
+    child.once('error', (error) => {
+      console.error(`Could not start server: ${error.message}`)
+      resolve()
+    })
+    child.once('close', () => resolve())
+  })
+  const ready = await waitForServer(url, closed)
+  if (!ready) {
+    await stopServer(child, closed)
+    throw new Error(`Server failed to start at ${url}`)
+  }
+  return { child, closed }
+}
 
 async function stopServer(child: ChildProcess, closed: Promise<void>) {
   child.kill()

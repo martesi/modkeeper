@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixture'
 import path from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 
 test('server starts without a mock', async ({ page, server }) => {
   const workspaceResponse = page.waitForResponse((response) => {
@@ -80,9 +80,24 @@ test('browses, creates and activates a library, then imports a local archive', a
       ).catch(() => ''),
     )
     .toContain('fixture-mod')
+  const modsDir = path.join(server.game, '.mod_keeper', 'mods')
+  const mods = await readdir(modsDir)
+  expect(mods).toHaveLength(1)
+  expect(
+    await readFile(
+      path.join(
+        modsDir,
+        mods[0],
+        'BepInEx',
+        'plugins',
+        'FixtureMod',
+        'fixture.dll',
+      ),
+    ),
+  ).toEqual(Buffer.from('fixture payload'))
 })
 
-test('settings persist through a fresh browser context', async ({
+test('settings persist across a server restart and fresh browser context', async ({
   browser,
   page,
   server,
@@ -102,6 +117,7 @@ test('settings persist through a fresh browser context', async ({
       ).catch(() => ''),
     )
     .toContain('theme = "dark"')
+  await server.restart()
   const context = await browser.newContext()
   const fresh = await context.newPage()
   await fresh.goto(server.url)
