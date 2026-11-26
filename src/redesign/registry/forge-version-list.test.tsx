@@ -176,6 +176,10 @@ const activeLibrary: LibrarySummary = {
   cacheStatus: { state: 'ready' },
   deployStale: false,
   updatedAt: '',
+  targetRuntime: 'windows',
+  deploymentMethod: 'copy-first',
+  policyUncertain: false,
+  hostRuntime: 'linux',
 }
 const initialSettings: AppSettings = {
   theme: 'system',

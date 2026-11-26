@@ -95,6 +95,12 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 				owned = owned || (e == nil && be == nil && within(base, resolved))
 			}
 			if !owned {
+				owned, err = replaceableCreatedDirectory(l, a.Target, state, remove)
+				if err != nil {
+					return nil, ioError(err)
+				}
+			}
+			if !owned {
 				return nil, collision(a.Target)
 			}
 		} else if !os.IsNotExist(err) {
@@ -108,6 +114,60 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 	}
 	return remove, nil
 }
+
+// A copy deployment records directories it created. When a later policy uses
+// directory links, replace such a directory only if every entry in its tree
+// is also tracked and scheduled for removal. This preserves untracked files.
+func replaceableCreatedDirectory(l Layout, target string, state DeploymentState, remove []DeploymentArtifact) (bool, error) {
+	createdDirs := make(map[string]bool, len(state.CreatedDirs))
+	for _, dir := range state.CreatedDirs {
+		createdDirs[pathKey(dir)] = true
+	}
+	if !createdDirs[pathKey(target)] {
+		return false, nil
+	}
+	removedArtifacts := make(map[string]bool, len(remove))
+	for _, artifact := range remove {
+		removedArtifacts[pathKey(artifact.Target)] = true
+	}
+
+	var inspect func(string) (bool, error)
+	inspect = func(dir string) (bool, error) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false, err
+		}
+		for _, entry := range entries {
+			child := filepath.Join(dir, entry.Name())
+			rel, err := filepath.Rel(l.GameRoot, child)
+			if err != nil {
+				return false, err
+			}
+			key := pathKey(rel)
+			info, err := os.Lstat(child)
+			if err != nil {
+				return false, err
+			}
+			if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+				if !createdDirs[key] {
+					return false, nil
+				}
+				ok, err := inspect(child)
+				if err != nil || !ok {
+					return ok, err
+				}
+				continue
+			}
+			if !removedArtifacts[key] {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+
+	return inspect(filepath.Join(l.GameRoot, target))
+}
+
 func Preflight(l Layout, plan DeploymentPlan) error {
 	state, e := LoadState(l)
 	if e != nil {
@@ -233,7 +293,7 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 			return e
 		}
 	}
-	return SaveState(l, DeploymentState{plan.Artifacts, sortedKeys(created)})
+	return SaveState(l, DeploymentState{Artifacts: plan.Artifacts, CreatedDirs: sortedKeys(created), Method: plan.Method, TargetRuntime: plan.TargetRuntime})
 }
 func DeployStale(l Layout, mods []models.Mod) (bool, error) {
 	state, e := LoadState(l)
@@ -264,6 +324,22 @@ func DeployStale(l Layout, mods []models.Mod) (bool, error) {
 	return false, nil
 }
 func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (Report, error) {
+	return SyncWithMethod(ctx, l, mods, models.DeploymentMethodCopyFirst, progress)
+}
+
+func SyncWithMethod(ctx context.Context, l Layout, mods []models.Mod, method models.DeploymentMethod, progress Reporter) (Report, error) {
+	target := models.TargetWindows
+	if method != models.DeploymentMethodCopyFirst {
+		target = models.TargetLinux
+	}
+	return SyncWithPolicy(ctx, l, mods, models.DeploymentPolicy{TargetRuntime: target, DeploymentMethod: method}, progress)
+}
+
+func SyncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter) (Report, error) {
+	return syncWithPolicy(ctx, l, mods, policy, progress, probeSymlinkConsumer)
+}
+
+func syncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter, probeLink func(Layout) error) (Report, error) {
 	stage := func(s models.TaskProgressStage) error {
 		if e := ctx.Err(); e != nil {
 			return e
@@ -275,6 +351,19 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	}
 	if e := stage(models.TaskStageSyncPlan); e != nil {
 		return Report{}, e
+	}
+	if !policy.Valid() {
+		return Report{}, models.Fail(models.ParseError, "invalid deployment policy")
+	}
+	planFor := func(candidate []models.Mod) (DeploymentPlan, error) {
+		if policy.DeploymentMethod == models.DeploymentMethodCopyFirst {
+			plan, err := Plan(candidate, l)
+			plan.TargetRuntime = policy.TargetRuntime
+			return plan, err
+		}
+		plan, err := planWithMethod(candidate, l, policy.DeploymentMethod, probeLink)
+		plan.TargetRuntime = policy.TargetRuntime
+		return plan, err
 	}
 	enabled := make([]models.Mod, 0, len(mods))
 	for _, mod := range mods {
@@ -299,7 +388,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 		if _, excluded := conflicted[mod.ID]; excluded {
 			continue
 		}
-		modPlan, planErr := Plan([]models.Mod{mod}, l)
+		modPlan, planErr := planFor([]models.Mod{mod})
 		if planErr == nil {
 			planErr = Preflight(l, modPlan)
 		}
@@ -326,7 +415,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 			return Report{}, e
 		}
 	}
-	plan, e := Plan(deployable, l)
+	plan, e := planFor(deployable)
 	if e != nil {
 		return Report{}, e
 	}

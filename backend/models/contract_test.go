@@ -23,7 +23,7 @@ func TestLibraryEntryWireShapes(t *testing.T) {
 		want  string
 	}{
 		{StubEntry("/unreadable"), `{"path":"/unreadable"}`},
-		{SummaryEntry(LibrarySummary{ID: "id", Name: "name", GameRoot: "game", LibraryRoot: "library", CacheStatus: CacheStatus{State: CacheStateReady}, UpdatedAt: "now"}), `{"id":"id","name":"name","gameRoot":"game","libraryRoot":"library","cacheStatus":{"state":"ready"},"deployStale":false,"updatedAt":"now"}`},
+		{SummaryEntry(LibrarySummary{ID: "id", Name: "name", GameRoot: "game", LibraryRoot: "library", CacheStatus: CacheStatus{State: CacheStateReady}, UpdatedAt: "now", TargetRuntime: TargetWindows, DeploymentMethod: DeploymentMethodCopyFirst, HostRuntime: "linux"}), `{"id":"id","name":"name","gameRoot":"game","libraryRoot":"library","cacheStatus":{"state":"ready"},"deployStale":false,"updatedAt":"now","targetRuntime":"windows","deploymentMethod":"copy-first","policyUncertain":false,"hostRuntime":"linux"}`},
 	} {
 		assertJSON(t, tc.entry, tc.want)
 		var decoded LibraryEntry

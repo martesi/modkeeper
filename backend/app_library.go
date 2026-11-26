@@ -72,6 +72,15 @@ func (a *App) SyncMods(input models.SyncModsInput) (*models.OperationAccepted, e
 	}
 	return a.Library.SyncMods(input, nil)
 }
+func (a *App) SetDeploymentPolicy(input models.SetDeploymentPolicyInput) (*models.LibraryWorkspace, error) {
+	if a.Library == nil {
+		return nil, a.initFailure()
+	}
+	if err := a.Library.SetDeploymentPolicy(input); err != nil {
+		return nil, err
+	}
+	return a.Library.Workspace(), nil
+}
 func (a *App) InstallModArchives(input models.InstallModArchivesInput) (*models.OperationAccepted, error) {
 	if a.Library == nil {
 		return nil, a.initFailure()

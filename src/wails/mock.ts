@@ -193,10 +193,30 @@ export function createInMemoryWailsMock(): WailsMock {
         cacheStatus: { state: 'ready' },
         deployStale: false,
         updatedAt: now(),
+        targetRuntime: 'windows',
+        deploymentMethod: 'copy-first',
+        policyUncertain: false,
+        hostRuntime: 'linux',
       })
       workspace.modsByLibraryId[id] = []
       workspace.toolsByLibraryId[id] = []
       workspace.activeLibraryId = id
+      return structuredClone(workspace)
+    },
+    setDeploymentPolicy: ({
+      libraryId,
+      targetRuntime,
+      deploymentMethod,
+    }: any = {}) => {
+      const lib: any = workspace.libraries.find(
+        (item: any) => item.id === libraryId,
+      )
+      if (lib) {
+        lib.targetRuntime = targetRuntime
+        lib.deploymentMethod = deploymentMethod
+        lib.deployStale = true
+        lib.updatedAt = now()
+      }
       return structuredClone(workspace)
     },
     activateLibrary: ({ libraryId }: any) => {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -211,6 +212,18 @@ func TestWorkspaceModSummaryMirrorsManifestAndFileMetadata(t *testing.T) {
 	}
 	if findWorkspaceSummary(t, second, libraryID).UpdatedAt != summary.UpdatedAt {
 		t.Fatal("library updatedAt changed without a change")
+	}
+}
+
+func TestHostRuntimeFailsClosedWhenLinuxDetectionReadFails(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux kernel release detection fixture")
+	}
+	got := hostRuntimeWithReadFile(func(string) ([]byte, error) {
+		return nil, os.ErrPermission
+	})
+	if got != "unknown" {
+		t.Fatalf("host runtime after detection read failure = %q, want unknown", got)
 	}
 }
 

@@ -49,6 +49,9 @@ import type {
   RebuildLibraryCacheInput as WailsRebuildLibraryCacheInput,
   RenameLibraryInput as WailsRenameLibraryInput,
   SyncModsInput as WailsSyncModsInput,
+  SetDeploymentPolicyInput as WailsSetDeploymentPolicyInput,
+  TargetRuntime as WailsTargetRuntime,
+  DeploymentMethod as WailsDeploymentMethod,
   TaskOperation as WailsTaskOperation,
   TaskProgressEvent as WailsTaskProgressEvent,
   TaskProgressKind as WailsTaskProgressKind,
@@ -70,6 +73,8 @@ export type ModType = EnumValues<WailsModType>
 export type ModSource = EnumValues<WailsModSource>
 export type ForgeKind = EnumValues<WailsForgeKind>
 export type BulkAction = EnumValues<WailsBulkAction>
+export type TargetRuntime = EnumValues<WailsTargetRuntime> | ''
+export type DeploymentMethod = EnumValues<WailsDeploymentMethod> | ''
 
 export type TaskOperation = EnumValues<WailsTaskOperation>
 export type TaskProgressKind = EnumValues<WailsTaskProgressKind>
@@ -110,6 +115,10 @@ export type LibrarySummary = {
   cacheStatus: CacheStatus
   deployStale: boolean
   updatedAt: string
+  targetRuntime: TargetRuntime
+  deploymentMethod: DeploymentMethod
+  policyUncertain: boolean
+  hostRuntime: string
 }
 
 export type LibraryStub = {
@@ -196,6 +205,13 @@ export type InstallModArchivesInput = WailsInstallModArchivesInput
 export type RebuildLibraryCacheInput = WailsRebuildLibraryCacheInput
 export type RenameLibraryInput = WailsRenameLibraryInput
 export type SyncModsInput = WailsSyncModsInput
+export type SetDeploymentPolicyInput = Omit<
+  WailsSetDeploymentPolicyInput,
+  'targetRuntime' | 'deploymentMethod'
+> & {
+  targetRuntime: TargetRuntime
+  deploymentMethod: DeploymentMethod
+}
 
 export type ForgeDownloadVersionInput = Omit<
   WailsForgeDownloadVersionInput,
@@ -345,5 +361,8 @@ export interface Commands {
   ): Promise<Result<OperationAccepted>>
   renameLibrary(input: RenameLibraryInput): Promise<Result<LibraryWorkspace>>
   saveSettings(settings: AppSettings): Promise<Result<AppSettings>>
+  setDeploymentPolicy(
+    input: SetDeploymentPolicyInput,
+  ): Promise<Result<LibraryWorkspace>>
   syncMods(input: SyncModsInput): Promise<Result<OperationAccepted>>
 }

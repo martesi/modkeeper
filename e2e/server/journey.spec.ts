@@ -1,7 +1,15 @@
 import { expect } from '@playwright/test'
 import { test } from './fixture'
+import { release } from 'node:os'
 import path from 'node:path'
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 
 test('server starts without a mock', async ({ page, server }) => {
   const workspaceResponse = page.waitForResponse((response) => {
@@ -307,3 +315,130 @@ test('settings persist across a server restart and fresh browser context', async
   )
   await context.close()
 })
+
+test('saves Copy and Link policy, switches libraries, reloads, and syncs', async ({
+  page,
+  server,
+}) => {
+  test.skip(
+    process.platform !== 'linux' ||
+      release().toLowerCase().includes('microsoft'),
+    'Deployment policy controls are not verified on Windows or WSL hosts.',
+  )
+
+  await page.goto(server.url)
+  await page.getByRole('button', { name: /manage libraries/i }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: /add library/i }).click()
+  let picker = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Game root path') })
+  await picker.getByLabel('Game root path').fill(server.game)
+  await picker.getByRole('button', { name: 'Use path' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByRole('tab', { name: 'game', exact: true }).waitFor()
+  await expect(dialog.getByRole('combobox').nth(0)).toBeEnabled()
+
+  await chooseDeploymentPolicy(page, dialog, 'Copy')
+  await dialog.getByRole('button', { name: /save deployment policy/i }).click()
+  await expect
+    .poll(() =>
+      readFile(path.join(server.game, '.mod_keeper', 'manifest.toml'), 'utf8'),
+    )
+    .toContain('targetRuntime = "linux"')
+
+  await dialog.getByRole('button', { name: /add library/i }).click()
+  picker = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Game root path') })
+  await picker
+    .getByLabel('Game root path')
+    .fill(path.join(server.root, 'second-game'))
+  await picker.getByRole('button', { name: 'Use path' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByRole('tab', { name: 'game', exact: true }).click()
+  await expect(
+    dialog.getByRole('button', { name: /^save deployment policy$/i }),
+  ).toBeDisabled()
+  await dialog.getByRole('button', { name: /^activate$/i }).click()
+  await expect(
+    dialog.getByRole('button', { name: /activated/i }),
+  ).toBeDisabled()
+
+  await page.keyboard.press('Escape')
+  await page.goto(server.url)
+  await page.getByRole('button', { name: /manage libraries/i }).click()
+  dialog = page.getByRole('dialog')
+  await expect(
+    dialog.getByRole('tab', { name: 'game', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: 'Add mod', exact: true }).click()
+  const archiveDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Archive paths') })
+  await archiveDialog.getByLabel('Archive paths').fill(server.archive)
+  await archiveDialog.getByRole('button', { name: 'Use path' }).click()
+  await expect(
+    page.getByText('fixture-mod', { exact: false }).first(),
+  ).toBeVisible()
+
+  const deployed = path.join(
+    server.game,
+    'BepInEx',
+    'plugins',
+    'FixtureMod',
+    'fixture.dll',
+  )
+  const syncButton = page.getByRole('button', { name: /^sync$/i })
+  await syncAndWait(syncButton)
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  expect((await lstat(path.dirname(deployed))).isDirectory()).toBe(true)
+  expect((await lstat(deployed)).isSymbolicLink()).toBe(false)
+
+  await page.getByRole('button', { name: /manage libraries/i }).click()
+  dialog = page.getByRole('dialog')
+  await chooseDeploymentPolicy(page, dialog, 'Symbolic link')
+  await dialog.getByRole('button', { name: /save deployment policy/i }).click()
+  await expect
+    .poll(() =>
+      readFile(path.join(server.game, '.mod_keeper', 'manifest.toml'), 'utf8'),
+    )
+    .toContain('deploymentMethod = "link"')
+  await page.keyboard.press('Escape')
+  await syncAndWait(syncButton)
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  await expect
+    .poll(() =>
+      lstat(path.dirname(deployed))
+        .then((entry) => entry.isSymbolicLink())
+        .catch(() => false),
+    )
+    .toBe(true)
+
+  await syncAndWait(syncButton)
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  expect((await lstat(path.dirname(deployed))).isSymbolicLink()).toBe(true)
+})
+
+async function syncAndWait(
+  button: import('@playwright/test').Locator,
+): Promise<void> {
+  await button.click()
+  await expect(button).toHaveAttribute('aria-busy', 'true')
+  await expect(button).not.toHaveAttribute('aria-busy', 'true')
+}
+
+async function chooseDeploymentPolicy(
+  page: import('@playwright/test').Page,
+  dialog: import('@playwright/test').Locator,
+  method: 'Copy' | 'Symbolic link',
+): Promise<void> {
+  const runtime = dialog.getByRole('combobox').nth(0)
+  await runtime.click()
+  await page.getByRole('option', { name: 'Linux' }).click()
+  const deploymentMethod = dialog.getByRole('combobox').nth(1)
+  await deploymentMethod.click()
+  await page.getByRole('option', { name: method, exact: true }).click()
+}

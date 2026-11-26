@@ -84,6 +84,10 @@ function seedWorkspace(): LibraryWorkspace {
         cacheStatus: { state: 'ready', lastRebuiltAt: now() },
         deployStale: false,
         updatedAt: now(),
+        targetRuntime: 'windows',
+        deploymentMethod: 'copy-first',
+        policyUncertain: false,
+        hostRuntime: 'linux',
       },
       // A second, inactive library so Manage Library's tabs/activate flows are exercisable.
       {
@@ -95,6 +99,10 @@ function seedWorkspace(): LibraryWorkspace {
         cacheStatus: { state: 'ready', lastRebuiltAt: now() },
         deployStale: false,
         updatedAt: now(),
+        targetRuntime: 'windows',
+        deploymentMethod: 'copy-first',
+        policyUncertain: false,
+        hostRuntime: 'linux',
       },
       // A registered-but-unreadable entry (C13): rendered as a bare path, remove-only.
       { path: 'E:/Archive/old-spt/.mod_keeper' },

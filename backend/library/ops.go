@@ -57,6 +57,21 @@ func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requi
 		s.libraryMu.RUnlock()
 		return nil, nil, models.Fail(models.InvalidLibrary, libraryID, "not the active library")
 	}
+	if s.active.PolicyUncertain {
+		s.libraryMu.RUnlock()
+		return nil, nil, policyRecoveryRequired()
+	}
+	if op == models.TaskOperationSync {
+		if s.policyHostRuntime() == "unknown" {
+			s.libraryMu.RUnlock()
+			return nil, nil, models.Fail(models.ParseError, "host runtime could not be verified; Sync is disabled")
+		}
+		method := s.active.manifest.DeploymentMethod
+		if method != models.DeploymentMethodCopyFirst && !verifiedPolicy(s.policyHostRuntime(), s.active.manifest.TargetRuntime, method) {
+			s.libraryMu.RUnlock()
+			return nil, nil, models.Fail(models.ParseError, "this runtime and deployment method have not been verified on this platform")
+		}
+	}
 	if !s.modWrites.TryLock() {
 		s.libraryMu.RUnlock()
 		return nil, nil, models.Fail(models.LibraryBusy)
@@ -100,6 +115,9 @@ func (s *Service) BulkUpdateMods(in models.BulkUpdateModsInput) error {
 	defer s.modWrites.Unlock()
 	if s.active == nil {
 		return models.Fail(models.NoActiveLibrary)
+	}
+	if s.active.PolicyUncertain {
+		return policyRecoveryRequired()
 	}
 	if s.active.manifest.ID != in.LibraryID {
 		return models.Fail(models.InvalidLibrary, in.LibraryID, "not the active library")
@@ -379,6 +397,10 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 	if err != nil {
 		return nil, err
 	}
+	policy := models.DeploymentPolicy{
+		TargetRuntime:    s.active.manifest.TargetRuntime,
+		DeploymentMethod: s.active.manifest.DeploymentMethod,
+	}
 	return s.runTask(in.TaskID, func() error {
 		failures := []models.ModFailure{}
 		status, cause := models.SyncFailure, models.SyncCauseDiscovery
@@ -405,7 +427,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			return err
 		}
 		cause = models.SyncCauseDeployment
-		report, err := deployment.Sync(ctx, layout, s.active.modList(), e)
+		report, err := deployment.SyncWithPolicy(ctx, layout, s.active.modList(), policy, e)
 		if err == nil {
 			err = ctx.Err()
 		}

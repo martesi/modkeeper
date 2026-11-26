@@ -30,6 +30,7 @@ import type {
   WorkspaceEvent,
   TaskProgressEvent,
   SError,
+  SetDeploymentPolicyInput,
 } from './redesign-types'
 import { isLibrarySummary } from './redesign-types'
 import { resolveCommandError } from '../shared/hooks/use-command-error'
@@ -377,6 +378,10 @@ export async function createLibrary(input: {
         cacheStatus: { state: 'ready' },
         deployStale: false,
         updatedAt: new Date().toISOString(),
+        targetRuntime: 'windows',
+        deploymentMethod: 'copy-first',
+        policyUncertain: false,
+        hostRuntime: 'linux',
       })
       workspace.modsByLibraryId[id] = []
       workspace.toolsByLibraryId[id] = []
@@ -413,6 +418,39 @@ export async function renameLibrary(input: {
       }
     },
   )
+}
+
+export async function setDeploymentPolicy(
+  input: SetDeploymentPolicyInput,
+): Promise<
+  CommandOutcome<LibraryWorkspace> & { policyOutcomeUnknown: boolean }
+> {
+  const outcome = await plainCommand(
+    'setDeploymentPolicy',
+    () => commands.setDeploymentPolicy(input),
+    (workspace) => {
+      const library = findSummary(workspace, input.libraryId)
+      if (!library) return
+      library.targetRuntime = input.targetRuntime
+      library.deploymentMethod = input.deploymentMethod
+      library.deployStale = true
+      library.updatedAt = new Date().toISOString()
+    },
+  )
+  if (outcome.status === 'success')
+    return { ...outcome, policyOutcomeUnknown: false }
+
+  // A rejected Save can mean replacement completed but its durability step failed.
+  // Read backend state before returning the stale workspace to policy controls.
+  const refreshed = await loadLibraryWorkspace()
+  const authoritative = refreshed ?? outcome.workspace
+  const savedLibrary = findSummary(authoritative, input.libraryId)
+  return {
+    status: 'failure',
+    workspace: authoritative,
+    policyOutcomeUnknown:
+      refreshed === null || !savedLibrary || savedLibrary.policyUncertain,
+  }
 }
 
 export async function deleteLibrary(input: {
