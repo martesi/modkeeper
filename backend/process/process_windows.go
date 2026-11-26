@@ -5,98 +5,97 @@ package process
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// Windows matches process image paths from a toolhelp snapshot, mirroring the
-// current implementation shell's exact-path check against sysinfo.
+// Windows compares configured executable basenames with the process snapshot.
+// It does not open processes or resolve executable paths.
 type Windows struct{}
 
 func defaultInspector() Inspector { return Windows{} }
 
 func (Windows) IsRunning(paths []string) (bool, error) {
-	targets := make(map[string]struct{}, len(paths))
-	for _, path := range paths {
-		canonical, exists, err := canonicalWindowsPath(path)
-		if err != nil {
-			return false, err
-		}
-		if !exists {
-			// A target that does not exist cannot be running. This keeps a
-			// broken library deletable instead of turning a missing file into
-			// an inspection failure.
-			continue
-		}
-		targets[canonical] = struct{}{}
+	return inspectProcessSnapshot(createToolhelpSnapshot, paths)
+}
+
+type processSnapshot interface {
+	First() (name string, done bool, err error)
+	Next() (name string, done bool, err error)
+	Close() error
+}
+
+type toolhelpSnapshot struct {
+	handle windows.Handle
+	entry  windows.ProcessEntry32
+}
+
+func createToolhelpSnapshot() (processSnapshot, error) {
+	handle, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil, err
 	}
-	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	return &toolhelpSnapshot{handle: handle}, nil
+}
+
+func (s *toolhelpSnapshot) First() (string, bool, error) {
+	s.entry.Size = uint32(unsafe.Sizeof(s.entry))
+	err := windows.Process32First(s.handle, &s.entry)
+	return snapshotResult(s.entry, err)
+}
+
+func (s *toolhelpSnapshot) Next() (string, bool, error) {
+	err := windows.Process32Next(s.handle, &s.entry)
+	return snapshotResult(s.entry, err)
+}
+
+func (s *toolhelpSnapshot) Close() error {
+	return windows.CloseHandle(s.handle)
+}
+
+func snapshotResult(entry windows.ProcessEntry32, err error) (string, bool, error) {
+	if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+		return "", true, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return windows.UTF16ToString(entry.ExeFile[:]), false, nil
+}
+
+func inspectProcessSnapshot(
+	create func() (processSnapshot, error),
+	paths []string,
+) (running bool, resultErr error) {
+	targets := configuredBasenames(paths)
+	if len(targets) == 0 {
+		return false, nil
+	}
+
+	snapshot, err := create()
 	if err != nil {
 		return false, fmt.Errorf("snapshot processes: %w", err)
 	}
-	defer windows.CloseHandle(snapshot)
-	entry := windows.ProcessEntry32{Size: uint32(unsafe.Sizeof(windows.ProcessEntry32{}))}
-	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
-		image, imageErr := processImage(entry.ProcessID)
-		if imageErr != nil {
-			// A process can exit between the snapshot and the query, and
-			// protected processes stay unreadable. Skipping them matches the
-			// current implementation shell, whose sysinfo listing also omits inaccessible images.
-			if errors.Is(imageErr, windows.ERROR_INVALID_PARAMETER) || errors.Is(imageErr, windows.ERROR_ACCESS_DENIED) {
-				continue
-			}
-			return false, imageErr
+	defer func() {
+		if err := snapshot.Close(); err != nil {
+			running = false
+			resultErr = errors.Join(resultErr, fmt.Errorf("close process snapshot: %w", err))
 		}
-		// A junctioned game root means the running image and the configured
-		// path reach the same executable through different names.
-		canonical, exists, canonicalErr := canonicalWindowsPath(image)
-		if canonicalErr != nil || !exists {
-			// The image vanished or cannot be resolved; it cannot match a
-			// target that resolved successfully.
-			continue
-		}
-		if _, running := targets[canonical]; running {
+	}()
+
+	name, done, err := snapshot.First()
+	if err != nil {
+		return false, fmt.Errorf("enumerate processes: %w", err)
+	}
+	for !done {
+		if matchesConfiguredBasename(name, targets) {
 			return true, nil
 		}
+		name, done, err = snapshot.Next()
+		if err != nil {
+			return false, fmt.Errorf("enumerate processes: %w", err)
+		}
 	}
-	if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
-		return false, nil
-	}
-	return false, fmt.Errorf("enumerate processes: %w", err)
-}
-
-// canonicalWindowsPath resolves junctions and case-folds the path for the
-// case-insensitive comparison Windows uses. A missing path is reported as
-// absent rather than as an inspection failure.
-func canonicalWindowsPath(path string) (string, bool, error) {
-	resolved, err := filepath.EvalSymlinks(path)
-	if os.IsNotExist(err) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("canonicalize executable %q: %w", path, err)
-	}
-	absolute, err := filepath.Abs(resolved)
-	if err != nil {
-		return "", false, fmt.Errorf("canonicalize executable %q: %w", path, err)
-	}
-	return strings.ToLower(filepath.Clean(absolute)), true, nil
-}
-
-func processImage(pid uint32) (string, error) {
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-	if err != nil {
-		return "", err
-	}
-	defer windows.CloseHandle(handle)
-	buffer := make([]uint16, windows.MAX_LONG_PATH)
-	size := uint32(len(buffer))
-	if err := windows.QueryFullProcessImageName(handle, 0, &buffer[0], &size); err != nil {
-		return "", err
-	}
-	return windows.UTF16ToString(buffer[:size]), nil
+	return false, nil
 }
