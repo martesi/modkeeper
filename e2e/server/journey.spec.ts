@@ -381,7 +381,8 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   ).toBeVisible()
 
   const deployed = path.join(
-    server.game,
+    server.root,
+    'second-game',
     'BepInEx',
     'plugins',
     'FixtureMod',
@@ -397,7 +398,10 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   await dialog.getByRole('button', { name: /save deployment policy/i }).click()
   await expect
     .poll(() =>
-      readFile(path.join(server.game, '.mod_keeper', 'manifest.toml'), 'utf8'),
+      readFile(
+        path.join(server.root, 'second-game', '.mod_keeper', 'manifest.toml'),
+        'utf8',
+      ),
     )
     .toContain('deploymentMethod = "link"')
   await page.keyboard.press('Escape')
