@@ -107,7 +107,9 @@ test('browses, creates and activates a library, then imports and syncs a local a
     .toContain('libraryRoot')
   const config = await readFile(configPath, 'utf8')
   const libraryRoot = [...config.matchAll(/libraryRoot\s*=\s*"([^"]+)"/g)]
-    .map((match) => match[1])
+    // TOML basic strings escape Windows path separators. Decode the captured
+    // string before comparing it with the filesystem path supplied by Node.
+    .map((match) => JSON.parse(`"${match[1]}"`) as string)
     .find((root): root is string => Boolean(root?.startsWith(server.game)))
   expect(libraryRoot).toBeDefined()
   if (!libraryRoot) throw new Error('Game library root was not persisted')
