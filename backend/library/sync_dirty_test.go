@@ -272,6 +272,65 @@ func TestSyncCompletionSanitizesPathBearingFailureData(t *testing.T) {
 	}
 }
 
+func TestSyncCompletionSanitizesCollisionFromProductionSync(t *testing.T) {
+	_, svc := deleteFixture(t)
+	svc.Inspector = process.Fake{}
+	privateTarget := "BepInEx/plugins/PrivateLeakToken/private.dll"
+	for _, mod := range []struct{ id, target string }{
+		{id: "fixture-a", target: privateTarget},
+		{id: "fixture-b", target: privateTarget},
+		{id: "fixture-c", target: "BepInEx/plugins/Independent/independent.dll"},
+	} {
+		file := filepath.Join(svc.active.Root, "mods", mod.id, filepath.FromSlash(mod.target))
+		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(mod.id), 0644); err != nil {
+			t.Fatal(err)
+		}
+		svc.active.manifest.Mods[mod.id] = models.Mod{ID: mod.id, Name: mod.id, Enabled: true, Type: models.ModTypeServer, Source: models.ModSourceLocal}
+	}
+	if err := svc.active.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	const taskID = "safe-collision-task"
+	libraryID := svc.active.manifest.ID
+	var events []models.WorkspaceEvent
+	svc.SetEventSenders(nil, func(event models.WorkspaceEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if _, err := svc.SyncMods(models.SyncModsInput{TaskID: taskID, LibraryID: libraryID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	svc.Wait()
+	if len(events) != 1 {
+		t.Fatalf("completion events = %#v, want one", events)
+	}
+	payload, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	serialized := string(payload)
+	for _, private := range []string{privateTarget, "PrivateLeakToken", "FileCollision"} {
+		if strings.Contains(serialized, private) {
+			t.Fatalf("completion leaked %q: %s", private, serialized)
+		}
+	}
+	if events[0].TaskID != taskID || events[0].LibraryID != libraryID || events[0].Status != models.SyncPartialFailure {
+		t.Fatalf("completion = %+v, want correlated partial failure", events[0])
+	}
+	failures, ok := events[0].Failures.([]models.ModFailure)
+	if !ok || len(failures) != 2 || failures[0].ModID != "fixture-a" || failures[1].ModID != "fixture-b" || failures[0].Error.Code != models.SyncConflict {
+		t.Fatalf("sanitized failures = %#v, want both mod IDs and SyncConflict", events[0].Failures)
+	}
+	if payloadPath := os.Getenv("SYNC_COMPLETION_TEST_PAYLOAD"); payloadPath != "" {
+		if err := os.WriteFile(payloadPath, payload, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestCancelledSyncLeavesManifestDirty(t *testing.T) {
 	for _, stage := range []models.TaskProgressStage{models.TaskStageSyncCleanup, models.TaskStageSyncPersist} {
 		t.Run(string(stage), func(t *testing.T) {

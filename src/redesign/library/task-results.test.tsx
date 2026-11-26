@@ -3,6 +3,7 @@ import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterAll, afterEach, beforeEach, expect, vi, test } from 'vitest'
+import { readFile } from 'node:fs/promises'
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => () => {} }))
 vi.mock('../i18n/library-text', () => ({
@@ -65,6 +66,8 @@ vi.mock('../data/library-repository', () => ({
 vi.mock('../../wails/bridge', () => ({ cancelInstallTask: async () => {} }))
 
 import { deriveSyncOutcome } from '../data/task-outcome'
+import { handleWorkspaceEvent } from '../app/redesign-initializers'
+import { taskHistoryAtom } from '../data/task-history'
 import { taskResultAtom } from '../state/library-state'
 
 const browserWindow = new Window()
@@ -183,6 +186,51 @@ test('shows a safe partial-sync conflict summary without backend path data', asy
     'A deployment target is in use by an unmanaged file.',
   )
   expect(container.textContent).not.toContain(privatePath)
+})
+
+test('handles a sanitized backend completion and keeps its path out of task history', async () => {
+  const privatePath = '/private/game/PrivateLeakToken/private.dll'
+  const rawFailure = {
+    modId: 'fixture-mod',
+    error: { code: 'FileCollision', data: [privatePath] },
+  }
+  expect(JSON.stringify(rawFailure)).toContain(privatePath)
+
+  const completionPath = process.env.SYNC_COMPLETION_TEST_PAYLOAD
+  const completion = completionPath
+    ? JSON.parse(await readFile(completionPath, 'utf8'))
+    : {
+        type: 'sync_completed',
+        taskId: 'safe-collision-task',
+        libraryId: 'safe-collision-library',
+        failures: [{ modId: 'fixture-mod', error: { code: 'SyncConflict' } }],
+        status: 'partial_failure',
+        workspace: {},
+      }
+  expect(JSON.stringify(completion)).not.toContain(privatePath)
+  expect(JSON.stringify(completion)).not.toContain('PrivateLeakToken')
+
+  await act(async () => {
+    handleWorkspaceEvent(completion)
+    root?.render(
+      createElement((await import('./task-results')).TaskCenterPanel),
+    )
+  })
+
+  expect(container.textContent).toContain(
+    'A deployment target is in use by an unmanaged file.',
+  )
+  expect(container.textContent).not.toContain(privatePath)
+  expect(container.textContent).not.toContain('PrivateLeakToken')
+  const history = getDefaultStore().get(taskHistoryAtom)
+  expect(history).toHaveLength(1)
+  expect(history[0]).toMatchObject({
+    taskId: completion.taskId,
+    libraryId: completion.libraryId,
+    status: 'partial_failure',
+  })
+  expect(JSON.stringify(history)).not.toContain(privatePath)
+  expect(JSON.stringify(history)).not.toContain('PrivateLeakToken')
 })
 
 test('explains when a failed dirty-state restore leaves disk state uncertain', async () => {
