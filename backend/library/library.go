@@ -309,6 +309,12 @@ func (l *Library) Persist() error {
 }
 
 func (l *Library) persist(includeCache bool) error {
+	return l.persistWithFileSync(includeCache, func(file *os.File) error {
+		return file.Sync()
+	})
+}
+
+func (l *Library) persistWithFileSync(includeCache bool, syncFile func(*os.File) error) error {
 	base := l.Root
 	m := l.manifest
 	m.RepoRoot = l.Root
@@ -338,6 +344,9 @@ func (l *Library) persist(includeCache bool) error {
 		}
 		tmp := f.Name()
 		e = toml.NewEncoder(f).Encode(v)
+		if e == nil {
+			e = syncFile(f)
+		}
 		ce := f.Close()
 		if e == nil {
 			e = ce
@@ -379,6 +388,7 @@ type Service struct {
 	copyMod                func(src, dst string) error
 	installTransactionHook func(string)
 	installMarkerWriter    func(string, installTransaction) error
+	restoreDirtyState      func() error
 	modWrites              sync.Mutex
 	configMu               sync.RWMutex
 }

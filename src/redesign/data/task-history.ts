@@ -1,4 +1,5 @@
-import { atom, getDefaultStore } from 'jotai'
+import { getDefaultStore } from 'jotai'
+import { atomWithStorage, createJSONStorage } from 'jotai/utils'
 import type { TaskOperation, TaskProgressLog } from './redesign-types'
 import type { TaskOutcome } from './task-outcome'
 import type { SyncCause } from '@/wails/contract'
@@ -63,7 +64,26 @@ function rememberPendingProgress(): void {
 rememberPendingProgress()
 store.sub(pendingTasksAtom, rememberPendingProgress)
 
-export const taskHistoryAtom = atom<TaskHistoryEntry[]>([])
+const taskHistoryStorage = createJSONStorage<TaskHistoryEntry[]>(
+  () => window.localStorage,
+  {
+    replacer: (key, value) =>
+      key === '' ? { version: 1, tasks: normalizeHistory(value) } : value,
+    reviver: (key, value) => {
+      if (key !== '') return value
+      return normalizeHistory(
+        isRecord(value) && value.version === 1 ? value.tasks : [],
+      )
+    },
+  },
+)
+
+export const taskHistoryAtom = atomWithStorage<TaskHistoryEntry[]>(
+  'modkeeper.taskHistory.v1',
+  [],
+  taskHistoryStorage,
+  { getOnInit: true },
+)
 
 export function makeTaskHistoryEntry(
   outcome: TaskOutcome,
@@ -159,6 +179,15 @@ function normalizeEntry(value: unknown): TaskHistoryEntry | null {
   }
 }
 
+function normalizeHistory(value: unknown): TaskHistoryEntry[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(normalizeEntry)
+    .filter((entry): entry is TaskHistoryEntry => entry !== null)
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+    .slice(0, TASK_HISTORY_LIMIT)
+}
+
 function normalizeLogs(value: unknown): TaskProgressLog[] {
   if (!Array.isArray(value)) return []
   return value.slice(-TASK_HISTORY_LOG_LIMIT).flatMap((item) => {
@@ -228,7 +257,8 @@ function isSyncCause(value: unknown): value is SyncCause {
     value === 'discovery' ||
     value === 'initial_persistence' ||
     value === 'deployment' ||
-    value === 'final_persistence'
+    value === 'final_persistence' ||
+    value === 'disk_state_uncertain'
   )
 }
 

@@ -31,6 +31,8 @@ export function resolveCommandError(error: SError): string {
       return errorText.fileOrDirectoryNotFound(error.data)
     case 'FileCollision':
       return errorText.fileCollision(error.data)
+    case 'SyncConflict':
+      return errorText.syncConflict()
     case 'Unexpected':
       return errorText.unexpected()
     case 'UnhandledCompression':

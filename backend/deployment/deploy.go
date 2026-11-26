@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"errors"
 	"github.com/martes/modkeeper/backend/linker"
 	"github.com/martes/modkeeper/backend/models"
 	"os"
@@ -274,7 +275,33 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e := stage(models.TaskStageSyncPlan); e != nil {
 		return Report{}, e
 	}
-	plan, e := Plan(mods, l)
+	var deployable []models.Mod
+	failures := make([]ModFailure, 0)
+	for _, mod := range mods {
+		if !mod.Enabled {
+			continue
+		}
+		modPlan, planErr := Plan([]models.Mod{mod}, l)
+		if planErr == nil {
+			planErr = Preflight(l, modPlan)
+		}
+		if planErr != nil {
+			var coded *models.Error
+			if errors.As(planErr, &coded) && coded.Code == models.FileCollision {
+				failure := ModFailure{ModID: mod.ID}
+				copyOfError := *coded
+				failure.Error = &copyOfError
+				failures = append(failures, failure)
+				continue
+			}
+			return Report{}, planErr
+		}
+		deployable = append(deployable, mod)
+	}
+	if len(deployable) == 0 && len(failures) > 0 {
+		return Report{}, failures[0].Error
+	}
+	plan, e := Plan(deployable, l)
 	if e != nil {
 		return Report{}, e
 	}
@@ -287,7 +314,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e = stage(models.TaskStageSyncCleanup); e != nil {
 		return Report{}, e
 	}
-	if e = Purge(l, mods); e != nil {
+	if e = Purge(l, deployable); e != nil {
 		return Report{}, e
 	}
 	if e = stage(models.TaskStageSyncDeploy); e != nil {
@@ -296,5 +323,5 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e = deploy(l, plan, func() error { return stage(models.TaskStageSyncPersist) }); e != nil {
 		return Report{}, e
 	}
-	return Report{Failures: []ModFailure{}, Deployed: len(plan.Artifacts)}, nil
+	return Report{Failures: failures, Deployed: len(plan.Artifacts)}, nil
 }

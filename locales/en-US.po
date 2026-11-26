@@ -98,7 +98,7 @@ msgid "library.tools.registerNewTool"
 msgstr "+ Register New Tool"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:56
+#: src/redesign/i18n/error-text.ts:62
 msgid "error.asyncRuntimeError"
 msgstr "A background operation failed: {detail}"
 
@@ -106,6 +106,11 @@ msgstr "A background operation failed: {detail}"
 #: src/redesign/i18n/error-text.ts:30
 msgid "error.processRunning"
 msgstr "A conflicting process is still running"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/error-text.ts:49
+msgid "error.syncConflict"
+msgstr "A deployment target is in use by an unmanaged file. Preserve it or remove it before syncing again."
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/error-text.ts:18
@@ -126,7 +131,7 @@ msgid "A parsing error occurred. The file may be corrupted or in an invalid form
 msgstr "A parsing error occurred. The file may be corrupted or in an invalid format."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:83
+#: src/redesign/i18n/error-text.ts:89
 msgid "error.libraryBusy"
 msgstr "A task is in progress. Retry when it finishes."
 
@@ -241,12 +246,12 @@ msgid "An internal error occurred. Please try again."
 msgstr "An internal error occurred. Please try again."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:49
+#: src/redesign/i18n/error-text.ts:55
 msgid "error.unexpected"
 msgstr "An unexpected error occurred"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:88
+#: src/redesign/i18n/error-text.ts:94
 msgid "error.unknown"
 msgstr "An unexpected error occurred"
 
@@ -279,7 +284,7 @@ msgid "library.status.libraryBusy"
 msgstr "Another operation is still running for this library."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:73
+#: src/redesign/i18n/error-text.ts:79
 msgid "error.configSaveFailed"
 msgstr "App configuration could not be saved: {detail}"
 
@@ -1406,7 +1411,7 @@ msgstr "Mod archive"
 #~ msgstr "Mod ID"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:68
+#: src/redesign/i18n/error-text.ts:74
 msgid "error.modIdConflict"
 msgstr "Mod identity conflict between {existing} and {incoming}"
 
@@ -1512,7 +1517,7 @@ msgstr "No events yet."
 #~ msgstr "No Library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:61
+#: src/redesign/i18n/error-text.ts:67
 msgid "error.noActiveLibrary"
 msgstr "No library is active"
 
@@ -2040,7 +2045,7 @@ msgid "registry.empty.showIncompatible"
 msgstr "Show Incompatible Versions"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:98
+#: src/redesign/i18n/task-history-text.ts:104
 msgid "library.task.history.log"
 msgstr "Show log ({count})"
 
@@ -2134,6 +2139,11 @@ msgid "library.taskResult.syncSucceeded"
 msgstr "Sync completed."
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:96
+msgid "library.sync.cause.diskStateUncertain"
+msgstr "Sync files may have changed, and the dirty state could not be restored. Check the game and library before syncing again."
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:166
 msgid "library.status.syncing"
 msgstr "Syncing…"
@@ -2205,7 +2215,7 @@ msgid "The game or server is currently running. Please close it before performin
 msgstr "The game or server is currently running. Please close it before performing this operation."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:63
+#: src/redesign/i18n/error-text.ts:69
 msgid "error.invalidLibrary"
 msgstr "The library at {path} could not be opened: {reason}"
 
@@ -2243,7 +2253,7 @@ msgid "error.fileCollision"
 msgstr "These files are claimed by more than one mod: {0}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:78
+#: src/redesign/i18n/error-text.ts:84
 msgid "error.taskIdInUse"
 msgstr "This operation is already in progress"
 
@@ -2340,7 +2350,7 @@ msgid "library.manage.unreadableLibrary"
 msgstr "Unreadable library"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/error-text.ts:51
+#: src/redesign/i18n/error-text.ts:57
 msgid "error.unhandledCompression"
 msgstr "Unsupported archive format: {format}"
 

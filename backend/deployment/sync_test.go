@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -33,6 +35,30 @@ func TestCopyDeploymentMergesIntoExistingGameDirectory(t *testing.T) {
 
 func TestUnownedDeploymentTargetIsPreservedAndBlocksSync(t *testing.T) {
 	testUnownedDeploymentTargetIsPreservedAndBlocksSync(t)
+}
+
+func TestSyncReportsOneUnmanagedConflictAndDeploysOtherMod(t *testing.T) {
+	l := fixture(t)
+	conflict := mod(t, l, "conflict", map[string]string{"BepInEx/plugins/Conflict/conflict.dll": "mod"})
+	success := mod(t, l, "success", map[string]string{"BepInEx/plugins/Success/success.dll": "good"})
+	conflictingTarget := filepath.Join(l.GameRoot, "BepInEx/plugins/Conflict/conflict.dll")
+	write(t, conflictingTarget, "unmanaged")
+
+	report, err := Sync(context.Background(), l, []models.Mod{conflict, success}, nil)
+	if err != nil {
+		t.Fatalf("Sync() error = %v; want per-mod conflict report", err)
+	}
+	if len(report.Failures) != 1 || report.Failures[0].ModID != conflict.ID {
+		t.Fatalf("failures = %#v; want only mod %q", report.Failures, conflict.ID)
+	}
+	if report.Deployed != 1 {
+		t.Fatalf("deployed = %d; want 1", report.Deployed)
+	}
+	content(t, conflictingTarget, "unmanaged")
+	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/Success/success.dll"), "good")
+	if _, err := os.Lstat(filepath.Join(l.GameRoot, "BepInEx/plugins/Conflict/conflict.dll")); err != nil {
+		t.Fatalf("unmanaged conflict was removed: %v", err)
+	}
 }
 
 func TestUntrackedFileSafetyInSharedFolder(t *testing.T) {

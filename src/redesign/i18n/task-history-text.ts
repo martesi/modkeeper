@@ -92,6 +92,12 @@ export const taskHistoryText = {
           id: 'library.sync.cause.finalPersistence',
           message: 'Could not save the sync state. Check library storage.',
         })
+      case 'disk_state_uncertain':
+        return t({
+          id: 'library.sync.cause.diskStateUncertain',
+          message:
+            'Sync files may have changed, and the dirty state could not be restored. Check the game and library before syncing again.',
+        })
     }
   },
   log: (count: number) =>

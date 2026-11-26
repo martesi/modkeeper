@@ -49,6 +49,8 @@ export function TaskHistoryPanel() {
 
             return (
               <li
+                data-task-id={entry.taskId}
+                data-library-id={entry.libraryId}
                 className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 px-2.5 py-2"
                 key={entry.taskId}
               >

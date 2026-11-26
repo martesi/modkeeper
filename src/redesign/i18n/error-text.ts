@@ -45,6 +45,12 @@ export const errorText = {
       id: 'error.fileCollision',
       message: `These files are claimed by more than one mod: ${files.join(', ')}`,
     }),
+  syncConflict: () =>
+    t({
+      id: 'error.syncConflict',
+      message:
+        'A deployment target is in use by an unmanaged file. Preserve it or remove it before syncing again.',
+    }),
   unexpected: () =>
     t({ id: 'error.unexpected', message: 'An unexpected error occurred' }),
   unhandledCompression: (format: string) =>

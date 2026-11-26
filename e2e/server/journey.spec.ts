@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixture'
 import path from 'node:path'
-import { readFile, readdir } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 
 test('server starts without a mock', async ({ page, server }) => {
   const workspaceResponse = page.waitForResponse((response) => {
@@ -36,15 +36,39 @@ test('browses, creates and activates a library, then imports and syncs a local a
   page,
   server,
 }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'modkeeper.taskHistory.v1',
+      JSON.stringify({
+        version: 1,
+        tasks: [
+          {
+            taskId: 'older-task-decoy',
+            libraryId: 'older-library-decoy',
+            timestamp: '2026-11-18T10:00:00.000Z',
+            operation: 'sync',
+            status: 'success',
+            logTail: [],
+          },
+          {
+            taskId: 'other-library-decoy',
+            libraryId: 'other-library',
+            timestamp: '2026-11-18T10:01:00.000Z',
+            operation: 'sync',
+            status: 'failure',
+            logTail: [],
+          },
+        ],
+      }),
+    ),
+  )
   await page.goto(server.url)
   await page.getByRole('button', { name: /manage libraries/i }).click()
   await page.getByRole('button', { name: /add library/i }).click()
   const picker = page
     .getByRole('dialog')
     .filter({ has: page.getByLabel('Game root path') })
-  await picker.getByRole('button', { name: 'Browse folders' }).click()
-  await picker.getByRole('button', { name: 'game/', exact: true }).click()
-  await picker.getByRole('button', { name: 'Select this folder' }).click()
+  await picker.getByLabel('Game root path').fill(server.game)
   await expect(picker.getByLabel('Game root path')).toHaveValue(server.game)
   await picker.getByRole('button', { name: 'Use path' }).click()
   const dialog = page.getByRole('dialog')
@@ -72,15 +96,27 @@ test('browses, creates and activates a library, then imports and syncs a local a
   await expect(
     page.getByText('fixture-mod', { exact: false }).first(),
   ).toBeVisible()
+  const configPath = path.join(
+    server.root,
+    'config',
+    'Modkeeper',
+    'config.toml',
+  )
   await expect
-    .poll(async () =>
-      readFile(
-        path.join(server.game, '.mod_keeper', 'manifest.toml'),
-        'utf8',
-      ).catch(() => ''),
+    .poll(() => readFile(configPath, 'utf8').catch(() => ''))
+    .toContain('libraryRoot')
+  const config = await readFile(configPath, 'utf8')
+  const libraryRoot = [...config.matchAll(/libraryRoot\s*=\s*"([^"]+)"/g)]
+    .map((match) => match[1])
+    .find((root): root is string => Boolean(root?.startsWith(server.game)))
+  expect(libraryRoot).toBeDefined()
+  if (!libraryRoot) throw new Error('Game library root was not persisted')
+  await expect
+    .poll(() =>
+      readFile(path.join(libraryRoot, 'manifest.toml'), 'utf8').catch(() => ''),
     )
     .toContain('fixture-mod')
-  const modsDir = path.join(server.game, '.mod_keeper', 'mods')
+  const modsDir = path.join(libraryRoot, 'mods')
   const mods = await readdir(modsDir)
   expect(mods).toHaveLength(1)
   expect(
@@ -96,6 +132,18 @@ test('browses, creates and activates a library, then imports and syncs a local a
     ),
   ).toEqual(Buffer.from('fixture payload'))
 
+  await page.getByRole('button', { name: 'Add mod', exact: true }).click()
+  const successArchiveDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Archive paths') })
+  await successArchiveDialog
+    .getByLabel('Archive paths')
+    .fill(server.successArchive)
+  await successArchiveDialog.getByRole('button', { name: 'Use path' }).click()
+  await expect(
+    page.getByText('fixture-success-mod', { exact: false }).first(),
+  ).toBeVisible()
+
   const deployed = path.join(
     server.game,
     'BepInEx',
@@ -104,7 +152,83 @@ test('browses, creates and activates a library, then imports and syncs a local a
     'fixture.dll',
   )
   await expect(readFile(deployed)).rejects.toMatchObject({ code: 'ENOENT' })
+  await mkdir(path.dirname(deployed), { recursive: true })
+  await writeFile(deployed, 'unmanaged user content')
+  const successDeployed = path.join(
+    server.game,
+    'BepInEx',
+    'plugins',
+    'SuccessMod',
+    'success.dll',
+  )
   const sync = page.getByRole('button', { name: /^sync$/i })
+  const partial = await runSync(page, sync)
+  await page.getByRole('button', { name: /^tasks$/i }).click()
+  const partialHistory = getSyncHistory(page, partial.taskId, partial.libraryId)
+  await expect(partialHistory).toHaveCount(1)
+  await expect(
+    partialHistory.getByText('Completed with errors', { exact: true }),
+  ).toBeVisible()
+  await page.screenshot({
+    path: path.resolve('test-results/sync-partial-result.png'),
+    fullPage: false,
+  })
+  await expect(readFile(deployed, 'utf8')).resolves.toBe(
+    'unmanaged user content',
+  )
+  await expect
+    .poll(() => readFile(successDeployed, 'utf8'))
+    .toBe('successful fixture payload')
+  const partialManifest = await readFile(
+    path.join(libraryRoot, 'manifest.toml'),
+    'utf8',
+  )
+  expect(partialManifest).toContain('isDirty = true')
+  expect(partialManifest).toContain('fixture-mod')
+  expect(partialManifest).toContain('fixture-success-mod')
+  const partialDeployment = await readFile(
+    path.join(libraryRoot, 'deployment.toml'),
+    'utf8',
+  )
+  expect(partialDeployment).toContain('SuccessMod')
+  expect(partialDeployment).not.toContain('FixtureMod')
+
+  await rm(deployed)
+  await rm(path.dirname(deployed), { recursive: true, force: true })
+  await page
+    .getByRole('dialog', { name: 'Tasks' })
+    .getByRole('button', { name: 'Close' })
+    .click()
+  const success = await runSync(page, sync)
+  await page.getByRole('button', { name: /^tasks$/i }).click()
+  const successHistory = getSyncHistory(page, success.taskId, success.libraryId)
+  await expect(successHistory).toHaveCount(1)
+  await expect(
+    successHistory.getByText('Completed', { exact: true }),
+  ).toBeVisible()
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  await expect
+    .poll(() => readFile(successDeployed, 'utf8'))
+    .toBe('successful fixture payload')
+  const successManifest = await readFile(
+    path.join(libraryRoot, 'manifest.toml'),
+    'utf8',
+  )
+  expect(successManifest).toContain('isDirty = false')
+  expect(successManifest).toContain('fixture-mod')
+  expect(successManifest).toContain('fixture-success-mod')
+  const successDeployment = await readFile(
+    path.join(libraryRoot, 'deployment.toml'),
+    'utf8',
+  )
+  expect(successDeployment).toContain('SuccessMod')
+  expect(successDeployment).toContain('FixtureMod')
+})
+
+async function runSync(
+  page: import('@playwright/test').Page,
+  sync: import('@playwright/test').Locator,
+): Promise<{ taskId: string; libraryId: string }> {
   const accepted = page.waitForResponse((response) => {
     const request = response.request()
     if (
@@ -127,23 +251,25 @@ test('browses, creates and activates a library, then imports and syncs a local a
   const response = await accepted
   expect(response.ok()).toBe(true)
   expect(await response.json()).toMatchObject({ accepted: true })
-  await page.getByRole('button', { name: /^tasks$/i }).click()
   const request = response.request().postDataJSON() as {
     args: { args: [{ taskId: string; libraryId: string }] }
   }
   const { taskId, libraryId } = request.args.args[0]
   expect(taskId).toEqual(expect.any(String))
   expect(libraryId).toEqual(expect.any(String))
-  const syncHistory = page
+  return { taskId, libraryId }
+}
+
+function getSyncHistory(
+  page: import('@playwright/test').Page,
+  taskId: string,
+  libraryId: string,
+) {
+  return page
     .getByRole('region', { name: /recent task history/i })
     .locator(`li[data-task-id="${taskId}"][data-library-id="${libraryId}"]`)
     .filter({ hasText: 'Sync · Library: game' })
-  await expect(syncHistory).toHaveCount(1)
-  await expect(
-    syncHistory.getByText('Completed', { exact: true }),
-  ).toBeVisible()
-  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
-})
+}
 
 test('settings persist across a server restart and fresh browser context', async ({
   browser,

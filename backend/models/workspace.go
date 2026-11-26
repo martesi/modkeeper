@@ -37,6 +37,7 @@ const (
 	SyncCauseInitialPersistence SyncCause  = "initial_persistence"
 	SyncCauseDeployment         SyncCause  = "deployment"
 	SyncCauseFinalPersistence   SyncCause  = "final_persistence"
+	SyncCauseDiskStateUncertain SyncCause  = "disk_state_uncertain"
 )
 
 type CreateLibraryInput struct {

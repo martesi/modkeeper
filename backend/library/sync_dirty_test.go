@@ -1,7 +1,9 @@
 package library
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -167,6 +169,106 @@ func TestPersistCacheFailureDoesNotReplaceDirtyManifest(t *testing.T) {
 	}
 	if !saved.IsDirty {
 		t.Fatal("cache failure replaced the dirty manifest")
+	}
+}
+
+func TestPersistSyncsEncodedTempBeforeReplacementAndStopsOnSyncFailure(t *testing.T) {
+	_, svc := deleteFixture(t)
+	manifestPath := filepath.Join(svc.active.Root, "manifest.toml")
+	before, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncFailure := errors.New("injected file sync failure")
+	called := false
+	err = svc.active.persistWithFileSync(false, func(file *os.File) error {
+		called = true
+		info, statErr := file.Stat()
+		if statErr != nil {
+			return statErr
+		}
+		if info.Size() == 0 {
+			return errors.New("sync ran before manifest encoding")
+		}
+		current, readErr := os.ReadFile(manifestPath)
+		if readErr != nil {
+			return readErr
+		}
+		if !bytes.Equal(current, before) {
+			return errors.New("manifest was replaced before temp-file sync")
+		}
+		return syncFailure
+	})
+	if !called {
+		t.Fatal("temp-file sync was not called")
+	}
+	if !errors.Is(err, syncFailure) {
+		t.Fatalf("persist error = %v, want injected sync failure", err)
+	}
+	after, readErr := os.ReadFile(manifestPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("sync failure replaced the manifest")
+	}
+	temps, err := filepath.Glob(filepath.Join(svc.active.Root, ".tmp-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(temps) != 0 {
+		t.Fatalf("temporary manifest files remain after sync failure: %v", temps)
+	}
+}
+
+func TestSyncReportsUncertainDiskStateWhenDirtyRestoreFails(t *testing.T) {
+	_, svc, layout, _ := deployedFixture(t)
+	svc.Inspector = process.Fake{}
+	if err := deployment.Purge(layout, nil); err != nil {
+		t.Fatal(err)
+	}
+	svc.restoreDirtyState = func() error { return errors.New("injected restore failure") }
+	var events []models.WorkspaceEvent
+	svc.SetEventSenders(nil, func(event models.WorkspaceEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if _, err := svc.SyncMods(models.SyncModsInput{TaskID: "uncertain-sync", LibraryID: svc.active.manifest.ID}, func(event models.TaskProgressEvent) error {
+		if event.Stage == models.TaskStageSyncPersist {
+			cache := filepath.Join(svc.active.Root, "cache.toml")
+			if err := os.Remove(cache); err != nil {
+				return err
+			}
+			return os.Mkdir(cache, 0755)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc.Wait()
+	if len(events) != 1 || events[0].Status != models.SyncFailure || string(events[0].Cause) != "disk_state_uncertain" {
+		t.Fatalf("completion = %#v; want uncertainty cause", events)
+	}
+}
+
+func TestSyncCompletionSanitizesPathBearingFailureData(t *testing.T) {
+	privatePath := filepath.Join(t.TempDir(), "private", "game.dll")
+	failures := sanitizeSyncFailures([]models.ModFailure{{
+		ModID: "fixture-mod",
+		Error: models.Error{Code: models.FileCollision, Data: []string{privatePath}},
+	}})
+	payload, err := json.Marshal(models.WorkspaceEvent{
+		Type: models.WorkspaceEventSyncCompleted, TaskID: "safe-task", LibraryID: "safe-library",
+		Failures: failures, Status: models.SyncPartialFailure,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), privatePath) || strings.Contains(string(payload), "private") {
+		t.Fatalf("sync completion contains a filesystem path: %s", payload)
+	}
+	if !strings.Contains(string(payload), "SyncConflict") {
+		t.Fatalf("sync completion lost the safe conflict cause: %s", payload)
 	}
 }
 

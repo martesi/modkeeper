@@ -12,6 +12,7 @@ import (
 	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modmanager"
+	"github.com/martes/modkeeper/backend/security"
 	"github.com/martes/modkeeper/backend/spt"
 	"github.com/martes/modkeeper/backend/stager"
 	"github.com/martes/modkeeper/backend/task_progress"
@@ -416,6 +417,7 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			}
 			failures = append(failures, modFailure)
 		}
+		failures = sanitizeSyncFailures(failures)
 		if err != nil {
 			if ctx.Err() != nil {
 				status, cause = models.SyncCancelled, ""
@@ -425,11 +427,18 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			}
 			return err
 		}
-		s.active.manifest.IsDirty = false
+		s.active.manifest.IsDirty = len(failures) > 0
 		cause = models.SyncCauseFinalPersistence
 		if err := s.active.Persist(); err != nil {
 			s.active.manifest.IsDirty = true
-			if restoreErr := s.active.persist(false); restoreErr != nil {
+			var restoreErr error
+			if s.restoreDirtyState != nil {
+				restoreErr = s.restoreDirtyState()
+			} else {
+				restoreErr = s.active.persist(false)
+			}
+			if restoreErr != nil {
+				cause = models.SyncCauseDiskStateUncertain
 				err = fmt.Errorf("%w; failed to restore dirty manifest (disk state is uncertain): %v", err, restoreErr)
 			}
 			e.Failed(fmt.Errorf("save sync state; check library storage and retry: %w", err))
@@ -445,6 +454,25 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 		}
 		return nil
 	}), nil
+}
+
+func sanitizeSyncFailures(failures []models.ModFailure) []models.ModFailure {
+	safe := make([]models.ModFailure, 0, len(failures))
+	for _, failure := range failures {
+		modID := failure.ModID
+		if security.ValidateModID(modID) != nil {
+			modID = "unknown"
+		}
+		code := models.Unexpected
+		if failure.Error.Code == models.FileCollision {
+			code = models.SyncConflict
+		}
+		safe = append(safe, models.ModFailure{
+			ModID: modID,
+			Error: models.Error{Code: code},
+		})
+	}
+	return safe
 }
 
 func archiveError(err error) models.Error {
