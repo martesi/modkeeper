@@ -387,7 +387,8 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
     'FixtureMod',
     'fixture.dll',
   )
-  await page.getByRole('button', { name: /^sync$/i }).click()
+  const syncButton = page.getByRole('button', { name: /^sync$/i })
+  await syncAndWait(syncButton)
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
   expect((await lstat(deployed)).isSymbolicLink()).toBe(false)
 
@@ -401,20 +402,28 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
     )
     .toContain('deploymentMethod = "link"')
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: /^sync$/i }).click()
+  await syncAndWait(syncButton)
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
   await expect
     .poll(() =>
-      lstat(deployed)
+      lstat(path.dirname(deployed))
         .then((entry) => entry.isSymbolicLink())
         .catch(() => false),
     )
     .toBe(true)
 
-  await page.getByRole('button', { name: /^sync$/i }).click()
+  await syncAndWait(syncButton)
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
-  expect((await lstat(deployed)).isSymbolicLink()).toBe(true)
+  expect((await lstat(path.dirname(deployed))).isSymbolicLink()).toBe(true)
 })
+
+async function syncAndWait(
+  button: import('@playwright/test').Locator,
+): Promise<void> {
+  await button.click()
+  await expect(button).toHaveAttribute('aria-busy', 'true')
+  await expect(button).not.toHaveAttribute('aria-busy', 'true')
+}
 
 async function chooseDeploymentPolicy(
   page: import('@playwright/test').Page,
