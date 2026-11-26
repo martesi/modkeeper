@@ -219,15 +219,6 @@ func claimConflicts(claims []sourceClaim) (map[string]string, string) {
 	return byMod, operationPath
 }
 
-// Plan prefers copies when the source and destination support them.
-func Plan(mods []models.Mod, l Layout) (DeploymentPlan, error) {
-	file, directory, err := probeMethods(l)
-	if err != nil {
-		return DeploymentPlan{}, ioError(err)
-	}
-	return PlanWithKinds(mods, l, file, directory)
-}
-
 // PlanWithKinds supports the link fallback and deterministic capability tests.
 func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.ArtifactKind) (DeploymentPlan, error) {
 	state, e := LoadState(l)
