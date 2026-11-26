@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixture'
+import { release } from 'node:os'
 import path from 'node:path'
 import {
   lstat,
@@ -319,6 +320,12 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   page,
   server,
 }) => {
+  test.skip(
+    process.platform !== 'linux' ||
+      release().toLowerCase().includes('microsoft'),
+    'Deployment policy controls are not verified on Windows or WSL hosts.',
+  )
+
   await page.goto(server.url)
   await page.getByRole('button', { name: /manage libraries/i }).click()
   let dialog = page.getByRole('dialog')
@@ -330,10 +337,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   await picker.getByRole('button', { name: 'Use path' }).click()
   dialog = page.getByRole('dialog')
   await dialog.getByRole('tab', { name: 'game', exact: true }).waitFor()
-  test.skip(
-    await dialog.getByRole('combobox').nth(0).isDisabled(),
-    'Native host consumer fixtures are not available on this platform.',
-  )
+  await expect(dialog.getByRole('combobox').nth(0)).toBeEnabled()
 
   await chooseDeploymentPolicy(page, dialog, 'Copy')
   await dialog.getByRole('button', { name: /save deployment policy/i }).click()
