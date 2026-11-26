@@ -362,7 +362,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   ).toBeDisabled()
 
   await page.keyboard.press('Escape')
-  await page.reload()
+  await page.goto(server.url)
   await page.getByRole('button', { name: /manage libraries/i }).click()
   dialog = page.getByRole('dialog')
   await expect(
