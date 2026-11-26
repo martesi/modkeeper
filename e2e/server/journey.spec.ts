@@ -32,7 +32,7 @@ test('server starts without a mock', async ({ page, server }) => {
   ).toBeVisible()
 })
 
-test('browses, creates and activates a library, then imports a local archive', async ({
+test('browses, creates and activates a library, then imports and syncs a local archive', async ({
   page,
   server,
 }) => {
@@ -136,12 +136,12 @@ test('browses, creates and activates a library, then imports a local archive', a
   expect(libraryId).toEqual(expect.any(String))
   const syncHistory = page
     .getByRole('region', { name: /recent task history/i })
-    .locator(
-      `li[data-task-id="${taskId}"][data-library-id="${libraryId}"]`,
-    )
+    .locator(`li[data-task-id="${taskId}"][data-library-id="${libraryId}"]`)
     .filter({ hasText: 'Sync · Library: game' })
   await expect(syncHistory).toHaveCount(1)
-  await expect(syncHistory.getByText('Completed', { exact: true })).toBeVisible()
+  await expect(
+    syncHistory.getByText('Completed', { exact: true }),
+  ).toBeVisible()
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
 })
 
