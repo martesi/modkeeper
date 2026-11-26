@@ -13,6 +13,25 @@ permissions:
   contents: read
 
 jobs:
+  tool-versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      go: ${{ steps.versions.outputs.go }}
+      bun: ${{ steps.versions.outputs.bun }}
+      node: ${{ steps.versions.outputs.node }}
+      wails: ${{ steps.versions.outputs.wails }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - id: versions
+        run: |
+          versions=$(nix eval --impure --json --expr 'let p = (builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux; in { go = p.go.version; bun = p.bun.version; node = p.nodejs.version; wails = p.wails3.version; }')
+          for tool in go bun node wails; do echo "$tool=$(jq -r ".$tool" <<< "$versions")" >> "$GITHUB_OUTPUT"; done
+
   linux:
     runs-on: ubuntu-24.04
     steps:
@@ -103,7 +122,20 @@ jobs:
           '
 
       - name: Playwright real-server journeys
-        run: nix develop .#e2e -c bun run test:e2e:server
+        run: |
+          set -o pipefail
+          nix develop .#e2e -c bun run test:e2e:server 2>&1 | tee "$RUNNER_TEMP/e2e-server.log"
+
+      - name: Upload Linux E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-e2e-diagnostics
+          path: |
+            test-results/
+            ${{ runner.temp }}/e2e-server.log
+            /tmp/server.log
+          if-no-files-found: ignore
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -112,5 +144,155 @@ jobs:
           path: |
             build/ci/modkeeper
             build/ci/modkeeper-server
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: tool-versions
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ needs.tool-versions.outputs.go }}
+          cache: true
+      - name: Require Windows symlink capability
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'symlink-target'
+          $link = Join-Path $env:RUNNER_TEMP 'symlink-probe'
+          Set-Content $target 'probe'
+          try {
+            try {
+              New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
+            } catch {
+              reg add 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+              if ($LASTEXITCODE -ne 0) { throw 'Could not enable Developer Mode.' }
+              New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
+            }
+            if ((Get-Item $link).LinkType -ne 'SymbolicLink') { throw 'Expected a file symlink.' }
+          } finally {
+            Remove-Item $link, $target -Force -ErrorAction SilentlyContinue
+          }
+      - name: Require native junction support
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'junction-probe'
+          $target = Join-Path $root 'target'
+          $link = Join-Path $root 'link'
+          New-Item -ItemType Directory -Force $target | Out-Null
+          try {
+            New-Item -ItemType Junction -Path $link -Target $target -ErrorAction Stop | Out-Null
+            if ((Get-Item $link).LinkType -ne 'Junction') { throw 'Expected a junction.' }
+          } finally {
+            Remove-Item $link -Force -ErrorAction SilentlyContinue
+            Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - name: Require Windows directory symlink capability
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'directory-symlink-probe'
+          $target = Join-Path $root 'target'
+          $link = Join-Path $root 'link'
+          New-Item -ItemType Directory -Force $target | Out-Null
+          try {
+            try {
+              New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
+            } catch {
+              reg add 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+              if ($LASTEXITCODE -ne 0) { throw 'Could not enable Developer Mode.' }
+              New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
+            }
+            if ((Get-Item $link).LinkType -ne 'SymbolicLink') { throw 'Expected a directory symlink.' }
+            if (!(Test-Path (Join-Path $link '.'))) { throw 'Directory symlink does not resolve.' }
+          } finally {
+            Remove-Item $link -Force -ErrorAction SilentlyContinue
+            Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ needs.tool-versions.outputs.bun }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ needs.tool-versions.outputs.node }}
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v${{ needs.tool-versions.outputs.wails }}
+      - name: Install frontend dependencies
+        run: bun ci --ignore-scripts
+      - name: Generate Wails bindings
+        run: bun run bindings:wails
+      - name: Typecheck active frontend
+        run: bun run typecheck
+      - name: Lint active frontend scope
+        run: bun run lint
+      - name: Check formatting
+        run: bun run format:check
+      - name: Build frontend
+        run: bun run build
+      - name: Check design tokens
+        run: bun run scripts/check-tokens.ts
+      - name: Build embedded frontend
+        run: bun run build:wails
+      - name: Check Go formatting
+        run: |
+          $files = git ls-files '*.go'
+          $unformatted = gofmt -l $files
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($unformatted) { $unformatted; exit 1 }
+      - name: Vet
+        run: go vet ./...
+      - name: Frontend tests
+        run: bun run test
+      - name: Go tests
+        run: go test ./...
+      - name: Server-tagged Go tests
+        run: go test -tags server . ./backend
+      - name: Build desktop and server artifacts
+        run: |
+          New-Item -ItemType Directory -Force build/ci | Out-Null
+          go build -trimpath -o build/ci/modkeeper.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -trimpath -tags server -o build/ci/modkeeper-server.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke-test server mode
+        run: |
+          $env:MODKEEPER_SERVER_PORT = '18080'
+          $log = Join-Path $env:RUNNER_TEMP 'modkeeper-server.log'
+          $err = Join-Path $env:RUNNER_TEMP 'modkeeper-server.err'
+          $process = Start-Process -FilePath ./build/ci/modkeeper-server.exe -RedirectStandardOutput $log -RedirectStandardError $err -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 100; $i++) {
+              try { if ((Invoke-WebRequest http://127.0.0.1:18080/ -UseBasicParsing).StatusCode -eq 200) { $ready = $true; break } } catch { Start-Sleep -Milliseconds 100 }
+            }
+            if (!$ready) { throw 'Server did not become ready' }
+          } finally {
+            if (!$process.HasExited) { Stop-Process -Id $process.Id -Force }
+            Get-Content $log, $err
+          }
+          if (!((Get-Content $log, $err -Raw) -match 'Server mode enabled')) { throw 'Missing server mode log' }
+      - name: Install Playwright Chromium
+        run: bunx playwright install chromium
+      - name: Playwright real-server journeys
+        run: |
+          bun run test:e2e:server 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/e2e-server.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Windows diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-e2e-diagnostics
+          path: |
+            test-results/
+            ${{ runner.temp }}/e2e-server.log
+            ${{ runner.temp }}/modkeeper-server.log
+            ${{ runner.temp }}/modkeeper-server.err
+          if-no-files-found: ignore
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: modkeeper-windows-x86_64
+          path: |
+            build/ci/modkeeper.exe
+            build/ci/modkeeper-server.exe
           if-no-files-found: error
           retention-days: 7

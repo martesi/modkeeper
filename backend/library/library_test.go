@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -225,9 +226,13 @@ func TestLibraryStructureAndStoredRelativeRoot(t *testing.T) {
 	}
 }
 
-func TestWindowsAbsoluteGameRootResolvesOnLinux(t *testing.T) {
+func TestWindowsAbsoluteGameRootResolves(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".mod_keeper")
-	if got := resolveGameRoot(root, `C:\Games\Example`); got != filepath.Dir(root) {
+	want := filepath.Dir(root)
+	if runtime.GOOS == "windows" {
+		want = filepath.Clean(`C:\Games\Example`)
+	}
+	if got := resolveGameRoot(root, `C:\Games\Example`); got != want {
 		t.Fatalf("got %q", got)
 	}
 }

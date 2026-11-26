@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const fixtures: string[] = []
@@ -24,19 +24,20 @@ function runScript(script: string, failGeneration = false) {
   const log = join(fixture, 'calls')
   mkdirSync(bin, { recursive: true })
   writeFileSync(join(fixture, 'package.json'), readFileSync('package.json'))
+  const isWindows = process.platform === 'win32'
   for (const name of ['wails3', 'vite', 'tsc']) {
-    const executable = join(bin, name)
-    writeFileSync(
-      executable,
-      `#!/bin/sh\nprintf '%s\\n' '${name} '"$*" >> "$TEST_LOG"\n${name === 'wails3' ? 'exit "${GENERATOR_EXIT:-0}"' : ''}\n`,
-    )
-    chmodSync(executable, 0o755)
+    const executable = join(bin, isWindows ? `${name}.cmd` : name)
+    const scriptBody = isWindows
+      ? `@echo off\r\n>>"%TEST_LOG%" echo ${name} %*\r\n${name === 'wails3' ? 'if "%GENERATOR_EXIT%"=="" set GENERATOR_EXIT=0\r\nexit /b %GENERATOR_EXIT%\r\n' : 'exit /b 0\r\n'}`
+      : `#!/bin/sh\nprintf '%s\\n' '${name} '"$*" >> "$TEST_LOG"\n${name === 'wails3' ? 'exit "${GENERATOR_EXIT:-0}"' : ''}\n`
+    writeFileSync(executable, scriptBody)
+    if (!isWindows) chmodSync(executable, 0o755)
   }
   const result = spawnSync('bun', ['run', script, '--', '--example-flag'], {
     cwd: fixture,
     env: {
       ...process.env,
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: `${bin}${delimiter}${process.env.PATH}`,
       TEST_LOG: log,
       GENERATOR_EXIT: failGeneration ? '42' : '0',
     },

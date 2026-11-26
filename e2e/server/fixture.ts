@@ -21,6 +21,8 @@ export const test = base.extend<ServerFixture>({
     const root = await mkdtemp(path.join(tmpdir(), 'modkeeper-e2e-'))
     let serverProcess: ReturnType<typeof startServer> | undefined
     await (async () => {
+      if (process.env.MODKEEPER_E2E_ROOT_MARKER)
+        await writeFile(process.env.MODKEEPER_E2E_ROOT_MARKER, root)
       const game = path.join(root, 'game')
       await mkdir(path.join(game, 'SPT', 'user', 'sptRegistry'), {
         recursive: true,

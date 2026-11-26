@@ -3,6 +3,7 @@ package deployment
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,9 @@ func TestPurgePreflightsAllProtectedRootsBeforeTraversal(t *testing.T) {
 	content(t, link, "library")
 }
 func TestPurgePreflightsAllWalksBeforeUnlinkingLinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows paths cannot represent non-UTF-8 names")
+	}
 	l, root, target := purgeFixture(t)
 	link := filepath.Join(root, "keep")
 	must(t, os.Symlink(target, link))
@@ -51,6 +55,23 @@ func TestPurgeResolvesRelativeLinkTargetsFromTheLinkParent(t *testing.T) {
 	content(t, target, "library")
 	absent(t, journal(l))
 }
+func TestPlanPurgeDoesNotDuplicateTheDefaultServerModsRoot(t *testing.T) {
+	l, root, target := purgeFixture(t)
+	link := filepath.Join(root, "planned-once")
+	must(t, os.Symlink(target, link))
+
+	links, err := planPurge(l)
+	must(t, err)
+	count := 0
+	for _, planned := range links {
+		if filepath.Clean(planned.path) == filepath.Clean(link) {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("default server-mod link appears %d times in purge plan; want 1 (plan has %d entries)", count, len(links))
+	}
+}
 func TestPurgeKeepsDanglingExternalTargetsUnverified(t *testing.T) {
 	l, root, _ := purgeFixture(t)
 	link := filepath.Join(root, "dangling")
@@ -64,6 +85,9 @@ func TestPurgeKeepsDanglingExternalTargetsUnverified(t *testing.T) {
 	}
 }
 func TestPurgeHandlesNonUtf8LinkTargetsWithoutRecreatingThem(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows paths cannot represent non-UTF-8 names")
+	}
 	l, root, _ := purgeFixture(t)
 	target := filepath.Join(l.LibraryRoot, "target-\xff")
 	write(t, target, "library")

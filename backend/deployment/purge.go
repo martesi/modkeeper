@@ -47,7 +47,7 @@ func planPurge(l Layout) ([]purgeLink, error) {
 		return nil, ioError(e)
 	}
 	roots := ProtectedPaths(l.Rules)
-	if l.Rules.ServerMods != "SPT/user/mods" {
+	if pathKey(l.Rules.ServerMods) != "SPT/user/mods" {
 		roots = append(roots, "SPT/user/mods")
 	}
 	var valid []string

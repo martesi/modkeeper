@@ -67,7 +67,7 @@ func IsProtected(path string, r spt.Rules) bool {
 	return false
 }
 func safeRelative(p string) bool {
-	if p == "" || filepath.IsAbs(p) || strings.Contains(p, "\\") || strings.Contains(p, ":") {
+	if p == "" || !filepath.IsLocal(p) || (filepath.Separator != '\\' && strings.Contains(p, "\\")) || strings.Contains(p, ":") {
 		return false
 	}
 	for _, c := range strings.Split(filepath.ToSlash(p), "/") {
