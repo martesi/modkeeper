@@ -1,6 +1,7 @@
 package task_progress
 
 import (
+	"log/slog"
 	"math"
 	"sync"
 	"time"
@@ -55,6 +56,12 @@ func (e *Emitter) Completed(outcome Outcome) {
 		stage, level, code, message = models.TaskStageTaskFailed, models.TaskLevelError, "task_failed", "Operation failed"
 	}
 	e.emit(models.TaskProgressCompleted, stage, nil, &models.TaskProgressLog{Level: level, Code: code, Message: message})
+}
+
+// Failed keeps diagnostic causes in the developer log, not progress events.
+func (e *Emitter) Failed(err error) {
+	slog.Error("task failed", "operation", e.operation, "task_id", e.taskID, "error", err)
+	e.Completed(Failure)
 }
 
 func (e *Emitter) Cancelled() {

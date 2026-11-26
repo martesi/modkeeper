@@ -263,6 +263,10 @@ export type ModFailure = {
   error: SError
 }
 
+export type SyncStatus = 'success' | 'partial_failure' | 'failure' | 'cancelled'
+export type SyncCause =
+  'discovery' | 'initial_persistence' | 'deployment' | 'final_persistence'
+
 /** Workspace events sent by the Go backend. */
 export type WorkspaceEvent =
   | {
@@ -284,6 +288,8 @@ export type WorkspaceEvent =
       taskId: string
       libraryId: string
       failures: ModFailure[]
+      status: SyncStatus
+      cause?: SyncCause
       workspace: LibraryWorkspace
     }
 

@@ -51,8 +51,6 @@ export function TaskHistoryPanel() {
               <li
                 className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 px-2.5 py-2"
                 key={entry.taskId}
-                data-task-id={entry.taskId}
-                data-library-id={entry.libraryId}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -73,6 +71,11 @@ export function TaskHistoryPanel() {
                       {taskHistoryText.status(entry.status)}
                     </span>
                   </div>
+                  {entry.cause && (
+                    <p className="mt-1 text-muted-foreground">
+                      {taskHistoryText.syncCause(entry.cause)}
+                    </p>
+                  )}
                   {entry.logTail.length > 0 && (
                     <details className="mt-1">
                       <summary className="w-fit cursor-pointer text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">

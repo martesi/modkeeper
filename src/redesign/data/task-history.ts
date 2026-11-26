@@ -1,13 +1,14 @@
 import { atom, getDefaultStore } from 'jotai'
 import type { TaskOperation, TaskProgressLog } from './redesign-types'
 import type { TaskOutcome } from './task-outcome'
+import type { SyncCause } from '@/wails/contract'
 import { pendingTasksAtom } from '../state/library-state'
 
 export const TASK_HISTORY_LIMIT = 50
 export const TASK_HISTORY_LOG_LIMIT = 20
 
 export type TaskHistoryStatus =
-  'success' | 'partial_failure' | 'failure' | 'unknown'
+  'success' | 'partial_failure' | 'failure' | 'cancelled' | 'unknown'
 
 export type TaskHistoryEntry = {
   taskId: string
@@ -16,6 +17,7 @@ export type TaskHistoryEntry = {
   libraryId: string
   status: TaskHistoryStatus
   logTail: TaskProgressLog[]
+  cause?: SyncCause
 }
 
 const SAFE_HISTORY_LOGS: Record<string, TaskProgressLog> = {
@@ -79,6 +81,7 @@ export function makeTaskHistoryEntry(
       libraryId: outcome.libraryId,
       status: statusForOutcome(outcome),
       logTail: input?.logTail ?? [],
+      cause: outcome.kind === 'sync' ? outcome.cause : undefined,
     }) ?? {
       taskId: 'unknown',
       timestamp: new Date().toISOString(),
@@ -152,6 +155,7 @@ function normalizeEntry(value: unknown): TaskHistoryEntry | null {
     operation: isTaskOperation(value.operation) ? value.operation : 'unknown',
     status: isTaskHistoryStatus(value.status) ? value.status : 'unknown',
     logTail: normalizeLogs(value.logTail),
+    ...(isSyncCause(value.cause) ? { cause: value.cause } : {}),
   }
 }
 
@@ -171,8 +175,7 @@ function statusForOutcome(outcome: TaskOutcome): TaskHistoryStatus {
     return outcome.successCount > 0 ? 'partial_failure' : 'failure'
   }
   if (outcome.kind === 'sync') {
-    if (outcome.succeeded) return 'success'
-    return outcome.failures.length > 0 ? 'failure' : 'unknown'
+    return outcome.status
   }
   if (outcome.cacheState === 'ready') return 'success'
   if (outcome.cacheState === 'failed') return 'failure'
@@ -215,7 +218,17 @@ function isTaskHistoryStatus(value: unknown): value is TaskHistoryStatus {
     value === 'success' ||
     value === 'partial_failure' ||
     value === 'failure' ||
+    value === 'cancelled' ||
     value === 'unknown'
+  )
+}
+
+function isSyncCause(value: unknown): value is SyncCause {
+  return (
+    value === 'discovery' ||
+    value === 'initial_persistence' ||
+    value === 'deployment' ||
+    value === 'final_persistence'
   )
 }
 

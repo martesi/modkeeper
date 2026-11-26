@@ -151,7 +151,7 @@ describe('completed task history', () => {
       },
     ]
     const summary = makeTaskHistoryEntry(
-      deriveSyncOutcome([], 'library-1', 'task-log'),
+      deriveSyncOutcome([], 'library-1', 'task-log', 'success', null),
       { logTail: logs },
     )
 
@@ -171,7 +171,7 @@ describe('completed task history', () => {
       message: 'x'.repeat(500),
     }))
     const summary = makeTaskHistoryEntry(
-      deriveSyncOutcome([], 'library-1', 'task-log'),
+      deriveSyncOutcome([], 'library-1', 'task-log', 'success', null),
       { logTail: logs },
     )
     const bounded = summary.logTail
@@ -237,6 +237,8 @@ describe('completed task history', () => {
         [{ modId: 'mod-1', error: { code: 'ParseError', data: 'failed' } }],
         'library-1',
         secondTask,
+        'partial_failure',
+        null,
       ),
       { timestamp: '2026-11-18T10:01:00.000Z' },
     )

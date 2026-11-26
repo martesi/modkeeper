@@ -501,6 +501,7 @@ export async function syncMods(
       setMockWorkspace(workspace)
       dispatchWorkspaceEvent({
         type: 'sync_completed',
+        status: 'success',
         taskId,
         libraryId,
         failures: [],

@@ -1,5 +1,6 @@
 import { t } from '@lingui/core/macro'
 import type { TaskOperation } from '../data/redesign-types'
+import type { SyncCause } from '@/wails/contract'
 
 const operationText: Record<TaskOperation, () => string> = {
   sync: () => t({ id: 'library.task.history.operation.sync', message: 'Sync' }),
@@ -37,7 +38,9 @@ export const taskHistoryText = {
           message: 'Unknown task',
         })
       : operationText[operation](),
-  status: (status: 'success' | 'partial_failure' | 'failure' | 'unknown') => {
+  status: (
+    status: 'success' | 'partial_failure' | 'failure' | 'cancelled' | 'unknown',
+  ) => {
     switch (status) {
       case 'success':
         return t({
@@ -54,10 +57,40 @@ export const taskHistoryText = {
           id: 'library.task.history.status.failure',
           message: 'Failed',
         })
+      case 'cancelled':
+        return t({
+          id: 'library.task.history.status.cancelled',
+          message: 'Cancelled',
+        })
       case 'unknown':
         return t({
           id: 'library.task.history.status.unknown',
           message: 'Outcome unknown',
+        })
+    }
+  },
+  syncCause: (cause: SyncCause) => {
+    switch (cause) {
+      case 'discovery':
+        return t({
+          id: 'library.sync.cause.discovery',
+          message: 'Could not discover the game layout. Check the game folder.',
+        })
+      case 'initial_persistence':
+        return t({
+          id: 'library.sync.cause.initialPersistence',
+          message:
+            'Could not save the dirty state before sync. Check library storage.',
+        })
+      case 'deployment':
+        return t({
+          id: 'library.sync.cause.deployment',
+          message: 'Deployment failed. Check the game and library files.',
+        })
+      case 'final_persistence':
+        return t({
+          id: 'library.sync.cause.finalPersistence',
+          message: 'Could not save the sync state. Check library storage.',
         })
     }
   },

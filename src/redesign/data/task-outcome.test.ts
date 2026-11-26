@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { makeTaskHistoryEntry } from './task-history'
 import {
   archiveBasename,
   canRetryFailedArchives,
@@ -120,10 +121,46 @@ describe('task outcomes', () => {
       [{ modId: '', error: { code: 'Unexpected' } }],
       'library-1',
       'task-7',
+      'partial_failure',
+      null,
     )
 
     expect(outcome.succeeded).toBe(false)
     expect(outcome.failures[0]?.modId).toBe('')
+  })
+
+  test.each(['discovery', 'initial_persistence', 'final_persistence'] as const)(
+    'keeps sync %s failure in the outcome and history',
+    (cause) => {
+      const outcome = deriveSyncOutcome(
+        [],
+        'library-1',
+        'task-7',
+        'failure',
+        cause,
+      )
+      expect(outcome).toMatchObject({
+        status: 'failure',
+        cause,
+        succeeded: false,
+      })
+      expect(makeTaskHistoryEntry(outcome)).toMatchObject({
+        status: 'failure',
+        cause,
+      })
+    },
+  )
+
+  test('keeps cancellation distinct in sync outcome and history', () => {
+    const outcome = deriveSyncOutcome(
+      [],
+      'library-1',
+      'task-7',
+      'cancelled',
+      null,
+    )
+    expect(outcome).toMatchObject({ status: 'cancelled', succeeded: false })
+    expect(makeTaskHistoryEntry(outcome).status).toBe('cancelled')
   })
 
   test('retains the backend cache failure message', () => {
@@ -195,7 +232,7 @@ describe('task outcomes', () => {
     expect(canRetryFailedArchives(outcome, 'library-1', true)).toBe(false)
     expect(
       canRetryFailedArchives(
-        deriveSyncOutcome([], 'library-1', 'task-10'),
+        deriveSyncOutcome([], 'library-1', 'task-10', 'success', null),
         'library-1',
         false,
       ),

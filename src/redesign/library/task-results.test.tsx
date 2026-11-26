@@ -116,6 +116,8 @@ test('shows a recorded event and Clear all empties the list', async () => {
       libraryId: 'test-library',
       failures: [],
       succeeded: true,
+      status: 'success',
+      cause: null,
     }),
   )
 

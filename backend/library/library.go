@@ -305,6 +305,10 @@ func isSnapshotTemp(name string) bool {
 	return true
 }
 func (l *Library) Persist() error {
+	return l.persist(true)
+}
+
+func (l *Library) persist(includeCache bool) error {
 	base := l.Root
 	m := l.manifest
 	m.RepoRoot = l.Root
@@ -316,10 +320,21 @@ func (l *Library) Persist() error {
 	}
 	// deployment.toml is owned by the deployment package; rewriting it here
 	// erased the recorded artifacts and made delete/ownership checks vacuous.
-	for file, v := range map[string]any{"manifest.toml": m, "cache.toml": l.cacheTOML()} {
+	type persistEntry struct {
+		file  string
+		value any
+	}
+	var entries []persistEntry
+	if includeCache {
+		entries = append(entries, persistEntry{"cache.toml", l.cacheTOML()})
+	}
+	// The manifest is the commit point, so a cache failure cannot mark a sync clean.
+	entries = append(entries, persistEntry{"manifest.toml", m})
+	for _, entry := range entries {
+		file, v := entry.file, entry.value
 		f, e := os.CreateTemp(base, ".tmp-*")
 		if e != nil {
-			return e
+			return fmt.Errorf("save %s: %w", file, e)
 		}
 		tmp := f.Name()
 		e = toml.NewEncoder(f).Encode(v)
@@ -335,7 +350,7 @@ func (l *Library) Persist() error {
 		}
 		if e != nil {
 			_ = os.Remove(tmp)
-			return e
+			return fmt.Errorf("save %s (replacement may already be visible): %w", file, e)
 		}
 	}
 	return nil

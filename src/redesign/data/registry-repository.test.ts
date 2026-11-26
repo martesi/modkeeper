@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import { installWailsMock } from '@/wails/mock'
 import {
   activeLibraryIdAtom,
+  addPendingTask,
+  libraryBusyAtom,
   pendingTasksAtom,
   setWorkspace,
 } from '../state/library-state'
@@ -287,6 +289,92 @@ describe('registry repository Wails bridge', () => {
       }),
     )
     expect(store.get(registryInstallingMapAtom)).toEqual({})
+    remove()
+  })
+
+  test('sync completion clears busy and reaches the outcome consumer', async () => {
+    const remove = installBridge()
+    const { ensureWorkspaceEventBus, listenWorkspaceEvent } =
+      await import('./library-repository')
+    const { handleWorkspaceEvent } =
+      await import('../app/redesign-initializers')
+    const { taskHistoryAtom, clearTaskHistory } = await import('./task-history')
+    const { taskResultAtom } = await import('../state/library-state')
+    clearTaskHistory()
+    expect(await ensureWorkspaceEventBus()).toBe(true)
+    const unsubscribe = listenWorkspaceEvent(handleWorkspaceEvent)
+    const store = getDefaultStore()
+    for (const [status, cause] of [
+      ['failure', 'discovery'],
+      ['failure', 'initial_persistence'],
+      ['failure', 'final_persistence'],
+      ['cancelled', undefined],
+    ] as const) {
+      const taskId = `sync-${cause ?? status}`
+      addPendingTask({ taskId, libraryId: 'library', source: 'sync-button' })
+      expect(store.get(libraryBusyAtom)).toBe(true)
+      eventListeners.get('workspace-event')?.forEach((callback) =>
+        callback({
+          type: 'sync_completed',
+          taskId,
+          libraryId: 'library',
+          failures: [],
+          status,
+          cause,
+          workspace,
+        }),
+      )
+      expect(store.get(libraryBusyAtom)).toBe(false)
+      expect(store.get(taskResultAtom)).toMatchObject({
+        status,
+        cause: cause ?? null,
+      })
+      expect(
+        store.get(taskHistoryAtom).find((entry) => entry.taskId === taskId),
+      ).toMatchObject({ status, ...(cause ? { cause } : {}) })
+    }
+    for (const [taskId, statusField, failures, expected] of [
+      [
+        'legacy-failure',
+        {},
+        [{ modId: 'mod', error: { code: 'Unexpected' } }],
+        'partial_failure',
+      ],
+      ['legacy-empty', {}, [], 'unknown'],
+      [
+        'malformed',
+        { status: 'invalid' },
+        [{ modId: 'mod', error: { code: 'Unexpected' } }],
+        'unknown',
+      ],
+      [
+        'explicit-undefined',
+        { status: undefined },
+        [{ modId: 'mod', error: { code: 'Unexpected' } }],
+        'unknown',
+      ],
+    ] as const) {
+      addPendingTask({ taskId, libraryId: 'library', source: 'sync-button' })
+      eventListeners.get('workspace-event')?.forEach((callback) =>
+        callback({
+          type: 'sync_completed',
+          taskId,
+          libraryId: 'library',
+          failures,
+          ...statusField,
+          workspace,
+        }),
+      )
+      expect(store.get(taskResultAtom)).toMatchObject({
+        status: expected,
+        succeeded: false,
+      })
+      expect(
+        store.get(taskHistoryAtom).find((entry) => entry.taskId === taskId),
+      ).toMatchObject({ status: expected })
+      expect(store.get(libraryBusyAtom)).toBe(false)
+    }
+    unsubscribe()
     remove()
   })
 

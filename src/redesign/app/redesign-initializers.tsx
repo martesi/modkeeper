@@ -60,7 +60,7 @@ export function RedesignInitializers() {
   return <SettingsApplier />
 }
 
-function handleWorkspaceEvent(
+export function handleWorkspaceEvent(
   event: WorkspaceEvent,
   submittedPaths?: readonly string[],
 ): void {
@@ -78,7 +78,15 @@ function handleWorkspaceEvent(
 
   if (event.type === 'sync_completed') {
     publishTaskResult(
-      deriveSyncOutcome(event.failures, event.libraryId, event.taskId),
+      deriveSyncOutcome(
+        event.failures,
+        event.libraryId,
+        event.taskId,
+        !Object.hasOwn(event, 'status') && event.failures.length > 0
+          ? 'partial_failure'
+          : event.status,
+        event.cause ?? null,
+      ),
     )
     return
   }

@@ -400,7 +400,7 @@ msgid "library.manage.gameRootPathPlaceholder"
 msgstr "C:\\SPT"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:14
+#: src/redesign/i18n/task-history-text.ts:15
 msgid "library.task.history.operation.cacheRebuild"
 msgstr "Cache rebuild"
 
@@ -447,6 +447,11 @@ msgstr "Cancel"
 #: src/redesign/i18n/library-text.ts:61
 msgid "library.task.cancel"
 msgstr "Cancel import"
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:61
+msgid "library.task.history.status.cancelled"
+msgstr "Cancelled"
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/registry-text.ts:306
@@ -507,7 +512,7 @@ msgid "library.task.stage.syncCleanup"
 msgstr "Cleaning up"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:25
+#: src/redesign/i18n/task-history-text.ts:26
 msgid "library.task.history.clearAll"
 msgstr "Clear all"
 
@@ -604,12 +609,12 @@ msgid "registry.detail.compatibleOnly"
 msgstr "Compatible with this SPT version"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:43
+#: src/redesign/i18n/task-history-text.ts:46
 msgid "library.task.history.status.success"
 msgstr "Completed"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:48
+#: src/redesign/i18n/task-history-text.ts:51
 msgid "library.task.history.status.partialFailure"
 msgstr "Completed with errors"
 
@@ -648,6 +653,11 @@ msgid "error.unableToDetermineModId"
 msgstr "Could not determine an identity for this mod"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:75
+msgid "library.sync.cause.discovery"
+msgstr "Could not discover the game layout. Check the game folder."
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:493
 msgid "library.tools.launchFailed"
 msgstr "Could not launch {name}"
@@ -671,6 +681,16 @@ msgstr "Could not load this versions page. Try selecting the page again."
 #: src/redesign/i18n/common-text.ts:51
 msgid "common.error.fileOpenerFailed"
 msgstr "Could not open this location."
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:80
+msgid "library.sync.cause.initialPersistence"
+msgstr "Could not save the dirty state before sync. Check library storage."
+
+#. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:91
+msgid "library.sync.cause.finalPersistence"
+msgstr "Could not save the sync state. Check library storage."
 
 #. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:229
@@ -769,6 +789,11 @@ msgid "library.task.stage.syncDeploy"
 msgstr "Deploying files"
 
 #. js-lingui-explicit-id
+#: src/redesign/i18n/task-history-text.ts:86
+msgid "library.sync.cause.deployment"
+msgstr "Deployment failed. Check the game and library files."
+
+#. js-lingui-explicit-id
 #: src/redesign/i18n/library-text.ts:168
 msgid "library.status.deployStale"
 msgstr "Deployment out of date — sync now"
@@ -804,7 +829,7 @@ msgid "library.toolbar.filterDisabled"
 msgstr "Disabled only"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:27
+#: src/redesign/i18n/task-history-text.ts:28
 msgid "library.task.history.dismiss"
 msgstr "Dismiss {operation} for {library}"
 
@@ -824,7 +849,7 @@ msgid "registry.install.incompatible.dontShow"
 msgstr "Do not show this warning again"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:9
+#: src/redesign/i18n/task-history-text.ts:10
 msgid "library.task.history.operation.download"
 msgstr "Download"
 
@@ -969,7 +994,7 @@ msgid "library.tools.dialogDescription"
 msgstr "External executable and launch parameters."
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:53
+#: src/redesign/i18n/task-history-text.ts:56
 msgid "library.task.history.status.failure"
 msgstr "Failed"
 
@@ -1478,7 +1503,7 @@ msgstr "No Active SPT Library"
 #~ msgstr "No backups yet"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:32
+#: src/redesign/i18n/task-history-text.ts:33
 msgid "library.task.history.emptyState"
 msgstr "No events yet."
 
@@ -1589,7 +1614,7 @@ msgid "library.empty.dropBrowse"
 msgstr "or click to browse local files"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:58
+#: src/redesign/i18n/task-history-text.ts:66
 msgid "library.task.history.status.unknown"
 msgstr "Outcome unknown"
 
@@ -1696,12 +1721,12 @@ msgstr "Rebuild Cache"
 #~ msgstr "Rebuild Cache"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:24
+#: src/redesign/i18n/task-history-text.ts:25
 msgid "library.task.history.label"
 msgstr "Recent task history"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:22
+#: src/redesign/i18n/task-history-text.ts:23
 msgid "library.task.history.heading"
 msgstr "Recent tasks"
 
@@ -2015,7 +2040,7 @@ msgid "registry.empty.showIncompatible"
 msgstr "Show Incompatible Versions"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:65
+#: src/redesign/i18n/task-history-text.ts:98
 msgid "library.task.history.log"
 msgstr "Show log ({count})"
 
@@ -2089,7 +2114,7 @@ msgid "library.actions.sync"
 msgstr "Sync"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:5
+#: src/redesign/i18n/task-history-text.ts:6
 msgid "library.task.history.operation.sync"
 msgstr "Sync"
 
@@ -2305,7 +2330,7 @@ msgstr "Unknown library"
 #~ msgstr "Unknown mod"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:35
+#: src/redesign/i18n/task-history-text.ts:36
 msgid "library.task.history.operation.unknown"
 msgstr "Unknown task"
 
@@ -2334,7 +2359,7 @@ msgid "registry.actions.update"
 msgstr "Update to v{version}"
 
 #. js-lingui-explicit-id
-#: src/redesign/i18n/task-history-text.ts:7
+#: src/redesign/i18n/task-history-text.ts:8
 msgid "library.task.history.operation.upload"
 msgstr "Upload"
 

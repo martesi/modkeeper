@@ -18,6 +18,7 @@ import type {
   TaskOutcome,
 } from '../data/task-outcome'
 import { libraryText } from '../i18n/library-text'
+import { taskHistoryText } from '../i18n/task-history-text'
 import { resolveCommandErrorSummary } from '../shared/hooks/use-command-error'
 import { registryText } from '../i18n/registry-text'
 import { TaskHistoryPanel } from './task-history-panel'
@@ -309,10 +310,17 @@ function OutcomeDetails({
     return (
       <>
         <h2 className="font-medium">
-          {outcome.succeeded
+          {outcome.status === 'success'
             ? libraryText.syncSucceeded()
-            : libraryText.syncFailed()}
+            : outcome.status === 'failure'
+              ? libraryText.syncFailed()
+              : taskHistoryText.status(outcome.status)}
         </h2>
+        {outcome.cause && (
+          <p className="mt-1 text-muted-foreground">
+            {taskHistoryText.syncCause(outcome.cause)}
+          </p>
+        )}
         {visibleFailures.length > 0 && (
           <ul className="mt-1 list-inside list-disc text-muted-foreground">
             {visibleFailures.map((failure, index) => (

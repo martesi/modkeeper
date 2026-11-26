@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"log/slog"
 	"os"
 	"runtime"
 	"strconv"
@@ -34,6 +35,7 @@ func main() {
 		defer closeLog()
 		if logger != nil {
 			options.Logger = logger
+			slog.SetDefault(logger)
 		}
 	}
 	app := application.New(options)
