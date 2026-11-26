@@ -25,6 +25,21 @@ type ModFailure struct {
 	ModID string `json:"modId"`
 	Error Error  `json:"error"`
 }
+type SyncStatus string
+type SyncCause string
+
+const (
+	SyncSuccess                 SyncStatus = "success"
+	SyncPartialFailure          SyncStatus = "partial_failure"
+	SyncFailure                 SyncStatus = "failure"
+	SyncCancelled               SyncStatus = "cancelled"
+	SyncCauseDiscovery          SyncCause  = "discovery"
+	SyncCauseInitialPersistence SyncCause  = "initial_persistence"
+	SyncCauseDeployment         SyncCause  = "deployment"
+	SyncCauseFinalPersistence   SyncCause  = "final_persistence"
+	SyncCauseDiskStateUncertain SyncCause  = "disk_state_uncertain"
+)
+
 type CreateLibraryInput struct {
 	GameRoot    string  `json:"gameRoot"`
 	LibraryRoot *string `json:"libraryRoot"`
@@ -93,6 +108,8 @@ type WorkspaceEvent struct {
 	Type              string
 	TaskID, LibraryID string
 	Failures          any
+	Status            SyncStatus
+	Cause             SyncCause
 	Workspace         LibraryWorkspace
 	CacheStatus       *CacheStatus
 }
@@ -117,6 +134,17 @@ func (e WorkspaceEvent) MarshalJSON() ([]byte, error) {
 	if failures == nil {
 		failures = []ModFailure{}
 	}
+	if e.Type == WorkspaceEventSyncCompleted {
+		return json.Marshal(struct {
+			Type      string           `json:"type"`
+			TaskID    string           `json:"taskId"`
+			LibraryID string           `json:"libraryId"`
+			Failures  any              `json:"failures"`
+			Status    SyncStatus       `json:"status"`
+			Cause     SyncCause        `json:"cause,omitempty"`
+			Workspace LibraryWorkspace `json:"workspace"`
+		}{e.Type, e.TaskID, e.LibraryID, failures, e.Status, e.Cause, e.Workspace})
+	}
 	return json.Marshal(struct {
 		Type      string           `json:"type"`
 		TaskID    string           `json:"taskId"`
@@ -131,13 +159,15 @@ func (e *WorkspaceEvent) UnmarshalJSON(data []byte) error {
 		TaskID      string           `json:"taskId"`
 		LibraryID   string           `json:"libraryId"`
 		Failures    json.RawMessage  `json:"failures"`
+		Status      SyncStatus       `json:"status"`
+		Cause       SyncCause        `json:"cause"`
 		CacheStatus *CacheStatus     `json:"cacheStatus"`
 		Workspace   LibraryWorkspace `json:"workspace"`
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
-	result := WorkspaceEvent{Type: v.Type, TaskID: v.TaskID, LibraryID: v.LibraryID, CacheStatus: v.CacheStatus, Workspace: v.Workspace}
+	result := WorkspaceEvent{Type: v.Type, TaskID: v.TaskID, LibraryID: v.LibraryID, CacheStatus: v.CacheStatus, Workspace: v.Workspace, Status: v.Status, Cause: v.Cause}
 	switch v.Type {
 	case WorkspaceEventCacheRebuildCompleted:
 		if v.CacheStatus == nil {

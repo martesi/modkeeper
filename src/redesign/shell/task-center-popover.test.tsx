@@ -115,6 +115,8 @@ describe('task center popover', () => {
         libraryId: 'library-1',
         failures: [],
         succeeded: true,
+        status: 'success',
+        cause: null,
       })
     })
 

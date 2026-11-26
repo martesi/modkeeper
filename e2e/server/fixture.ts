@@ -11,6 +11,7 @@ interface ServerFixture {
     root: string
     game: string
     archive: string
+    successArchive: string
     restart: () => Promise<void>
   }
 }
@@ -36,6 +37,7 @@ export const test = base.extend<ServerFixture>({
       await cp(game, path.join(root, 'second-game'), { recursive: true })
       const archive = path.join(root, 'fixture-mod.zip')
       await copyFile(path.resolve('e2e/server/fixture-mod.zip'), archive)
+      const successArchive = path.resolve('e2e/server/fixture-success-mod.zip')
       const port = await freePort()
       const url = `http://127.0.0.1:${port}`
       const env: NodeJS.ProcessEnv = {
@@ -67,6 +69,7 @@ export const test = base.extend<ServerFixture>({
         root,
         game,
         archive,
+        successArchive,
         restart: async () => {
           if (!serverProcess) throw new Error('Server has not started')
           await stopServer(serverProcess.child, serverProcess.closed)

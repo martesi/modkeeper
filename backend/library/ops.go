@@ -12,6 +12,7 @@ import (
 	"github.com/martes/modkeeper/backend/deployment"
 	"github.com/martes/modkeeper/backend/models"
 	"github.com/martes/modkeeper/backend/modmanager"
+	"github.com/martes/modkeeper/backend/security"
 	"github.com/martes/modkeeper/backend/spt"
 	"github.com/martes/modkeeper/backend/stager"
 	"github.com/martes/modkeeper/backend/task_progress"
@@ -379,14 +380,36 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 		return nil, err
 	}
 	return s.runTask(in.TaskID, func() error {
+		failures := []models.ModFailure{}
+		status, cause := models.SyncFailure, models.SyncCauseDiscovery
+		defer func() {
+			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures, Status: status, Cause: cause})
+		}()
+		if err := ctx.Err(); err != nil {
+			status, cause = models.SyncCancelled, ""
+			e.Cancelled()
+			return err
+		}
 		rules, err := spt.Discover(s.active.GameRoot)
 		if err != nil {
-			e.Completed(task_progress.Failure)
+			e.Failed(fmt.Errorf("discover game layout: %w", err))
 			return err
 		}
 		layout := deployment.Layout{LibraryRoot: s.active.Root, GameRoot: s.active.GameRoot, Rules: rules}
+		// An interrupted sync must not leave a clean manifest while the game tree
+		// may have been changed. Persist this before entering deployment.
+		s.active.manifest.IsDirty = true
+		cause = models.SyncCauseInitialPersistence
+		if err := s.active.Persist(); err != nil {
+			e.Failed(fmt.Errorf("save dirty state before sync; check library storage and retry: %w", err))
+			return err
+		}
+		cause = models.SyncCauseDeployment
 		report, err := deployment.Sync(ctx, layout, s.active.modList(), e)
-		failures := make([]models.ModFailure, 0, len(report.Failures))
+		if err == nil {
+			err = ctx.Err()
+		}
+		failures = make([]models.ModFailure, 0, len(report.Failures))
 		for _, failure := range report.Failures {
 			modFailure := models.ModFailure{ModID: failure.ModID}
 			if failure.Error != nil {
@@ -394,33 +417,62 @@ func (s *Service) SyncMods(in models.SyncModsInput, progress func(models.TaskPro
 			}
 			failures = append(failures, modFailure)
 		}
+		failures = sanitizeSyncFailures(failures)
 		if err != nil {
 			if ctx.Err() != nil {
+				status, cause = models.SyncCancelled, ""
 				e.Cancelled()
 			} else {
-				e.Completed(task_progress.Failure)
-			}
-			if s.sendWorkspace != nil {
-				s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
+				e.Failed(fmt.Errorf("sync deployment failed; check the game and library files before retrying: %w", err))
 			}
 			return err
 		}
-		s.active.manifest.IsDirty = false
+		s.active.manifest.IsDirty = len(failures) > 0
+		cause = models.SyncCauseFinalPersistence
 		if err := s.active.Persist(); err != nil {
-			e.Completed(task_progress.Failure)
+			s.active.manifest.IsDirty = true
+			var restoreErr error
+			if s.restoreDirtyState != nil {
+				restoreErr = s.restoreDirtyState()
+			} else {
+				restoreErr = s.active.persist(false)
+			}
+			if restoreErr != nil {
+				cause = models.SyncCauseDiskStateUncertain
+				err = fmt.Errorf("%w; failed to restore dirty manifest (disk state is uncertain): %v", err, restoreErr)
+			}
+			e.Failed(fmt.Errorf("save sync state; check library storage and retry: %w", err))
 			return err
 		}
 		e.Progress(models.TaskStageSyncPersist, nil)
 		if len(failures) > 0 {
+			status, cause = models.SyncPartialFailure, ""
 			e.Completed(task_progress.PartialFailure)
 		} else {
+			status, cause = models.SyncSuccess, ""
 			e.Completed(task_progress.Success)
-		}
-		if s.sendWorkspace != nil {
-			s.sendWorkspaceSnapshot(models.WorkspaceEvent{Type: models.WorkspaceEventSyncCompleted, TaskID: in.TaskID, LibraryID: in.LibraryID, Failures: failures})
 		}
 		return nil
 	}), nil
+}
+
+func sanitizeSyncFailures(failures []models.ModFailure) []models.ModFailure {
+	safe := make([]models.ModFailure, 0, len(failures))
+	for _, failure := range failures {
+		modID := failure.ModID
+		if security.ValidateModID(modID) != nil {
+			modID = "unknown"
+		}
+		code := models.Unexpected
+		if failure.Error.Code == models.FileCollision {
+			code = models.SyncConflict
+		}
+		safe = append(safe, models.ModFailure{
+			ModID: modID,
+			Error: models.Error{Code: code},
+		})
+	}
+	return safe
 }
 
 func archiveError(err error) models.Error {

@@ -46,4 +46,5 @@ const (
 	TaskAlreadyCancelled    = "TaskAlreadyCancelled"
 	TaskNotCancellable      = "TaskNotCancellable"
 	LibraryBusy             = "LibraryBusy"
+	SyncConflict            = "SyncConflict"
 )

@@ -1,13 +1,44 @@
 package task_progress
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/martes/modkeeper/backend/models"
 )
+
+func TestFailedKeepsPrivateCauseOutOfProgress(t *testing.T) {
+	const privatePath = "/private/distinctive-game-path/file"
+	var diagnostics bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&diagnostics, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	var events []models.TaskProgressEvent
+	e := New("task", "library", models.TaskOperationSync, func(event models.TaskProgressEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	e.Failed(errors.New("cannot open " + privatePath))
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), privatePath) {
+		t.Fatalf("private path in progress: %s", encoded)
+	}
+	if len(events) != 1 || events[0].Log == nil || events[0].Log.Code != "task_failed" || events[0].Log.Message != "Operation failed" {
+		t.Fatalf("unexpected progress: %s", encoded)
+	}
+	if !strings.Contains(diagnostics.String(), privatePath) {
+		t.Fatalf("missing diagnostic cause: %s", diagnostics.String())
+	}
+}
 
 func TestAdmissionOrderingAndSinkFailure(t *testing.T) {
 	var events []models.TaskProgressEvent

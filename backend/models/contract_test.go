@@ -45,6 +45,10 @@ func TestExistingCompletionEventPayloadsKeepTheirWireShapes(t *testing.T) {
 	for _, kind := range []string{WorkspaceEventSyncCompleted, WorkspaceEventModInstallCompleted, WorkspaceEventCacheRebuildCompleted} {
 		event := WorkspaceEvent{Type: kind, TaskID: "task", LibraryID: "library", Workspace: workspace}
 		middle := `"failures":[],`
+		if kind == WorkspaceEventSyncCompleted {
+			event.Status = SyncSuccess
+			middle = `"failures":[],"status":"success",`
+		}
 		if kind == WorkspaceEventCacheRebuildCompleted {
 			event.CacheStatus = &CacheStatus{State: CacheStateReady}
 			middle = `"cacheStatus":{"state":"ready"},`
@@ -56,6 +60,21 @@ func TestExistingCompletionEventPayloadsKeepTheirWireShapes(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertJSON(t, decoded, want)
+	}
+}
+
+func TestSyncFailureCompletionRoundTripsCauseAndModFailures(t *testing.T) {
+	event := WorkspaceEvent{Type: WorkspaceEventSyncCompleted, TaskID: "task", LibraryID: "library", Status: SyncFailure, Cause: SyncCauseFinalPersistence, Failures: []ModFailure{{ModID: "mod", Error: Error{Code: "Unexpected"}}}}
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded WorkspaceEvent
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Status != event.Status || decoded.Cause != event.Cause || len(decoded.Failures.([]ModFailure)) != 1 {
+		t.Fatalf("completion round trip: %+v", decoded)
 	}
 }
 func TestOldManifestModsDefaultToLocalWithoutRegistryIdentity(t *testing.T) {

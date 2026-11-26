@@ -30,20 +30,25 @@ function entry(taskId: string, timestamp: string): TaskHistoryEntry {
 }
 
 describe('completed task history', () => {
-  test('starts empty on a fresh module load despite an old stored history key', async () => {
-    let reads = 0
-    let writes = 0
+  test('persists outcomes and reloads task and library IDs without matching decoys', async () => {
+    let stored = JSON.stringify({
+      version: 1,
+      tasks: [
+        entry('decoy-task', '2026-11-18T10:00:00.000Z'),
+        {
+          ...entry('other-task', '2026-11-18T10:01:00.000Z'),
+          libraryId: 'other-library',
+        },
+      ],
+    })
     const storage = {
       getItem(key: string) {
-        reads += 1
         expect(key).toBe('modkeeper.taskHistory.v1')
-        return JSON.stringify({
-          version: 1,
-          tasks: [entry('stored-task', '2026-11-18T10:00:00.000Z')],
-        })
+        return stored
       },
-      setItem() {
-        writes += 1
+      setItem(key: string, value: string) {
+        expect(key).toBe('modkeeper.taskHistory.v1')
+        stored = value
       },
       removeItem() {},
     }
@@ -57,16 +62,44 @@ describe('completed task history', () => {
     })
     vi.resetModules()
     const freshHistory = await import('./task-history')
-    const initialEntries = getDefaultStore().get(freshHistory.taskHistoryAtom)
+    const privatePath = '/private/library/mods/secret'
+    freshHistory.recordTaskHistory(
+      deriveSyncOutcome([], 'target-library', 'target-task', 'success', null),
+      {
+        logTail: [
+          { level: 'error', code: 'task_failed', message: privatePath },
+        ],
+      },
+    )
+    const persisted = JSON.parse(stored) as {
+      version: number
+      tasks: TaskHistoryEntry[]
+    }
+    expect(
+      persisted.tasks.map(({ taskId, libraryId }) => [taskId, libraryId]),
+    ).toContainEqual(['target-task', 'target-library'])
+    expect(stored).not.toContain(privatePath)
+    expect(
+      persisted.tasks.find(({ taskId }) => taskId === 'target-task')?.logTail,
+    ).toEqual([
+      { level: 'error', code: 'task_failed', message: 'Operation failed' },
+    ])
+    vi.resetModules()
+    const reloadedHistory = await import('./task-history')
+    const reloaded = getDefaultStore().get(reloadedHistory.taskHistoryAtom)
     if (windowDescriptor) {
       Object.defineProperty(globalThis, 'window', windowDescriptor)
     } else {
       Reflect.deleteProperty(globalThis, 'window')
     }
 
-    expect(initialEntries).toEqual([])
-    expect(reads).toBe(0)
-    expect(writes).toBe(0)
+    expect(
+      reloaded.map(({ taskId, libraryId }) => [taskId, libraryId]),
+    ).toEqual([
+      ['target-task', 'target-library'],
+      ['other-task', 'other-library'],
+      ['decoy-task', 'library-1'],
+    ])
   })
 
   test('keeps the newest 50 entries and replaces duplicate task ids', () => {
@@ -151,7 +184,7 @@ describe('completed task history', () => {
       },
     ]
     const summary = makeTaskHistoryEntry(
-      deriveSyncOutcome([], 'library-1', 'task-log'),
+      deriveSyncOutcome([], 'library-1', 'task-log', 'success', null),
       { logTail: logs },
     )
 
@@ -171,7 +204,7 @@ describe('completed task history', () => {
       message: 'x'.repeat(500),
     }))
     const summary = makeTaskHistoryEntry(
-      deriveSyncOutcome([], 'library-1', 'task-log'),
+      deriveSyncOutcome([], 'library-1', 'task-log', 'success', null),
       { logTail: logs },
     )
     const bounded = summary.logTail
@@ -237,6 +270,8 @@ describe('completed task history', () => {
         [{ modId: 'mod-1', error: { code: 'ParseError', data: 'failed' } }],
         'library-1',
         secondTask,
+        'partial_failure',
+        null,
       ),
       { timestamp: '2026-11-18T10:01:00.000Z' },
     )

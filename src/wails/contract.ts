@@ -237,6 +237,7 @@ export type SError =
   | { code: 'ModNotFound'; data: string }
   | { code: 'FileOrDirectoryNotFound'; data: string }
   | { code: 'FileCollision'; data: string[] }
+  | { code: 'SyncConflict' }
   | { code: 'Unexpected' }
   | { code: 'UnhandledCompression'; data: string }
   | { code: 'AsyncRuntimeError'; data: string }
@@ -263,6 +264,14 @@ export type ModFailure = {
   error: SError
 }
 
+export type SyncStatus = 'success' | 'partial_failure' | 'failure' | 'cancelled'
+export type SyncCause =
+  | 'discovery'
+  | 'initial_persistence'
+  | 'deployment'
+  | 'final_persistence'
+  | 'disk_state_uncertain'
+
 /** Workspace events sent by the Go backend. */
 export type WorkspaceEvent =
   | {
@@ -284,6 +293,8 @@ export type WorkspaceEvent =
       taskId: string
       libraryId: string
       failures: ModFailure[]
+      status: SyncStatus
+      cause?: SyncCause
       workspace: LibraryWorkspace
     }
 

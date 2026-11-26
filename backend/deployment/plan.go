@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -24,7 +25,11 @@ func ancestors(p string) []string {
 	var out []string
 	for p != "." && p != "" {
 		out = append(out, p)
-		p = pathKey(filepath.Dir(filepath.FromSlash(p)))
+		parent := pathKey(filepath.Dir(filepath.FromSlash(p)))
+		if parent == p {
+			break
+		}
+		p = parent
 	}
 	return out
 }
@@ -37,21 +42,11 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-// Plan prefers copies when the source and destination support them.
-func Plan(mods []models.Mod, l Layout) (DeploymentPlan, error) {
-	file, directory, err := probeMethods(l)
-	if err != nil {
-		return DeploymentPlan{}, ioError(err)
-	}
-	return PlanWithKinds(mods, l, file, directory)
+type sourceClaim struct {
+	ModID, Relative, Target string
 }
 
-// PlanWithKinds supports the link fallback and deterministic capability tests.
-func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.ArtifactKind) (DeploymentPlan, error) {
-	state, e := LoadState(l)
-	if e != nil {
-		return DeploymentPlan{}, e
-	}
+func discoverClaims(mods []models.Mod, l Layout) ([]sourceClaim, map[string]map[string]bool, map[string][]string, error) {
 	owners := map[string]map[string]bool{}
 	files := map[string][]string{}
 	add := func(p, id string) {
@@ -67,16 +62,17 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 		}
 	}
 	ids := map[string]bool{}
-	for _, m := range mods {
-		if !m.Enabled {
+	var claims []sourceClaim
+	for _, mod := range mods {
+		if !mod.Enabled {
 			continue
 		}
-		if !safeRelative(m.ID) || filepath.Base(m.ID) != m.ID || ids[m.ID] {
-			return DeploymentPlan{}, collision(m.ID)
+		if !safeRelative(mod.ID) || filepath.Base(mod.ID) != mod.ID || ids[mod.ID] {
+			return nil, nil, nil, collision(mod.ID)
 		}
-		ids[m.ID] = true
-		root := filepath.Join(l.Paths().Mods, m.ID)
-		e = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		ids[mod.ID] = true
+		root := filepath.Join(l.Paths().Mods, mod.ID)
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
@@ -94,22 +90,111 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 				return collision(rel)
 			}
 			rel = pathKey(rel)
-			if len(owners[rel]) > 0 {
-				for owner := range owners[rel] {
-					if owner != m.ID && owner != "__SYSTEM__" {
-						return collision(rel)
-					}
-				}
-			}
-			files[m.ID] = append(files[m.ID], rel)
+			files[mod.ID] = append(files[mod.ID], rel)
+			claims = append(claims, sourceClaim{ModID: mod.ID, Relative: rel, Target: targetPath(l, rel)})
 			for _, p := range ancestors(rel) {
-				add(p, m.ID)
+				add(p, mod.ID)
 			}
 			return nil
 		})
-		if e != nil {
-			return DeploymentPlan{}, ioError(e)
+		if err != nil {
+			return nil, nil, nil, ioError(err)
 		}
+	}
+	return claims, owners, files, nil
+}
+
+func claimKey(p string) string {
+	p = pathKey(p)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(p)
+	}
+	return p
+}
+
+func claimConflicts(claims []sourceClaim) (map[string]string, string) {
+	byMod := map[string]string{}
+	var operationPath string
+	check := func(target bool) {
+		index := map[string][]sourceClaim{}
+		for _, claim := range claims {
+			p := claim.Relative
+			if target {
+				p = claim.Target
+			}
+			index[claimKey(p)] = append(index[claimKey(p)], claim)
+		}
+		mark := func(entries []sourceClaim, path string) {
+			ids := map[string]bool{}
+			for _, entry := range entries {
+				ids[entry.ModID] = true
+			}
+			if len(ids) < 2 {
+				if len(entries) > 1 && (operationPath == "" || path < operationPath) {
+					operationPath = path
+				}
+				return
+			}
+			for id := range ids {
+				if byMod[id] == "" || path < byMod[id] {
+					byMod[id] = path
+				}
+			}
+		}
+		for key, entries := range index {
+			if len(entries) > 1 {
+				p := entries[0].Relative
+				if target {
+					p = entries[0].Target
+				}
+				mark(entries, p)
+			}
+			for _, parent := range ancestors(filepath.FromSlash(key))[1:] {
+				if ancestors := index[claimKey(parent)]; len(ancestors) > 0 {
+					p := entries[0].Relative
+					if target {
+						p = entries[0].Target
+					}
+					mark(append(append([]sourceClaim{}, entries...), ancestors...), p)
+				}
+			}
+		}
+	}
+	check(false)
+	check(true)
+	return byMod, operationPath
+}
+
+// Plan prefers copies when the source and destination support them.
+func Plan(mods []models.Mod, l Layout) (DeploymentPlan, error) {
+	file, directory, err := probeMethods(l)
+	if err != nil {
+		return DeploymentPlan{}, ioError(err)
+	}
+	return PlanWithKinds(mods, l, file, directory)
+}
+
+// PlanWithKinds supports the link fallback and deterministic capability tests.
+func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.ArtifactKind) (DeploymentPlan, error) {
+	state, e := LoadState(l)
+	if e != nil {
+		return DeploymentPlan{}, e
+	}
+	claims, owners, files, e := discoverClaims(mods, l)
+	if e != nil {
+		return DeploymentPlan{}, e
+	}
+	conflicts, operationConflict := claimConflicts(claims)
+	if operationConflict != "" {
+		return DeploymentPlan{}, collision(operationConflict)
+	}
+	if len(conflicts) > 0 {
+		paths := make([]string, 0, len(conflicts))
+		for _, path := range conflicts {
+			paths = append(paths, path)
+		}
+		sort.Strings(paths)
+		return DeploymentPlan{}, collision(paths[0])
 	}
 	selected := map[string]DeploymentArtifact{}
 	dirs := map[string]bool{}

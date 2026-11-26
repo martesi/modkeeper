@@ -172,6 +172,7 @@ export function createInMemoryWailsMock(): WailsMock {
     }
     if (type === 'cache_rebuild_completed')
       event.cacheStatus = { state: 'ready', lastRebuiltAt: now() }
+    if (type === 'sync_completed') event.status = 'success'
     queueMicrotask(() =>
       listeners.get('workspace-event')?.forEach((callback) => callback(event)),
     )

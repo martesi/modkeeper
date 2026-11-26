@@ -3,6 +3,7 @@ import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterAll, afterEach, beforeEach, expect, vi, test } from 'vitest'
+import { readFile } from 'node:fs/promises'
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => () => {} }))
 vi.mock('../i18n/library-text', () => ({
@@ -23,7 +24,15 @@ vi.mock('../i18n/common-text', () => ({
   commonText: { close: () => 'Close' },
 }))
 vi.mock('../i18n/error-text', () => ({
-  errorText: new Proxy({}, { get: () => () => '' }),
+  errorText: new Proxy(
+    {},
+    {
+      get: (_target, key) =>
+        key === 'syncConflict'
+          ? () => 'A deployment target is in use by an unmanaged file.'
+          : () => '',
+    },
+  ),
 }))
 vi.mock('../i18n/task-history-text', () => ({
   taskHistoryText: {
@@ -38,6 +47,10 @@ vi.mock('../i18n/task-history-text', () => ({
           ? 'Download'
           : 'Upload',
     status: () => 'Completed',
+    syncCause: (cause: string) =>
+      cause === 'disk_state_uncertain'
+        ? 'Sync files may have changed, and the dirty state could not be restored. Check the game and library before syncing again.'
+        : '',
     dismiss: (operation: string, library: string) =>
       `Dismiss ${operation} for ${library}`,
     log: () => 'Show log',
@@ -51,6 +64,11 @@ vi.mock('../data/library-repository', () => ({
   retryFailedArchives: async () => {},
 }))
 vi.mock('../../wails/bridge', () => ({ cancelInstallTask: async () => {} }))
+
+import { deriveSyncOutcome } from '../data/task-outcome'
+import { handleWorkspaceEvent } from '../app/redesign-initializers'
+import { taskHistoryAtom } from '../data/task-history'
+import { taskResultAtom } from '../state/library-state'
 
 const browserWindow = new Window()
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>()
@@ -88,6 +106,7 @@ beforeEach(async () => {
   recordTaskHistory = history.recordTaskHistory
   clearTaskHistory = history.clearTaskHistory
   clearTaskHistory()
+  getDefaultStore().set(taskResultAtom, null)
   const { TaskCenterPanel } = await import('./task-results')
   root = createRoot(container)
   await act(async () => root?.render(createElement(TaskCenterPanel)))
@@ -116,6 +135,8 @@ test('shows a recorded event and Clear all empties the list', async () => {
       libraryId: 'test-library',
       failures: [],
       succeeded: true,
+      status: 'success',
+      cause: null,
     }),
   )
 
@@ -138,4 +159,98 @@ test('shows a recorded event and Clear all empties the list', async () => {
       (await import('../data/task-history')).taskHistoryAtom,
     ),
   ).toHaveLength(0)
+})
+
+test('shows a safe partial-sync conflict summary without backend path data', async () => {
+  const privatePath = '/private/game/BepInEx/plugins/Conflict/file.dll'
+  const serializedFailure = {
+    modId: 'fixture-mod',
+    error: { code: 'SyncConflict' as const },
+  }
+  const outcome = deriveSyncOutcome(
+    [serializedFailure],
+    'test-library',
+    'sync-event-private-path',
+    'partial_failure',
+    null,
+  )
+
+  await act(async () => {
+    getDefaultStore().set(taskResultAtom, outcome)
+    root?.render(
+      createElement((await import('./task-results')).TaskCenterPanel),
+    )
+  })
+
+  expect(container.textContent).toContain(
+    'A deployment target is in use by an unmanaged file.',
+  )
+  expect(container.textContent).not.toContain(privatePath)
+})
+
+test('handles a sanitized backend completion and keeps its path out of task history', async () => {
+  const privatePath = '/private/game/PrivateLeakToken/private.dll'
+  const rawFailure = {
+    modId: 'fixture-mod',
+    error: { code: 'FileCollision', data: [privatePath] },
+  }
+  expect(JSON.stringify(rawFailure)).toContain(privatePath)
+
+  const completionPath = process.env.SYNC_COMPLETION_TEST_PAYLOAD
+  const completion = completionPath
+    ? JSON.parse(await readFile(completionPath, 'utf8'))
+    : {
+        type: 'sync_completed',
+        taskId: 'safe-collision-task',
+        libraryId: 'safe-collision-library',
+        failures: [{ modId: 'fixture-mod', error: { code: 'SyncConflict' } }],
+        status: 'partial_failure',
+        workspace: {},
+      }
+  expect(JSON.stringify(completion)).not.toContain(privatePath)
+  expect(JSON.stringify(completion)).not.toContain('PrivateLeakToken')
+
+  await act(async () => {
+    handleWorkspaceEvent(completion)
+    root?.render(
+      createElement((await import('./task-results')).TaskCenterPanel),
+    )
+  })
+
+  expect(container.textContent).toContain(
+    'A deployment target is in use by an unmanaged file.',
+  )
+  expect(container.textContent).not.toContain(privatePath)
+  expect(container.textContent).not.toContain('PrivateLeakToken')
+  const history = getDefaultStore().get(taskHistoryAtom)
+  expect(history).toHaveLength(1)
+  expect(history[0]).toMatchObject({
+    taskId: completion.taskId,
+    libraryId: completion.libraryId,
+    status: 'partial_failure',
+  })
+  expect(JSON.stringify(history)).not.toContain(privatePath)
+  expect(JSON.stringify(history)).not.toContain('PrivateLeakToken')
+})
+
+test('explains when a failed dirty-state restore leaves disk state uncertain', async () => {
+  const privatePath = '/private/library/manifest.toml'
+  const outcome = deriveSyncOutcome(
+    [],
+    'test-library',
+    'sync-event-uncertain',
+    'failure',
+    'disk_state_uncertain',
+  )
+
+  await act(async () => {
+    getDefaultStore().set(taskResultAtom, outcome)
+    root?.render(
+      createElement((await import('./task-results')).TaskCenterPanel),
+    )
+  })
+
+  expect(container.textContent).toContain('dirty state could not be restored')
+  expect(container.textContent).toContain('Check the game and library')
+  expect(container.textContent).not.toContain(privatePath)
 })

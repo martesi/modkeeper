@@ -3,6 +3,8 @@ import type {
   CacheStatus,
   ModFailure,
   SError,
+  SyncStatus,
+  SyncCause,
 } from '@/wails/contract'
 
 export type ArchiveTaskFailure = { path: string; error: SError }
@@ -32,6 +34,8 @@ export type SyncTaskOutcome = TaskIdentity & {
   kind: 'sync'
   failures: SyncTaskFailure[]
   succeeded: boolean
+  status: SyncStatus | 'unknown'
+  cause: SyncCause | null
 }
 
 export type CacheTaskOutcome = TaskIdentity & {
@@ -130,13 +134,24 @@ export function deriveSyncOutcome(
   failures: readonly ModFailure[],
   libraryId: string,
   taskId: string,
+  status: SyncStatus,
+  cause: SyncCause | null,
 ): SyncTaskOutcome {
+  const safeStatus =
+    status === 'success' ||
+    status === 'partial_failure' ||
+    status === 'failure' ||
+    status === 'cancelled'
+      ? status
+      : 'unknown'
   return {
     kind: 'sync',
     taskId,
     libraryId,
     failures: failures.map(({ modId, error }) => ({ modId, error })),
-    succeeded: failures.length === 0,
+    status: safeStatus,
+    cause,
+    succeeded: safeStatus === 'success',
   }
 }
 

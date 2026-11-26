@@ -2,11 +2,13 @@ package deployment
 
 import (
 	"context"
+	"errors"
 	"github.com/martes/modkeeper/backend/linker"
 	"github.com/martes/modkeeper/backend/models"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type Reporter interface {
@@ -274,7 +276,57 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e := stage(models.TaskStageSyncPlan); e != nil {
 		return Report{}, e
 	}
-	plan, e := Plan(mods, l)
+	enabled := make([]models.Mod, 0, len(mods))
+	for _, mod := range mods {
+		if mod.Enabled {
+			enabled = append(enabled, mod)
+		}
+	}
+	claims, _, _, e := discoverClaims(enabled, l)
+	if e != nil {
+		return Report{}, e
+	}
+	conflicted, unattributed := claimConflicts(claims)
+	if unattributed != "" {
+		return Report{}, collision(unattributed)
+	}
+	failuresByID := map[string]ModFailure{}
+	for id, target := range conflicted {
+		failuresByID[id] = ModFailure{ModID: id, Error: codedCollision(target)}
+	}
+	var deployable []models.Mod
+	for _, mod := range enabled {
+		if _, excluded := conflicted[mod.ID]; excluded {
+			continue
+		}
+		modPlan, planErr := Plan([]models.Mod{mod}, l)
+		if planErr == nil {
+			planErr = Preflight(l, modPlan)
+		}
+		if planErr != nil {
+			var coded *models.Error
+			if errors.As(planErr, &coded) && coded.Code == models.FileCollision {
+				copyOfError := *coded
+				failuresByID[mod.ID] = ModFailure{ModID: mod.ID, Error: &copyOfError}
+				continue
+			}
+			return Report{}, planErr
+		}
+		deployable = append(deployable, mod)
+	}
+	failures := make([]ModFailure, 0, len(failuresByID))
+	for _, id := range sortedKeys(failuresByID) {
+		failures = append(failures, failuresByID[id])
+	}
+	if len(deployable) == 0 && len(failures) > 0 {
+		return Report{}, failures[0].Error
+	}
+	if len(failures) > 0 {
+		if e := guardExcludedArtifacts(l, failures); e != nil {
+			return Report{}, e
+		}
+	}
+	plan, e := Plan(deployable, l)
 	if e != nil {
 		return Report{}, e
 	}
@@ -287,7 +339,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e = stage(models.TaskStageSyncCleanup); e != nil {
 		return Report{}, e
 	}
-	if e = Purge(l, mods); e != nil {
+	if e = Purge(l, deployable); e != nil {
 		return Report{}, e
 	}
 	if e = stage(models.TaskStageSyncDeploy); e != nil {
@@ -296,5 +348,54 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	if e = deploy(l, plan, func() error { return stage(models.TaskStageSyncPersist) }); e != nil {
 		return Report{}, e
 	}
-	return Report{Failures: []ModFailure{}, Deployed: len(plan.Artifacts)}, nil
+	return Report{Failures: failures, Deployed: len(plan.Artifacts)}, nil
+}
+
+func codedCollision(path string) *models.Error {
+	var coded *models.Error
+	_ = errors.As(collision(path), &coded)
+	return coded
+}
+
+func guardExcludedArtifacts(l Layout, failures []ModFailure) error {
+	excluded := make(map[string]bool, len(failures))
+	for _, failure := range failures {
+		excluded[failure.ModID] = true
+	}
+	belongsToExcluded := func(rel string) bool {
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		return len(parts) > 1 && parts[0] == "mods" && excluded[parts[1]]
+	}
+	state, err := LoadState(l)
+	if err != nil {
+		return err
+	}
+	for _, artifact := range state.Artifacts {
+		if belongsToExcluded(artifact.Source) {
+			return collision(artifact.Target)
+		}
+	}
+	links, err := planPurge(l)
+	if err != nil {
+		return err
+	}
+	base, err := filepath.EvalSymlinks(l.LibraryRoot)
+	if err != nil {
+		return ioError(err)
+	}
+	for _, link := range links {
+		target := link.raw
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(link.path), target)
+		}
+		resolved, err := filepath.EvalSymlinks(target)
+		if err != nil || !within(base, resolved) {
+			continue
+		}
+		rel, err := filepath.Rel(base, resolved)
+		if err == nil && belongsToExcluded(rel) {
+			return collision(link.path)
+		}
+	}
+	return nil
 }
