@@ -381,8 +381,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   ).toBeVisible()
 
   const deployed = path.join(
-    server.root,
-    'second-game',
+    server.game,
     'BepInEx',
     'plugins',
     'FixtureMod',
@@ -398,16 +397,19 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   await dialog.getByRole('button', { name: /save deployment policy/i }).click()
   await expect
     .poll(() =>
-      readFile(
-        path.join(server.root, 'second-game', '.mod_keeper', 'manifest.toml'),
-        'utf8',
-      ),
+      readFile(path.join(server.game, '.mod_keeper', 'manifest.toml'), 'utf8'),
     )
     .toContain('deploymentMethod = "link"')
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: /^sync$/i }).click()
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
-  expect((await lstat(deployed)).isSymbolicLink()).toBe(true)
+  await expect
+    .poll(() =>
+      lstat(deployed)
+        .then((entry) => entry.isSymbolicLink())
+        .catch(() => false),
+    )
+    .toBe(true)
 
   await page.getByRole('button', { name: /^sync$/i }).click()
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
