@@ -238,6 +238,18 @@ func TestDeploymentPolicyPostReplacementFailureBlocksSyncUntilRecovery(t *testin
 	}
 }
 
+func TestSyncAdmissionFailsClosedWhenHostRuntimeIsUnknown(t *testing.T) {
+	env := testenv.New(t)
+	service := createPolicyService(t, env)
+	service.policyHost = "unknown"
+	service.Inspector = process.Fake{}
+	if _, err := service.SyncMods(models.SyncModsInput{
+		TaskID: "unknown-host-sync", LibraryID: service.active.manifest.ID,
+	}, nil); err == nil || !strings.Contains(err.Error(), "host runtime could not be verified") {
+		t.Fatalf("Sync admission with unknown host = %v; want fail-closed error", err)
+	}
+}
+
 func TestLibrarySyncModsUsesPersistedDeploymentPolicy(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("native Linux consumer fixture")

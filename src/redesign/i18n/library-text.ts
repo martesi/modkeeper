@@ -465,6 +465,11 @@ export const libraryText = {
       message:
         'The saved policy is uncertain. Review the library manifest and recovery marker before Sync or another change.',
     }),
+  refreshPolicyStatus: () =>
+    t({
+      id: 'library.manage.refreshPolicyStatus',
+      message: 'Refresh policy status',
+    }),
   wslPolicyUnverified: () =>
     t({
       id: 'library.manage.wslPolicyUnverified',
@@ -476,6 +481,12 @@ export const libraryText = {
       id: 'library.manage.windowsPolicyUnverified',
       message:
         'Runtime and deployment choices are disabled until native Windows consumer fixtures verify them.',
+    }),
+  unknownHostPolicyUnverified: () =>
+    t({
+      id: 'library.manage.unknownHostPolicyUnverified',
+      message:
+        'Runtime and deployment choices are disabled because the host platform could not be verified.',
     }),
   policyActiveIdleOnly: () =>
     t({

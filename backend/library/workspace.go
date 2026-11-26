@@ -79,10 +79,18 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 }
 
 func hostRuntime() string {
+	return hostRuntimeWithReadFile(os.ReadFile)
+}
+
+func hostRuntimeWithReadFile(readFile func(string) ([]byte, error)) string {
 	if runtime.GOOS != "linux" {
 		return runtime.GOOS
 	}
-	if release, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil && strings.Contains(strings.ToLower(string(release)), "microsoft") {
+	release, err := readFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		return "unknown"
+	}
+	if strings.Contains(strings.ToLower(string(release)), "microsoft") {
 		return "wsl"
 	}
 	return "linux"

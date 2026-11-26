@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -26,6 +27,31 @@ func TestLinkProbeSeparatesUnsupportedFromPermissionErrors(t *testing.T) {
 	})
 	if errors.As(permission, &unsupportedErr) || !errors.Is(permission, os.ErrPermission) {
 		t.Fatalf("permission error was misclassified: %v", permission)
+	}
+}
+
+func TestLinkProbeCleanupFailureTakesPrecedenceOverUnsupported(t *testing.T) {
+	l := fixture(t)
+	cleanupErr := os.ErrPermission
+	err := probeSymlinkConsumerWithLinkerAndCleanup(
+		l,
+		func(string, string, linker.ArtifactKind) error { return syscall.EOPNOTSUPP },
+		func(string) error { return cleanupErr },
+	)
+	_, planningErr := planWithMethod(nil, l, models.DeploymentMethodLink, func(Layout) error { return err })
+	if planningErr == nil || !strings.Contains(planningErr.Error(), "cleanup link probe") || !strings.Contains(planningErr.Error(), cleanupErr.Error()) {
+		t.Fatalf("planning error = %v, want cleanup I/O failure with details", planningErr)
+	}
+}
+
+func TestLinkProbeReportsConsumerReadFailure(t *testing.T) {
+	l := fixture(t)
+	err := probeSymlinkConsumerWithLinker(l, func(_, target string, _ linker.ArtifactKind) error {
+		return os.Symlink(filepath.Join(filepath.Dir(target), "missing"), target)
+	})
+	var unsupported unsupportedLinkError
+	if err == nil || errors.As(err, &unsupported) || !strings.Contains(err.Error(), "read selected link as game consumer") {
+		t.Fatalf("consumer read failure = %v", err)
 	}
 }
 

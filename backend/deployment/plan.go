@@ -80,6 +80,10 @@ func planWithMethod(mods []models.Mod, l Layout, method models.DeploymentMethod,
 		return plan, err
 	case models.DeploymentMethodLink:
 		if err := probeLink(l); err != nil {
+			var cleanupErr probeCleanupError
+			if errors.As(err, &cleanupErr) {
+				return DeploymentPlan{}, ioError(err)
+			}
 			var unsupported unsupportedLinkError
 			if errors.As(err, &unsupported) {
 				return DeploymentPlan{}, models.Fail(models.ParseError, "symbolic links are not supported by the selected library and game filesystems")

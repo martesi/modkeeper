@@ -23,17 +23,26 @@ func (e unsupportedLinkError) Error() string {
 }
 func (e unsupportedLinkError) Unwrap() error { return e.cause }
 
+type probeCleanupError struct{ cause error }
+
+func (e probeCleanupError) Error() string { return fmt.Sprintf("cleanup link probe: %v", e.cause) }
+func (e probeCleanupError) Unwrap() error { return e.cause }
+
 func probeSymlinkConsumerWithLinker(l Layout, createLink func(string, string, linker.ArtifactKind) error) (result error) {
+	return probeSymlinkConsumerWithLinkerAndCleanup(l, createLink, os.RemoveAll)
+}
+
+func probeSymlinkConsumerWithLinkerAndCleanup(l Layout, createLink func(string, string, linker.ArtifactKind) error, removeAll func(string) error) (result error) {
 	sourceRoot, err := os.MkdirTemp(l.LibraryRoot, ".link-probe-source-")
 	if err != nil {
 		return fmt.Errorf("create source probe: %w", err)
 	}
-	defer func() { result = errors.Join(result, os.RemoveAll(sourceRoot)) }()
+	defer func() { result = errors.Join(result, cleanupProbePath(removeAll, sourceRoot)) }()
 	targetRoot, err := os.MkdirTemp(l.GameRoot, ".link-probe-target-")
 	if err != nil {
 		return fmt.Errorf("create target probe: %w", err)
 	}
-	defer func() { result = errors.Join(result, os.RemoveAll(targetRoot)) }()
+	defer func() { result = errors.Join(result, cleanupProbePath(removeAll, targetRoot)) }()
 	source := filepath.Join(sourceRoot, "sentinel")
 	target := filepath.Join(targetRoot, "sentinel")
 	sourceDir := filepath.Join(sourceRoot, "directory")
@@ -72,6 +81,13 @@ func probeSymlinkConsumerWithLinker(l Layout, createLink func(string, string, li
 	}
 	if string(contents) != "directory-probe" {
 		return fmt.Errorf("game consumer read unexpected directory probe content %q", contents)
+	}
+	return nil
+}
+
+func cleanupProbePath(removeAll func(string) error, path string) error {
+	if err := removeAll(path); err != nil {
+		return probeCleanupError{cause: err}
 	}
 	return nil
 }

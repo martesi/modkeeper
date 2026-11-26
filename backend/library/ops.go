@@ -62,6 +62,10 @@ func (s *Service) admit(taskID, libraryID string, op models.TaskOperation, requi
 		return nil, nil, policyRecoveryRequired()
 	}
 	if op == models.TaskOperationSync {
+		if s.policyHostRuntime() == "unknown" {
+			s.libraryMu.RUnlock()
+			return nil, nil, models.Fail(models.ParseError, "host runtime could not be verified; Sync is disabled")
+		}
 		method := s.active.manifest.DeploymentMethod
 		if method != models.DeploymentMethodCopyFirst && !verifiedPolicy(s.policyHostRuntime(), s.active.manifest.TargetRuntime, method) {
 			s.libraryMu.RUnlock()

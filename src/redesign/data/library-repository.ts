@@ -422,8 +422,10 @@ export async function renameLibrary(input: {
 
 export async function setDeploymentPolicy(
   input: SetDeploymentPolicyInput,
-): Promise<CommandOutcome<LibraryWorkspace>> {
-  return plainCommand(
+): Promise<
+  CommandOutcome<LibraryWorkspace> & { policyOutcomeUnknown: boolean }
+> {
+  const outcome = await plainCommand(
     'setDeploymentPolicy',
     () => commands.setDeploymentPolicy(input),
     (workspace) => {
@@ -435,6 +437,20 @@ export async function setDeploymentPolicy(
       library.updatedAt = new Date().toISOString()
     },
   )
+  if (outcome.status === 'success')
+    return { ...outcome, policyOutcomeUnknown: false }
+
+  // A rejected Save can mean replacement completed but its durability step failed.
+  // Read backend state before returning the stale workspace to policy controls.
+  const refreshed = await loadLibraryWorkspace()
+  const authoritative = refreshed ?? outcome.workspace
+  const savedLibrary = findSummary(authoritative, input.libraryId)
+  return {
+    status: 'failure',
+    workspace: authoritative,
+    policyOutcomeUnknown:
+      refreshed === null || !savedLibrary || savedLibrary.policyUncertain,
+  }
 }
 
 export async function deleteLibrary(input: {
