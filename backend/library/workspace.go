@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -45,16 +47,25 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 			continue
 		}
 		game := resolveGameRoot(known.LibraryRoot, m.GameRoot)
+		policyUncertain := s.policyUncertain(known.ID)
+		if policyUncertain {
+			m.TargetRuntime = ""
+			m.DeploymentMethod = ""
+		}
 		libraryUpdatedAt := mtimeISO(filepath.Join(known.LibraryRoot, "manifest.toml"))
 		w.Libraries = append(w.Libraries, models.SummaryEntry(models.LibrarySummary{
-			ID:          known.ID,
-			Name:        m.Name,
-			GameRoot:    game,
-			LibraryRoot: known.LibraryRoot,
-			SPTVersion:  &m.SPTVersion,
-			CacheStatus: s.workspaceCacheStatus(known),
-			DeployStale: m.IsDirty,
-			UpdatedAt:   libraryUpdatedAt,
+			ID:               known.ID,
+			Name:             m.Name,
+			GameRoot:         game,
+			LibraryRoot:      known.LibraryRoot,
+			SPTVersion:       &m.SPTVersion,
+			CacheStatus:      s.workspaceCacheStatus(known),
+			DeployStale:      m.IsDirty,
+			UpdatedAt:        libraryUpdatedAt,
+			TargetRuntime:    m.TargetRuntime,
+			DeploymentMethod: m.DeploymentMethod,
+			PolicyUncertain:  policyUncertain,
+			HostRuntime:      hostRuntime(),
 		}))
 		rows := make([]models.ModSummary, 0, len(m.Mods))
 		for _, mod := range sortedMods(m.Mods) {
@@ -65,6 +76,16 @@ func (s *Service) Workspace() *models.LibraryWorkspace {
 		w.ToolsByLibraryID[known.ID] = []models.ToolSummary{}
 	}
 	return w
+}
+
+func hostRuntime() string {
+	if runtime.GOOS != "linux" {
+		return runtime.GOOS
+	}
+	if release, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil && strings.Contains(strings.ToLower(string(release)), "microsoft") {
+		return "wsl"
+	}
+	return "linux"
 }
 
 // workspaceManifest prefers the active library's in-memory state because it is
@@ -87,6 +108,16 @@ func readStrictManifest(path string) (manifest, error) {
 	}
 	if err := missingFields(raw, manifestFields); err != nil {
 		return manifest{}, err
+	}
+	if value, present := raw["targetRuntime"]; present {
+		if runtimeValue, ok := value.(string); !ok || runtimeValue == "" {
+			return manifest{}, fmt.Errorf("invalid target runtime")
+		}
+	}
+	if value, present := raw["deploymentMethod"]; present {
+		if methodValue, ok := value.(string); !ok || methodValue == "" {
+			return manifest{}, fmt.Errorf("invalid deployment method")
+		}
 	}
 	mods, ok := raw["mods"].(map[string]any)
 	if !ok {
@@ -113,6 +144,17 @@ func readStrictManifest(path string) (manifest, error) {
 	var m manifest
 	if _, err := toml.DecodeFile(path, &m); err != nil {
 		return manifest{}, err
+	}
+	runtime, err := models.NormalizeTargetRuntime(m.TargetRuntime)
+	if err != nil {
+		return manifest{}, err
+	}
+	m.TargetRuntime = runtime
+	if m.DeploymentMethod == "" {
+		m.DeploymentMethod = models.DeploymentMethodCopyFirst
+	}
+	if !m.DeploymentMethod.Valid() {
+		return manifest{}, fmt.Errorf("invalid deployment method %q", m.DeploymentMethod)
 	}
 	return m, nil
 }

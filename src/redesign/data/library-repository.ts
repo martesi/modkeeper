@@ -30,6 +30,7 @@ import type {
   WorkspaceEvent,
   TaskProgressEvent,
   SError,
+  SetDeploymentPolicyInput,
 } from './redesign-types'
 import { isLibrarySummary } from './redesign-types'
 import { resolveCommandError } from '../shared/hooks/use-command-error'
@@ -377,6 +378,10 @@ export async function createLibrary(input: {
         cacheStatus: { state: 'ready' },
         deployStale: false,
         updatedAt: new Date().toISOString(),
+        targetRuntime: 'windows',
+        deploymentMethod: 'copy-first',
+        policyUncertain: false,
+        hostRuntime: 'linux',
       })
       workspace.modsByLibraryId[id] = []
       workspace.toolsByLibraryId[id] = []
@@ -411,6 +416,23 @@ export async function renameLibrary(input: {
         library.name = input.name
         library.updatedAt = new Date().toISOString()
       }
+    },
+  )
+}
+
+export async function setDeploymentPolicy(
+  input: SetDeploymentPolicyInput,
+): Promise<CommandOutcome<LibraryWorkspace>> {
+  return plainCommand(
+    'setDeploymentPolicy',
+    () => commands.setDeploymentPolicy(input),
+    (workspace) => {
+      const library = findSummary(workspace, input.libraryId)
+      if (!library) return
+      library.targetRuntime = input.targetRuntime
+      library.deploymentMethod = input.deploymentMethod
+      library.deployStale = true
+      library.updatedAt = new Date().toISOString()
     },
   )
 }

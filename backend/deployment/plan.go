@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"errors"
+	"fmt"
 	"github.com/martes/modkeeper/backend/linker"
 	"github.com/martes/modkeeper/backend/models"
 	"io/fs"
@@ -44,6 +46,54 @@ func sortedKeys[V any](m map[string]V) []string {
 
 type sourceClaim struct {
 	ModID, Relative, Target string
+}
+
+// Plan prefers copies when the source and destination support them.
+func Plan(mods []models.Mod, l Layout) (DeploymentPlan, error) {
+	file, directory, err := probeMethods(l)
+	if err != nil {
+		return DeploymentPlan{}, ioError(err)
+	}
+	plan, err := PlanWithKinds(mods, l, file, directory)
+	plan.Method = models.DeploymentMethodCopyFirst
+	return plan, err
+}
+
+func PlanWithMethod(mods []models.Mod, l Layout, method models.DeploymentMethod) (DeploymentPlan, error) {
+	return planWithMethod(mods, l, method, probeSymlinkConsumer)
+}
+
+func PlanWithPolicy(mods []models.Mod, l Layout, policy models.DeploymentPolicy) (DeploymentPlan, error) {
+	if !policy.Valid() {
+		return DeploymentPlan{}, models.Fail(models.ParseError, "invalid deployment policy")
+	}
+	plan, err := planWithMethod(mods, l, policy.DeploymentMethod, probeSymlinkConsumer)
+	plan.TargetRuntime = policy.TargetRuntime
+	return plan, err
+}
+
+func planWithMethod(mods []models.Mod, l Layout, method models.DeploymentMethod, probeLink func(Layout) error) (DeploymentPlan, error) {
+	switch method {
+	case models.DeploymentMethodCopy:
+		plan, err := PlanWithKinds(mods, l, linker.Copy, linker.Copy)
+		plan.Method = method
+		return plan, err
+	case models.DeploymentMethodLink:
+		if err := probeLink(l); err != nil {
+			var unsupported unsupportedLinkError
+			if errors.As(err, &unsupported) {
+				return DeploymentPlan{}, models.Fail(models.ParseError, "symbolic links are not supported by the selected library and game filesystems")
+			}
+			return DeploymentPlan{}, ioError(err)
+		}
+		plan, err := PlanWithKinds(mods, l, linker.Symlink, linker.Symlink)
+		plan.Method = method
+		return plan, err
+	case models.DeploymentMethodCopyFirst:
+		return Plan(mods, l)
+	default:
+		return DeploymentPlan{}, invalid(l, fmt.Sprintf("unknown deployment method %q", method))
+	}
 }
 
 func discoverClaims(mods []models.Mod, l Layout) ([]sourceClaim, map[string]map[string]bool, map[string][]string, error) {

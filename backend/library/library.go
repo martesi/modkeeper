@@ -24,13 +24,15 @@ import (
 )
 
 type manifest struct {
-	ID         string                `toml:"id"`
-	Name       string                `toml:"name"`
-	GameRoot   string                `toml:"gameRoot"`
-	RepoRoot   string                `toml:"repoRoot"`
-	SPTVersion string                `toml:"sptVersion"`
-	Mods       map[string]models.Mod `toml:"mods"`
-	IsDirty    bool                  `toml:"isDirty"`
+	ID               string                  `toml:"id"`
+	Name             string                  `toml:"name"`
+	GameRoot         string                  `toml:"gameRoot"`
+	RepoRoot         string                  `toml:"repoRoot"`
+	SPTVersion       string                  `toml:"sptVersion"`
+	Mods             map[string]models.Mod   `toml:"mods"`
+	IsDirty          bool                    `toml:"isDirty"`
+	TargetRuntime    models.TargetRuntime    `toml:"targetRuntime,omitempty"`
+	DeploymentMethod models.DeploymentMethod `toml:"deploymentMethod,omitempty"`
 }
 type cache struct {
 	Mods map[string]any `toml:"mods"`
@@ -39,6 +41,7 @@ type Library struct {
 	manifest                        manifest
 	Root, GameRoot                  string
 	ModsDir, StagingDir, BackupsDir string
+	PolicyUncertain                 bool
 }
 
 func layout(root string) (manifest, cache, string, string, string, error) {
@@ -106,7 +109,7 @@ func Create(game, root, name string) (*Library, error) {
 			return nil, err
 		}
 	}
-	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, RepoRoot: root, SPTVersion: v, Mods: map[string]models.Mod{}}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
+	l := &Library{manifest: manifest{ID: config.NewID(), Name: name, GameRoot: game, RepoRoot: root, SPTVersion: v, Mods: map[string]models.Mod{}, TargetRuntime: models.TargetWindows, DeploymentMethod: models.DeploymentMethodCopyFirst}, Root: root, GameRoot: game, ModsDir: filepath.Join(base, "mods"), StagingDir: filepath.Join(base, "staging"), BackupsDir: filepath.Join(base, "backups")}
 	return l, l.Persist()
 }
 func Load(root string) (*Library, error) {
@@ -126,7 +129,15 @@ func Load(root string) (*Library, error) {
 	if m.Mods == nil {
 		m.Mods = map[string]models.Mod{}
 	}
-	l := &Library{manifest: m, Root: root, GameRoot: game, ModsDir: mods, StagingDir: staging, BackupsDir: backups}
+	_, markerErr := os.Stat(filepath.Join(root, policyUncertainMarker))
+	if markerErr != nil && !os.IsNotExist(markerErr) {
+		return nil, models.Fail(models.InvalidLibrary, root, fmt.Sprintf("deployment policy recovery marker is unreadable: %v", markerErr))
+	}
+	l := &Library{manifest: m, Root: root, GameRoot: game, ModsDir: mods, StagingDir: staging, BackupsDir: backups, PolicyUncertain: markerErr == nil}
+	if l.PolicyUncertain {
+		l.manifest.TargetRuntime = ""
+		l.manifest.DeploymentMethod = ""
+	}
 	return l, nil
 }
 
@@ -389,6 +400,8 @@ type Service struct {
 	installTransactionHook func(string)
 	installMarkerWriter    func(string, installTransaction) error
 	restoreDirtyState      func() error
+	policySyncDir          func(string) error
+	policyHost             string
 	modWrites              sync.Mutex
 	configMu               sync.RWMutex
 }
@@ -435,7 +448,7 @@ func New(path string) (*Service, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Service{Store: &store.AppConfigStore{Path: path, Config: c}, Registry: registry.NewTaskRegistry(), Inspector: process.Default()}, nil
+	return &Service{Store: &store.AppConfigStore{Path: path, Config: c}, Registry: registry.NewTaskRegistry(), Inspector: process.Default(), policySyncDir: syncLibraryDir, policyHost: hostRuntime()}, nil
 }
 func (s *Service) Start() error {
 	s.startupMu.Lock()
@@ -466,6 +479,9 @@ func (s *Service) Start() error {
 				return
 			}
 			s.active = l
+			if l.PolicyUncertain {
+				s.setWarning("A deployment policy save needs recovery. Sync and policy changes are blocked until the policy transaction is reviewed.")
+			}
 			s.Registry.SetActive(l.manifest.ID, true)
 		}()
 		return nil
@@ -723,6 +739,9 @@ func (s *Service) RenameLibrary(id, name string) error {
 	if libraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
 	}
+	if s.policyUncertain(id) {
+		return policyRecoveryRequired()
+	}
 	// current implementation renames the live instance from memory and inactive libraries from
 	// manifest.toml alone; neither path reads cache.toml.
 	if s.active != nil && s.active.manifest.ID == id {
@@ -767,6 +786,9 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 	s.configMu.RUnlock()
 	if knownLibrary.ID == "" && knownLibrary.LibraryRoot == "" {
 		return models.Fail(models.InvalidLibrary, id, "Library not registered")
+	}
+	if s.policyUncertain(knownLibrary.ID) {
+		return policyRecoveryRequired()
 	}
 	// Validate the purge and every recorded deployment artifact BEFORE touching
 	// config or disk, matching the current implementation delete ordering.

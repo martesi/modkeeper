@@ -20,14 +20,18 @@ type LibraryCreationRequirement struct {
 	Name     string  `json:"name"`
 }
 type LibrarySummary struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	GameRoot    string      `json:"gameRoot"`
-	LibraryRoot string      `json:"libraryRoot"`
-	SPTVersion  *string     `json:"sptVersion,omitempty"`
-	CacheStatus CacheStatus `json:"cacheStatus"`
-	DeployStale bool        `json:"deployStale"`
-	UpdatedAt   string      `json:"updatedAt"`
+	ID               string           `json:"id"`
+	Name             string           `json:"name"`
+	GameRoot         string           `json:"gameRoot"`
+	LibraryRoot      string           `json:"libraryRoot"`
+	SPTVersion       *string          `json:"sptVersion,omitempty"`
+	CacheStatus      CacheStatus      `json:"cacheStatus"`
+	DeployStale      bool             `json:"deployStale"`
+	UpdatedAt        string           `json:"updatedAt"`
+	TargetRuntime    TargetRuntime    `json:"targetRuntime"`
+	DeploymentMethod DeploymentMethod `json:"deploymentMethod"`
+	PolicyUncertain  bool             `json:"policyUncertain"`
+	HostRuntime      string           `json:"hostRuntime"`
 }
 type LibraryStub struct {
 	Path string `json:"path"`

@@ -32,12 +32,16 @@ type DeploymentArtifact struct {
 	Fingerprint *string             `toml:"fingerprint,omitempty"`
 }
 type DeploymentState struct {
-	Artifacts   []DeploymentArtifact `toml:"artifacts"`
-	CreatedDirs []string             `toml:"created_dirs"`
+	Artifacts     []DeploymentArtifact    `toml:"artifacts"`
+	CreatedDirs   []string                `toml:"created_dirs"`
+	Method        models.DeploymentMethod `toml:"method,omitempty"`
+	TargetRuntime models.TargetRuntime    `toml:"target_runtime,omitempty"`
 }
 type DeploymentPlan struct {
-	Artifacts   []DeploymentArtifact
-	Directories []string
+	Artifacts     []DeploymentArtifact
+	Directories   []string
+	Method        models.DeploymentMethod
+	TargetRuntime models.TargetRuntime
 }
 
 // The helpers below preserve the error-code/data contract on the wire.

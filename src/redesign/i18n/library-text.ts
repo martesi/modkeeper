@@ -426,6 +426,68 @@ export const libraryText = {
     t({ id: 'library.manage.gameRootLabel', message: 'Game root' }),
   libraryRootLabel: () =>
     t({ id: 'library.manage.libraryRootLabel', message: 'Library root' }),
+  deploymentPolicySection: () =>
+    t({
+      id: 'library.manage.deploymentPolicySection',
+      message: 'Game Runtime and Deployment',
+    }),
+  deploymentPolicyDescription: () =>
+    t({
+      id: 'library.manage.deploymentPolicyDescription',
+      message:
+        'Choose which runtime reads deployed files and how Modkeeper deploys them.',
+    }),
+  targetRuntimeLabel: () =>
+    t({ id: 'library.manage.targetRuntimeLabel', message: 'Game runtime' }),
+  deploymentMethodLabel: () =>
+    t({
+      id: 'library.manage.deploymentMethodLabel',
+      message: 'Deployment method',
+    }),
+  windowsRuntimeUnverified: () =>
+    t({
+      id: 'library.manage.windowsRuntimeUnverified',
+      message: 'Windows — not verified on this platform',
+    }),
+  linuxRuntime: () =>
+    t({ id: 'library.manage.linuxRuntime', message: 'Linux' }),
+  legacyCopyFirst: () =>
+    t({
+      id: 'library.manage.legacyCopyFirst',
+      message: 'Legacy copy-first (existing library)',
+    }),
+  copyMethod: () => t({ id: 'library.manage.copyMethod', message: 'Copy' }),
+  linkMethod: () =>
+    t({ id: 'library.manage.linkMethod', message: 'Symbolic link' }),
+  policyRecoveryRequired: () =>
+    t({
+      id: 'library.manage.policyRecoveryRequired',
+      message:
+        'The saved policy is uncertain. Review the library manifest and recovery marker before Sync or another change.',
+    }),
+  wslPolicyUnverified: () =>
+    t({
+      id: 'library.manage.wslPolicyUnverified',
+      message:
+        'Runtime and deployment choices are disabled in WSL until a Windows-side consumer fixture verifies the path.',
+    }),
+  windowsPolicyUnverified: () =>
+    t({
+      id: 'library.manage.windowsPolicyUnverified',
+      message:
+        'Runtime and deployment choices are disabled until native Windows consumer fixtures verify them.',
+    }),
+  policyActiveIdleOnly: () =>
+    t({
+      id: 'library.manage.policyActiveIdleOnly',
+      message:
+        'Only the active idle library can be changed. Windows and cross-runtime choices remain disabled until verified.',
+    }),
+  saveDeploymentPolicy: () =>
+    t({
+      id: 'library.manage.saveDeploymentPolicy',
+      message: 'Save deployment policy',
+    }),
   copyPath: () => t({ id: 'library.manage.copyPath', message: 'Copy path' }),
   pathCopied: () =>
     t({ id: 'library.manage.pathCopied', message: 'Path copied' }),

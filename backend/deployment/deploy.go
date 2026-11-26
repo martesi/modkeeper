@@ -233,7 +233,7 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 			return e
 		}
 	}
-	return SaveState(l, DeploymentState{plan.Artifacts, sortedKeys(created)})
+	return SaveState(l, DeploymentState{Artifacts: plan.Artifacts, CreatedDirs: sortedKeys(created), Method: plan.Method, TargetRuntime: plan.TargetRuntime})
 }
 func DeployStale(l Layout, mods []models.Mod) (bool, error) {
 	state, e := LoadState(l)
@@ -264,6 +264,22 @@ func DeployStale(l Layout, mods []models.Mod) (bool, error) {
 	return false, nil
 }
 func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (Report, error) {
+	return SyncWithMethod(ctx, l, mods, models.DeploymentMethodCopyFirst, progress)
+}
+
+func SyncWithMethod(ctx context.Context, l Layout, mods []models.Mod, method models.DeploymentMethod, progress Reporter) (Report, error) {
+	target := models.TargetWindows
+	if method != models.DeploymentMethodCopyFirst {
+		target = models.TargetLinux
+	}
+	return SyncWithPolicy(ctx, l, mods, models.DeploymentPolicy{TargetRuntime: target, DeploymentMethod: method}, progress)
+}
+
+func SyncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter) (Report, error) {
+	return syncWithPolicy(ctx, l, mods, policy, progress, probeSymlinkConsumer)
+}
+
+func syncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter, probeLink func(Layout) error) (Report, error) {
 	stage := func(s models.TaskProgressStage) error {
 		if e := ctx.Err(); e != nil {
 			return e
@@ -275,6 +291,19 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 	}
 	if e := stage(models.TaskStageSyncPlan); e != nil {
 		return Report{}, e
+	}
+	if !policy.Valid() {
+		return Report{}, models.Fail(models.ParseError, "invalid deployment policy")
+	}
+	planFor := func(candidate []models.Mod) (DeploymentPlan, error) {
+		if policy.DeploymentMethod == models.DeploymentMethodCopyFirst {
+			plan, err := Plan(candidate, l)
+			plan.TargetRuntime = policy.TargetRuntime
+			return plan, err
+		}
+		plan, err := planWithMethod(candidate, l, policy.DeploymentMethod, probeLink)
+		plan.TargetRuntime = policy.TargetRuntime
+		return plan, err
 	}
 	enabled := make([]models.Mod, 0, len(mods))
 	for _, mod := range mods {
@@ -299,7 +328,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 		if _, excluded := conflicted[mod.ID]; excluded {
 			continue
 		}
-		modPlan, planErr := Plan([]models.Mod{mod}, l)
+		modPlan, planErr := planFor([]models.Mod{mod})
 		if planErr == nil {
 			planErr = Preflight(l, modPlan)
 		}
@@ -326,7 +355,7 @@ func Sync(ctx context.Context, l Layout, mods []models.Mod, progress Reporter) (
 			return Report{}, e
 		}
 	}
-	plan, e := Plan(deployable, l)
+	plan, e := planFor(deployable)
 	if e != nil {
 		return Report{}, e
 	}

@@ -16,6 +16,13 @@ import { FidelityButton } from '../../shared/components/fidelity-button'
 import { FidelityIconButton } from '../../shared/components/fidelity-icon-button'
 import { FidelityInput } from '../../shared/components/fidelity-input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   activeLibraryIdAtom,
   libraryListAtom,
   pendingTasksAtom,
@@ -26,12 +33,15 @@ import {
   deleteLibrary,
   rebuildLibraryCache,
   renameLibrary,
+  setDeploymentPolicy,
 } from '../../data/library-repository'
 import { isLibrarySummary } from '../../data/redesign-types'
 import type {
   LibraryEntry,
   LibraryStub,
   LibrarySummary,
+  DeploymentMethod,
+  TargetRuntime,
 } from '../../data/redesign-types'
 import { openGameRoot, openLibraryRoot } from '../../shared/utils/app-opener'
 import { pickWithNativeOrPathEntry } from '../../shared/utils/picker-gate'
@@ -172,10 +182,25 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
   const [activating, setActivating] = useState(false)
   const [nameDraft, setNameDraft] = useState(library.name)
   const [renaming, setRenaming] = useState(false)
+  const [runtimeDraft, setRuntimeDraft] = useState<TargetRuntime>(
+    library.targetRuntime,
+  )
+  const [methodDraft, setMethodDraft] = useState<DeploymentMethod>(
+    library.deploymentMethod,
+  )
+  const [savingPolicy, setSavingPolicy] = useState(false)
 
   const isActive = library.id === activeLibraryId
   const busy = pendingTasks.some((task) => task.libraryId === library.id)
   const nameDirty = nameDraft.trim() !== library.name && nameDraft.trim() !== ''
+  const policyDirty =
+    runtimeDraft !== library.targetRuntime ||
+    methodDraft !== library.deploymentMethod
+  const policyEditable =
+    isActive &&
+    !busy &&
+    !library.policyUncertain &&
+    library.hostRuntime === 'linux'
 
   async function handleActivate() {
     setActivating(true)
@@ -195,6 +220,35 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
     }
   }
 
+  async function handleSavePolicy() {
+    if (!policyEditable || savingPolicy || !policyDirty) return
+    setSavingPolicy(true)
+    const outcome = await setDeploymentPolicy({
+      libraryId: library.id,
+      targetRuntime: runtimeDraft,
+      deploymentMethod: methodDraft,
+    })
+    const saved = outcome.workspace.libraries.find(
+      (entry) => isLibrarySummary(entry) && entry.id === library.id,
+    )
+    if (saved && isLibrarySummary(saved)) {
+      setRuntimeDraft(saved.targetRuntime)
+      setMethodDraft(saved.deploymentMethod)
+    }
+    setSavingPolicy(false)
+  }
+
+  function changeRuntime(value: string) {
+    if (value !== 'windows' && value !== 'linux') return
+    setRuntimeDraft(value)
+    if (value === 'linux' && methodDraft === 'copy-first')
+      setMethodDraft('copy')
+  }
+
+  function changeMethod(value: string) {
+    if (value === 'copy' || value === 'link') setMethodDraft(value)
+  }
+
   return (
     <>
       <div className="grid gap-5 px-6 py-5 md:grid-cols-[16.25rem_1fr]">
@@ -210,6 +264,10 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
           <SectionLabel
             title={libraryText.pathsSection()}
             description={libraryText.pathsDescription()}
+          />
+          <SectionLabel
+            title={libraryText.deploymentPolicySection()}
+            description={libraryText.deploymentPolicyDescription()}
           />
         </div>
 
@@ -240,6 +298,80 @@ function LibraryDetails({ library }: { library: LibrarySummary }) {
             path={library.libraryRoot}
             onOpen={() => void openLibraryRoot(library)}
           />
+          <div className="mt-5 grid gap-3 rounded-md border border-border bg-secondary/50 p-3">
+            <label className="grid gap-1 text-xs font-semibold text-foreground">
+              {libraryText.targetRuntimeLabel()}
+              <Select
+                value={runtimeDraft}
+                onValueChange={changeRuntime}
+                disabled={!policyEditable || savingPolicy}
+              >
+                <SelectTrigger aria-label={libraryText.targetRuntimeLabel()}>
+                  <SelectValue
+                    placeholder={libraryText.policyRecoveryRequired()}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="windows" disabled>
+                    {libraryText.windowsRuntimeUnverified()}
+                  </SelectItem>
+                  <SelectItem
+                    value="linux"
+                    disabled={library.hostRuntime !== 'linux'}
+                  >
+                    {libraryText.linuxRuntime()}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-foreground">
+              {libraryText.deploymentMethodLabel()}
+              <Select
+                value={methodDraft}
+                onValueChange={changeMethod}
+                disabled={
+                  !policyEditable || runtimeDraft !== 'linux' || savingPolicy
+                }
+              >
+                <SelectTrigger aria-label={libraryText.deploymentMethodLabel()}>
+                  <SelectValue
+                    placeholder={libraryText.policyRecoveryRequired()}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {methodDraft === 'copy-first' && (
+                    <SelectItem value="copy-first" disabled>
+                      {libraryText.legacyCopyFirst()}
+                    </SelectItem>
+                  )}
+                  <SelectItem value="copy">
+                    {libraryText.copyMethod()}
+                  </SelectItem>
+                  <SelectItem value="link">
+                    {libraryText.linkMethod()}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {library.policyUncertain
+                ? libraryText.policyRecoveryRequired()
+                : library.hostRuntime === 'wsl'
+                  ? libraryText.wslPolicyUnverified()
+                  : library.hostRuntime !== 'linux'
+                    ? libraryText.windowsPolicyUnverified()
+                    : libraryText.policyActiveIdleOnly()}
+            </p>
+            <div>
+              <FidelityButton
+                disabled={!policyEditable || !policyDirty || savingPolicy}
+                busy={savingPolicy}
+                onClick={() => void handleSavePolicy()}
+              >
+                {libraryText.saveDeploymentPolicy()}
+              </FidelityButton>
+            </div>
+          </div>
         </div>
       </div>
 
