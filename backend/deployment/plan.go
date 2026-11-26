@@ -14,15 +14,17 @@ import (
 func targetPath(l Layout, p string) string {
 	parts := strings.Split(filepath.ToSlash(p), "/")
 	if parts[0] == "SPT" {
-		return filepath.Join(filepath.Dir(l.Rules.ServerExe), filepath.FromSlash(strings.Join(parts[1:], "/")))
+		return pathKey(filepath.Join(filepath.Dir(l.Rules.ServerExe), filepath.FromSlash(strings.Join(parts[1:], "/"))))
 	}
-	return p
+	return pathKey(p)
 }
+func pathKey(p string) string { return filepath.ToSlash(filepath.Clean(p)) }
 func ancestors(p string) []string {
+	p = pathKey(p)
 	var out []string
 	for p != "." && p != "" {
 		out = append(out, p)
-		p = filepath.Dir(p)
+		p = pathKey(filepath.Dir(filepath.FromSlash(p)))
 	}
 	return out
 }
@@ -53,6 +55,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 	owners := map[string]map[string]bool{}
 	files := map[string][]string{}
 	add := func(p, id string) {
+		p = pathKey(p)
 		if owners[p] == nil {
 			owners[p] = map[string]bool{}
 		}
@@ -87,9 +90,10 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 			if err != nil {
 				return err
 			}
-			if strings.EqualFold(strings.Split(filepath.ToSlash(rel), "/")[0], "SPT_Runtime") && filepath.Dir(l.Rules.ServerExe) != "SPT" {
+			if strings.EqualFold(strings.Split(filepath.ToSlash(rel), "/")[0], "SPT_Runtime") && pathKey(filepath.Dir(l.Rules.ServerExe)) != pathKey("SPT") {
 				return collision(rel)
 			}
+			rel = pathKey(rel)
 			if len(owners[rel]) > 0 {
 				for owner := range owners[rel] {
 					if owner != m.ID && owner != "__SYSTEM__" {
@@ -111,12 +115,12 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 	dirs := map[string]bool{}
 	ownedDir := func(p string) bool {
 		for _, d := range state.CreatedDirs {
-			if d == p {
+			if pathKey(d) == pathKey(p) {
 				return true
 			}
 		}
 		for _, a := range state.Artifacts {
-			if a.Target == p {
+			if pathKey(a.Target) == pathKey(p) {
 				ok, _ := recorded(l, a)
 				if ok {
 					return true
@@ -139,10 +143,10 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 	}
 	for _, id := range sortedKeys(files) {
 		for _, file := range files[id] {
-			parts := strings.Split(file, string(filepath.Separator))
+			parts := strings.Split(file, "/")
 			p := ""
 			for _, part := range parts {
-				p = filepath.Join(p, part)
+				p = pathKey(filepath.Join(p, part))
 				if len(owners[p]) != 1 {
 					continue
 				}
@@ -182,7 +186,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 						if err != nil {
 							return err
 						}
-						t := filepath.Join(target, rel)
+						t := pathKey(filepath.Join(target, rel))
 						if d.IsDir() {
 							dirs[t] = true
 							return nil

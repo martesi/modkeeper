@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { commands, dispatchCommand } from './bridge'
 import { createInMemoryWailsMock, installWailsMock } from './mock'
 import { events } from './events'
+
+// The generated bindings import Wails' browser runtime, which starts a timer
+// that outlives this test's happy-dom window. These tests exercise the bridge,
+// so keep the native runtime outside this unit-test boundary.
+vi.mock('@wailsio/runtime', () => ({
+  Call: { ByID: vi.fn() },
+  CancellablePromise: vi.fn(),
+  Create: { Events: {} },
+  Events: { On: vi.fn(), Once: vi.fn(), Emit: vi.fn() },
+}))
 
 const originalWindow = globalThis.window
 

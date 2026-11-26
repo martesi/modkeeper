@@ -208,8 +208,10 @@ func (s *Service) downloadArchive(v object, root string, progress Progress) (pat
 		return "", fail("IOError", err.Error())
 	}
 	path = file.Name()
-	defer file.Close()
 	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = fail("IOError", "Forge archive staging close failed: "+closeErr.Error())
+		}
 		if err != nil {
 			_ = os.Remove(path)
 		}

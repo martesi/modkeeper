@@ -95,6 +95,54 @@ test('browses, creates and activates a library, then imports a local archive', a
       ),
     ),
   ).toEqual(Buffer.from('fixture payload'))
+
+  const deployed = path.join(
+    server.game,
+    'BepInEx',
+    'plugins',
+    'FixtureMod',
+    'fixture.dll',
+  )
+  await expect(readFile(deployed)).rejects.toMatchObject({ code: 'ENOENT' })
+  const sync = page.getByRole('button', { name: /^sync$/i })
+  const accepted = page.waitForResponse((response) => {
+    const request = response.request()
+    if (
+      request.method() !== 'POST' ||
+      new URL(response.url()).pathname !== '/wails/runtime'
+    )
+      return false
+    const body = request.postDataJSON() as {
+      object?: number
+      method?: number
+      args?: { methodID?: number }
+    }
+    return (
+      body.object === 0 &&
+      body.method === 0 &&
+      body.args?.methodID === 3644304143
+    )
+  })
+  await sync.click()
+  const response = await accepted
+  expect(response.ok()).toBe(true)
+  expect(await response.json()).toMatchObject({ accepted: true })
+  await page.getByRole('button', { name: /^tasks$/i }).click()
+  const request = response.request().postDataJSON() as {
+    args: { args: [{ taskId: string; libraryId: string }] }
+  }
+  const { taskId, libraryId } = request.args.args[0]
+  expect(taskId).toEqual(expect.any(String))
+  expect(libraryId).toEqual(expect.any(String))
+  const syncHistory = page
+    .getByRole('region', { name: /recent task history/i })
+    .locator(
+      `li[data-task-id="${taskId}"][data-library-id="${libraryId}"]`,
+    )
+    .filter({ hasText: 'Sync · Library: game' })
+  await expect(syncHistory).toHaveCount(1)
+  await expect(syncHistory.getByText('Completed', { exact: true })).toBeVisible()
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
 })
 
 test('settings persist across a server restart and fresh browser context', async ({

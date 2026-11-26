@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -765,6 +766,12 @@ func killHelperAtBoundary(t *testing.T, cmd *exec.Cmd, environment map[string]st
 		t.Fatal(err)
 	}
 	waitErr := cmd.Wait()
+	if runtime.GOOS == "windows" {
+		if _, ok := waitErr.(*exec.ExitError); !ok {
+			t.Fatalf("helper did not terminate abnormally at %q: state=%v err=%v", boundary, cmd.ProcessState, waitErr)
+		}
+		return
+	}
 	status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus)
 	if !ok || !status.Signaled() || status.Signal() != syscall.SIGKILL {
 		t.Fatalf("helper was not SIGKILLed at %q: state=%v err=%v", boundary, cmd.ProcessState, waitErr)

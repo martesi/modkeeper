@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'vitest'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -28,6 +28,9 @@ test('cleans its root when the server binary does not exist', async () => {
         env: {
           ...env,
           TMPDIR: temp,
+          TEMP: temp,
+          TMP: temp,
+          MODKEEPER_E2E_ROOT_MARKER: path.join(temp, 'fixture-root'),
           MODKEEPER_E2E_BINARY: path.join(temp, 'missing-server'),
           MODKEEPER_E2E_STARTUP_PROBE: '1',
         },
@@ -38,6 +41,9 @@ test('cleans its root when the server binary does not exist', async () => {
   })
   expect(error).not.toBeNull()
   expect(stdout + stderr).toContain('Server failed to start')
+  const fixtureRoot = await readFile(path.join(temp, 'fixture-root'), 'utf8')
+  expect(path.dirname(fixtureRoot)).toBe(temp)
+  expect(path.basename(fixtureRoot)).toMatch(/^modkeeper-e2e-/)
   expect(
     (await readdir(temp)).filter((name) => name.startsWith('modkeeper-e2e-')),
   ).toEqual([])
