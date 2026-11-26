@@ -406,7 +406,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
   await expect
     .poll(() =>
-      lstat(deployed)
+      lstat(path.dirname(deployed))
         .then((entry) => entry.isSymbolicLink())
         .catch(() => false),
     )
@@ -414,7 +414,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
 
   await syncAndWait(syncButton)
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
-  expect((await lstat(deployed)).isSymbolicLink()).toBe(true)
+  expect((await lstat(path.dirname(deployed))).isSymbolicLink()).toBe(true)
 })
 
 async function syncAndWait(

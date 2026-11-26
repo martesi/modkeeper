@@ -377,7 +377,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 		}
 		_, err := os.Lstat(filepath.Join(l.GameRoot, t))
 		if err == nil {
-			owned := legacy(filepath.Join(l.GameRoot, t))
+			owned := legacy(filepath.Join(l.GameRoot, t)) || ownedDir(t)
 			for _, old := range state.Artifacts {
 				if within(old.Target, t) {
 					ok, e := recorded(l, old)

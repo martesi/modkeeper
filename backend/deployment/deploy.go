@@ -95,6 +95,12 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 				owned = owned || (e == nil && be == nil && within(base, resolved))
 			}
 			if !owned {
+				owned, err = replaceableCreatedDirectory(l, a.Target, state, remove)
+				if err != nil {
+					return nil, ioError(err)
+				}
+			}
+			if !owned {
 				return nil, collision(a.Target)
 			}
 		} else if !os.IsNotExist(err) {
@@ -108,6 +114,60 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 	}
 	return remove, nil
 }
+
+// A copy deployment records directories it created. When a later policy uses
+// directory links, replace such a directory only if every entry in its tree
+// is also tracked and scheduled for removal. This preserves untracked files.
+func replaceableCreatedDirectory(l Layout, target string, state DeploymentState, remove []DeploymentArtifact) (bool, error) {
+	createdDirs := make(map[string]bool, len(state.CreatedDirs))
+	for _, dir := range state.CreatedDirs {
+		createdDirs[pathKey(dir)] = true
+	}
+	if !createdDirs[pathKey(target)] {
+		return false, nil
+	}
+	removedArtifacts := make(map[string]bool, len(remove))
+	for _, artifact := range remove {
+		removedArtifacts[pathKey(artifact.Target)] = true
+	}
+
+	var inspect func(string) (bool, error)
+	inspect = func(dir string) (bool, error) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false, err
+		}
+		for _, entry := range entries {
+			child := filepath.Join(dir, entry.Name())
+			rel, err := filepath.Rel(l.GameRoot, child)
+			if err != nil {
+				return false, err
+			}
+			key := pathKey(rel)
+			info, err := os.Lstat(child)
+			if err != nil {
+				return false, err
+			}
+			if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+				if !createdDirs[key] {
+					return false, nil
+				}
+				ok, err := inspect(child)
+				if err != nil || !ok {
+					return ok, err
+				}
+				continue
+			}
+			if !removedArtifacts[key] {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+
+	return inspect(filepath.Join(l.GameRoot, target))
+}
+
 func Preflight(l Layout, plan DeploymentPlan) error {
 	state, e := LoadState(l)
 	if e != nil {

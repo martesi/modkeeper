@@ -54,6 +54,37 @@ func TestSyncUsesSelectedDeploymentMethod(t *testing.T) {
 	}
 }
 
+func TestSyncCanSwitchCopyDeploymentToLink(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native Linux consumer fixture")
+	}
+	l := fixture(t)
+	m := mod(t, l, "enabled", map[string]string{"BepInEx/plugins/FixtureMod/fixture.dll": "fixture payload"})
+	if _, err := SyncWithMethod(context.Background(), l, []models.Mod{m}, models.DeploymentMethodCopy, nil); err != nil {
+		t.Fatal(err)
+	}
+	userFile := filepath.Join(l.GameRoot, "BepInEx/plugins/FixtureMod/user.txt")
+	write(t, userFile, "preserve me")
+	if _, err := SyncWithMethod(context.Background(), l, []models.Mod{m}, models.DeploymentMethodLink, nil); err == nil {
+		t.Fatal("switch to Link succeeded despite an untracked file in the owned directory")
+	} else {
+		code(t, err, models.FileCollision)
+	}
+	content(t, userFile, "preserve me")
+	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/FixtureMod/fixture.dll"), "fixture payload")
+	must(t, os.Remove(userFile))
+	if _, err := SyncWithMethod(context.Background(), l, []models.Mod{m}, models.DeploymentMethodLink, nil); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(l.GameRoot, "BepInEx/plugins/FixtureMod")
+	info, err := os.Lstat(target)
+	must(t, err)
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("deployed mod directory is not a symlink: %s", target)
+	}
+	content(t, filepath.Join(target, "fixture.dll"), "fixture payload")
+}
+
 func TestLegacySyncPersistsCopyFirstCompatibilityPolicy(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "enabled", map[string]string{"SPT/user/mods/Sentinel/file.txt": "sentinel"})
