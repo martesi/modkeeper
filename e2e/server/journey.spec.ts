@@ -390,6 +390,7 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
   const syncButton = page.getByRole('button', { name: /^sync$/i })
   await syncAndWait(syncButton)
   await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  expect((await lstat(path.dirname(deployed))).isDirectory()).toBe(true)
   expect((await lstat(deployed)).isSymbolicLink()).toBe(false)
 
   await page.getByRole('button', { name: /manage libraries/i }).click()
