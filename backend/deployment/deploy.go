@@ -496,9 +496,6 @@ func syncWithPolicyAndHooks(ctx context.Context, l Layout, mods []models.Mod, po
 	if !policy.Valid() {
 		return Report{}, models.Fail(models.ParseError, "invalid deployment policy")
 	}
-	if e := upgradeLegacyDeployment(l); e != nil {
-		return Report{}, e
-	}
 	planFor := func(candidate []models.Mod) (DeploymentPlan, error) {
 		if policy.DeploymentMethod == models.DeploymentMethodCopyFirst {
 			plan, err := Plan(candidate, l)

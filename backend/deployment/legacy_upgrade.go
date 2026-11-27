@@ -1,30 +1,31 @@
 package deployment
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	"github.com/martes/modkeeper/backend/linker"
+	"github.com/martes/modkeeper/backend/models"
 )
 
-// upgradeLegacyDeployment runs under the mutation lock before planning Sync.
-// Old records contain no durable proof of which game files the app created.
-func upgradeLegacyDeployment(l Layout) error {
-	path := l.Paths().Deployment
+const legacyDeploymentFilename = "deployment.toml"
+
+// checkLegacyDeployment reads the old record only to block adoption of
+// unproven files. New Sync never updates or moves the old record.
+func checkLegacyDeployment(l Layout) error {
+	path := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
-		return ioError(fmt.Errorf("inspect deployment record before upgrade: %w", err))
+		return ioError(err)
 	}
 	if !info.Mode().IsRegular() {
 		return collision(path)
 	}
-
 	f, err := os.Open(path)
 	if err != nil {
 		return ioError(err)
@@ -37,44 +38,32 @@ func upgradeLegacyDeployment(l Layout) error {
 	if !os.SameFile(info, opened) {
 		return collision(path)
 	}
-	raw, err := io.ReadAll(f)
+	var record struct {
+		Artifacts []struct {
+			Target      string              `toml:"target"`
+			Source      string              `toml:"source"`
+			Kind        linker.ArtifactKind `toml:"kind"`
+			Fingerprint *string             `toml:"fingerprint"`
+		} `toml:"artifacts"`
+		CreatedDirs   []string                `toml:"created_dirs"`
+		Method        models.DeploymentMethod `toml:"method"`
+		TargetRuntime models.TargetRuntime    `toml:"target_runtime"`
+	}
+	md, err := toml.NewDecoder(f).Decode(&record)
 	if err != nil {
-		return ioError(err)
-	}
-	var state DeploymentState
-	md, err := toml.Decode(string(raw), &state)
-	if err != nil {
-		return invalid(l, "deployment.toml: "+err.Error())
-	}
-	// Signed/partially signed records must use normal recovery; never "upgrade"
-	// a damaged current record or discard metadata from an unknown format.
-	if md.IsDefined("file_id") || md.IsDefined("receipt") || md.IsDefined("sync_token") {
-		return nil
-	}
-	// Any evidence of recovery-era Sync makes an unsigned record a possible
-	// replacement, not legacy input. The normal path will reject it.
-	if _, err := os.Lstat(filepath.Join(l.LibraryRoot, ownershipKeyName)); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return ioError(err)
-	}
-	journals, err := syncIntentJournalPaths(l)
-	if err != nil {
-		return ioError(err)
-	}
-	for _, journal := range journals {
-		if _, err := os.Lstat(journal); err == nil {
-			return nil
-		} else if !os.IsNotExist(err) {
-			return ioError(err)
-		}
+		return invalid(l, legacyDeploymentFilename+": "+err.Error())
 	}
 	if !md.IsDefined("artifacts") || !md.IsDefined("created_dirs") || len(md.Undecoded()) != 0 {
-		return invalid(l, "deployment.toml is not a recognized legacy deployment record")
+		return invalid(l, legacyDeploymentFilename+" is not a recognized legacy deployment record")
 	}
-	for _, a := range state.Artifacts {
-		if a.FileID != "" || a.Receipt != "" || !contained(l.GameRoot, a.Target, false) {
-			return invalid(l, "deployment.toml has an invalid legacy artifact path")
+	for _, a := range record.Artifacts {
+		if !contained(l.GameRoot, a.Target, false) || !safeRelative(a.Source) {
+			return invalid(l, legacyDeploymentFilename+" has an invalid legacy artifact path")
+		}
+		switch a.Kind {
+		case linker.Copy, linker.Hardlink, linker.Symlink, linker.Junction:
+		default:
+			return invalid(l, legacyDeploymentFilename+" has an invalid legacy artifact kind")
 		}
 		target := filepath.Join(l.GameRoot, a.Target)
 		_, err := os.Lstat(target)
@@ -85,35 +74,6 @@ func upgradeLegacyDeployment(l Layout) error {
 			return ioError(fmt.Errorf("inspect legacy target %q: %w", target, err))
 		}
 	}
-	// Leave all legacy directories alone, even when the record claims them.
-	backup := path + ".pre-recovery"
-	latest, err := os.Lstat(path)
-	if err != nil || !os.SameFile(opened, latest) {
-		return collision(path)
-	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return ioError(err)
-	}
-	now, err := io.ReadAll(f)
-	if err != nil {
-		return ioError(err)
-	}
-	if !bytes.Equal(raw, now) {
-		return collision(path)
-	}
-	// Windows cannot rename the record while os.Open's handle is open.
-	if err := f.Close(); err != nil {
-		return ioError(err)
-	}
-	if err := archiveLegacyRecord(path, backup); err != nil {
-		return ioError(fmt.Errorf("preserve legacy deployment record as %q: %w", backup, err))
-	}
-	archived, err := os.Lstat(backup)
-	if err != nil || !os.SameFile(opened, archived) {
-		return collision(backup)
-	}
-	if err := syncDirectoryDurably(filepath.Dir(path)); err != nil {
-		return ioError(fmt.Errorf("sync legacy deployment record archive: %w", err))
-	}
+	// Legacy directory records never become new ownership claims.
 	return nil
 }

@@ -335,7 +335,7 @@ func (l *Library) persistWithFileSync(includeCache bool, syncFile func(*os.File)
 		m.GameRoot = strings.Repeat("../", depth)
 		m.GameRoot = strings.TrimSuffix(m.GameRoot, "/")
 	}
-	// deployment.toml is owned by the deployment package; rewriting it here
+	// The deployment record is owned by the deployment package; rewriting it here
 	// erased the recorded artifacts and made delete/ownership checks vacuous.
 	type persistEntry struct {
 		file  string
@@ -870,7 +870,7 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		for _, dir := range []string{"mods", "staging", "backups"} {
 			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, dir))
 		}
-		for _, file := range []string{"manifest.toml", "cache.toml", "deployment.toml"} {
+		for _, file := range []string{"manifest.toml", "cache.toml", filepath.Base(depLayout.Paths().Deployment)} {
 			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, file))
 		}
 		if entries, e := os.ReadDir(knownLibrary.LibraryRoot); e == nil && len(entries) == 0 {

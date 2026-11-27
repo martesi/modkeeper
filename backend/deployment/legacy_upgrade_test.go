@@ -26,12 +26,12 @@ kind = 'copy'
 fingerprint = 'legacy-fingerprint'
 `
 			}
-			path := l.Paths().Deployment
+			path := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
 			write(t, path, legacy)
 			m := mod(t, l, "new", map[string]string{"BepInEx/plugins/new.dll": "new payload"})
 			_, err := Sync(context.Background(), l, []models.Mod{m}, nil)
 			must(t, err)
-			content(t, path+".pre-recovery", legacy)
+			content(t, path, legacy)
 			content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/new.dll"), "new payload")
 			if _, err := os.Stat(oldDir); err != nil {
 				t.Fatalf("legacy directory changed: %v", err)
@@ -39,7 +39,7 @@ fingerprint = 'legacy-fingerprint'
 			must(t, releasePinsForMissingLibrary(l))
 			_, err = Sync(context.Background(), l, []models.Mod{m}, nil)
 			must(t, err)
-			content(t, path+".pre-recovery", legacy)
+			content(t, path, legacy)
 		})
 	}
 }
@@ -48,7 +48,7 @@ func TestSyncLeavesExistingLegacyArtifactsAndRecordUntouched(t *testing.T) {
 	l := fixture(t)
 	target := filepath.Join(l.GameRoot, "BepInEx", "plugins", "a.dll")
 	write(t, target, "same bytes")
-	path := l.Paths().Deployment
+	path := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
 	legacy := `created_dirs = []
 [[artifacts]]
 target = 'BepInEx/plugins/a.dll'
@@ -61,20 +61,25 @@ kind = 'copy'
 	code(t, err, models.InvalidLibrary)
 	content(t, target, "same bytes")
 	content(t, path, legacy)
-	absent(t, path+".pre-recovery")
+	absent(t, l.Paths().Deployment)
 	absent(t, l.Paths().SyncIntent)
 }
 
-func TestSyncDoesNotOverwriteExistingLegacyArchive(t *testing.T) {
+func TestSyncRejectsPartiallySignedLegacyRecord(t *testing.T) {
 	l := fixture(t)
-	path := l.Paths().Deployment
-	legacy := "artifacts = []\ncreated_dirs = []\n"
-	write(t, path, legacy)
-	write(t, path+".pre-recovery", "keep me")
+	path := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
+	partial := `created_dirs = []
+[[artifacts]]
+target = 'BepInEx/plugins/a.dll'
+source = 'mods/a/BepInEx/plugins/a.dll'
+kind = 'copy'
+file_id = ''
+`
+	write(t, path, partial)
 	m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "payload"})
 	_, err := Sync(context.Background(), l, []models.Mod{m}, nil)
-	code(t, err, models.IOError)
-	content(t, path, legacy)
-	content(t, path+".pre-recovery", "keep me")
+	code(t, err, models.InvalidLibrary)
+	content(t, path, partial)
+	absent(t, l.Paths().Deployment)
 	absent(t, l.Paths().SyncIntent)
 }

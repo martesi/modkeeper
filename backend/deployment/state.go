@@ -22,7 +22,7 @@ type Layout struct {
 type Paths struct{ Mods, Staging, Backups, Manifest, Cache, Deployment, SyncIntent string }
 
 func (l Layout) Paths() Paths {
-	return Paths{filepath.Join(l.LibraryRoot, "mods"), filepath.Join(l.LibraryRoot, "staging"), filepath.Join(l.LibraryRoot, "backups"), filepath.Join(l.LibraryRoot, "manifest.toml"), filepath.Join(l.LibraryRoot, "cache.toml"), filepath.Join(l.LibraryRoot, "deployment.toml"), filepath.Join(l.LibraryRoot, "sync-intent.toml")}
+	return Paths{filepath.Join(l.LibraryRoot, "mods"), filepath.Join(l.LibraryRoot, "staging"), filepath.Join(l.LibraryRoot, "backups"), filepath.Join(l.LibraryRoot, "manifest.toml"), filepath.Join(l.LibraryRoot, "cache.toml"), filepath.Join(l.LibraryRoot, "deployment-v2.toml"), filepath.Join(l.LibraryRoot, "sync-intent.toml")}
 }
 
 type DeploymentArtifact struct {
@@ -232,16 +232,16 @@ func LoadState(l Layout) (DeploymentState, error) {
 	path := l.Paths().Deployment
 	info, e := os.Lstat(path)
 	if os.IsNotExist(e) {
-		return state, nil
+		return state, checkLegacyDeployment(l)
 	}
 	if e != nil {
-		return state, invalid(l, "deployment.toml: "+e.Error())
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
 	}
 	if !info.Mode().IsRegular() {
-		return state, invalid(l, "deployment.toml is not a regular file")
+		return state, invalid(l, "deployment-v2.toml is not a regular file")
 	}
 	if _, e = toml.DecodeFile(path, &state); e != nil {
-		return state, invalid(l, "deployment.toml: "+e.Error())
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
 	}
 	for i, p := range state.CreatedDirs {
 		if filepath.IsAbs(p) && within(l.GameRoot, p) {

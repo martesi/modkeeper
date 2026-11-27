@@ -200,7 +200,7 @@ test('browses, creates and activates a library, then imports and syncs a local a
   expect(partialManifest).toContain('fixture-mod')
   expect(partialManifest).toContain('fixture-success-mod')
   const partialDeployment = await readFile(
-    path.join(libraryRoot, 'deployment.toml'),
+    path.join(libraryRoot, 'deployment-v2.toml'),
     'utf8',
   )
   expect(partialDeployment).toContain('SuccessMod')
@@ -231,7 +231,7 @@ test('browses, creates and activates a library, then imports and syncs a local a
   expect(successManifest).toContain('fixture-mod')
   expect(successManifest).toContain('fixture-success-mod')
   const successDeployment = await readFile(
-    path.join(libraryRoot, 'deployment.toml'),
+    path.join(libraryRoot, 'deployment-v2.toml'),
     'utf8',
   )
   expect(successDeployment).toContain('SuccessMod')
@@ -495,10 +495,11 @@ test('preserves staged bytes and reports blocked Sync after an interrupted serve
   const deploymentState = path.join(
     server.game,
     '.mod_keeper',
-    'deployment.toml',
+    'deployment-v2.toml',
   )
   const legacyState = 'artifacts = []\ncreated_dirs = []\n'
-  await writeFile(deploymentState, legacyState)
+  const legacyPath = path.join(server.game, '.mod_keeper', 'deployment.toml')
+  await writeFile(legacyPath, legacyState)
   const deployed = path.join(
     server.game,
     'BepInEx',
@@ -521,9 +522,7 @@ test('preserves staged bytes and reports blocked Sync after an interrupted serve
     .getByRole('button', { name: 'Close' })
     .click()
 
-  expect(await readFile(deploymentState + '.pre-recovery', 'utf8')).toBe(
-    legacyState,
-  )
+  expect(await readFile(legacyPath, 'utf8')).toBe(legacyState)
   const syncIntent = path.join(server.game, '.mod_keeper', 'sync-intent.toml')
   const stateBeforeCrash = await readFile(deploymentState)
   await rm(deployed)
