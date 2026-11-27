@@ -146,3 +146,15 @@ func TestSyncPreservesUnexpectedBytesInSignedV2State(t *testing.T) {
 	content(t, path, string(untrusted))
 	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll"), "payload")
 }
+
+func TestEmptyPlanStateRemainsCanonicalAfterClearingDeployment(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "payload"})
+	syncMods(t, l, m)
+	must(t, Deploy(l, DeploymentPlan{}))
+	state, err := LoadState(l)
+	must(t, err)
+	if len(state.Artifacts) != 0 {
+		t.Fatal("cleared deployment retained artifacts")
+	}
+}

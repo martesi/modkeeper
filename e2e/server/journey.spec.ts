@@ -92,6 +92,12 @@ test('browses, creates and activates a library, then imports and syncs a local a
     .getByLabel('Game root path')
     .fill(path.join(server.root, 'second-game'))
   await secondPicker.getByRole('button', { name: 'Use path' }).click()
+  await expect(
+    dialog.getByRole('tab', { name: 'second-game', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true')
+  await expect(
+    dialog.getByRole('button', { name: /^activated$/i }),
+  ).toBeDisabled()
   await dialog.getByRole('tab', { name: 'game', exact: true }).click()
   await dialog.getByRole('button', { name: /^activate$/i }).click()
   await expect(
@@ -356,6 +362,12 @@ test('saves Copy and Link policy, switches libraries, reloads, and syncs', async
     .fill(path.join(server.root, 'second-game'))
   await picker.getByRole('button', { name: 'Use path' }).click()
   dialog = page.getByRole('dialog')
+  await expect(
+    dialog.getByRole('tab', { name: 'second-game', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true')
+  await expect(
+    dialog.getByRole('button', { name: /^activated$/i }),
+  ).toBeDisabled()
   await dialog.getByRole('tab', { name: 'game', exact: true }).click()
   await expect(
     dialog.getByRole('button', { name: /^save deployment policy$/i }),

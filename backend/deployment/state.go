@@ -229,11 +229,11 @@ func equal(a, b DeploymentArtifact) bool {
 	return pathKey(a.Target) == pathKey(b.Target) && pathKey(a.Source) == pathKey(b.Source) && a.Kind == b.Kind && ((a.Fingerprint == nil && b.Fingerprint == nil) || (a.Fingerprint != nil && b.Fingerprint != nil && *a.Fingerprint == *b.Fingerprint))
 }
 func LoadState(l Layout) (DeploymentState, error) {
-	state := DeploymentState{Artifacts: []DeploymentArtifact{}, CreatedDirs: []string{}}
+	var state DeploymentState
 	path := l.Paths().Deployment
 	info, e := os.Lstat(path)
 	if os.IsNotExist(e) {
-		return state, checkLegacyDeployment(l)
+		return DeploymentState{Artifacts: []DeploymentArtifact{}, CreatedDirs: []string{}}, checkLegacyDeployment(l)
 	}
 	if e != nil {
 		return state, invalid(l, "deployment-v2.toml: "+e.Error())
