@@ -492,6 +492,13 @@ test('preserves staged bytes and reports blocked Sync after an interrupted serve
     ),
   ).toEqual(Buffer.from('fixture payload'))
 
+  const deploymentState = path.join(
+    server.game,
+    '.mod_keeper',
+    'deployment.toml',
+  )
+  const legacyState = 'artifacts = []\ncreated_dirs = []\n'
+  await writeFile(deploymentState, legacyState)
   const deployed = path.join(
     server.game,
     'BepInEx',
@@ -514,10 +521,8 @@ test('preserves staged bytes and reports blocked Sync after an interrupted serve
     .getByRole('button', { name: 'Close' })
     .click()
 
-  const deploymentState = path.join(
-    server.game,
-    '.mod_keeper',
-    'deployment.toml',
+  expect(await readFile(deploymentState + '.pre-recovery', 'utf8')).toBe(
+    legacyState,
   )
   const syncIntent = path.join(server.game, '.mod_keeper', 'sync-intent.toml')
   const stateBeforeCrash = await readFile(deploymentState)
