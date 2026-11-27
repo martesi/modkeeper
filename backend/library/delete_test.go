@@ -19,6 +19,12 @@ import (
 func deleteFixture(t *testing.T) (*testenv.Env, *Service) {
 	t.Helper()
 	env := testenv.New(t)
+	t.Cleanup(func() {
+		if err := deployment.CloseLiveDeploymentStates(); err != nil {
+			t.Errorf("close deployment pins: %v", err)
+		}
+	})
+
 	svc, err := New(filepath.Join(env.Root, "config.toml"))
 	if err != nil {
 		t.Fatal(err)

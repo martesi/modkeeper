@@ -442,3 +442,125 @@ async function chooseDeploymentPolicy(
   await deploymentMethod.click()
   await page.getByRole('option', { name: method, exact: true }).click()
 }
+
+test('preserves staged bytes and reports blocked Sync after an interrupted server restart', async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.url)
+  await page.getByRole('button', { name: /manage libraries/i }).click()
+  await page.getByRole('button', { name: /add library/i }).click()
+  const picker = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Game root path') })
+  await picker.getByRole('button', { name: 'Browse folders' }).click()
+  await picker.getByRole('button', { name: 'game/', exact: true }).click()
+  await picker.getByRole('button', { name: 'Select this folder' }).click()
+  await expect(picker.getByLabel('Game root path')).toHaveValue(server.game)
+  await picker.getByRole('button', { name: 'Use path' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Add mod', exact: true }).click()
+  const archiveDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByLabel('Archive paths') })
+  await archiveDialog.getByLabel('Archive paths').fill(server.archive)
+  await archiveDialog.getByRole('button', { name: 'Use path' }).click()
+  await expect(
+    page.getByText('fixture-mod', { exact: false }).first(),
+  ).toBeVisible()
+  await expect
+    .poll(async () =>
+      readFile(
+        path.join(server.game, '.mod_keeper', 'manifest.toml'),
+        'utf8',
+      ).catch(() => ''),
+    )
+    .toContain('fixture-mod')
+  const modsDir = path.join(server.game, '.mod_keeper', 'mods')
+  const mods = await readdir(modsDir)
+  expect(mods).toHaveLength(1)
+  expect(
+    await readFile(
+      path.join(
+        modsDir,
+        mods[0],
+        'BepInEx',
+        'plugins',
+        'FixtureMod',
+        'fixture.dll',
+      ),
+    ),
+  ).toEqual(Buffer.from('fixture payload'))
+
+  const deployed = path.join(
+    server.game,
+    'BepInEx',
+    'plugins',
+    'FixtureMod',
+    'fixture.dll',
+  )
+  await expect(readFile(deployed)).rejects.toMatchObject({ code: 'ENOENT' })
+  const sync = page.getByRole('button', { name: /^sync$/i })
+  const initial = await runSync(page, sync)
+  await page.getByRole('button', { name: /^tasks$/i }).click()
+  const syncHistory = getSyncHistory(page, initial.taskId, initial.libraryId)
+  await expect(syncHistory).toHaveCount(1)
+  await expect(
+    syncHistory.getByText('Completed', { exact: true }),
+  ).toBeVisible()
+  await expect.poll(() => readFile(deployed, 'utf8')).toBe('fixture payload')
+  await page
+    .getByRole('dialog', { name: 'Tasks' })
+    .getByRole('button', { name: 'Close' })
+    .click()
+
+  const deploymentState = path.join(
+    server.game,
+    '.mod_keeper',
+    'deployment.toml',
+  )
+  const syncIntent = path.join(server.game, '.mod_keeper', 'sync-intent.toml')
+  const stateBeforeCrash = await readFile(deploymentState)
+  await rm(deployed)
+  await server.pauseAtSyncBoundary('during-staging')
+  await runSync(page, sync)
+  await server.waitForSyncBoundary('during-staging')
+  await server.crash()
+
+  const intentBeforeRecovery = await readFile(syncIntent)
+  const stagePath = await findSyncStage(server.game)
+  const stageBeforeRecovery = await readFile(stagePath)
+  await server.restart()
+  await page.goto(server.url)
+  const retryTask = await runSync(
+    page,
+    page.getByRole('button', { name: /^sync$/i }),
+  )
+  await page.getByRole('button', { name: /^tasks$/i }).click()
+  const retryHistory = page
+    .getByRole('region', { name: /recent task history/i })
+    .locator(
+      `li[data-task-id="${retryTask.taskId}"][data-library-id="${retryTask.libraryId}"]`,
+    )
+  await expect(retryHistory).toBeVisible()
+  await retryHistory.locator('summary').click()
+  await expect(retryHistory).toContainText('Operation failed')
+  expect(await readFile(deployed).catch(() => undefined)).toBeUndefined()
+  expect(await readFile(stagePath)).toEqual(stageBeforeRecovery)
+  expect(await readFile(syncIntent)).toEqual(intentBeforeRecovery)
+  expect(await readFile(deploymentState)).toEqual(stateBeforeCrash)
+})
+
+async function findSyncStage(gameRoot: string): Promise<string> {
+  const plugins = path.join(gameRoot, 'BepInEx', 'plugins')
+  const stack = [plugins]
+  while (stack.length > 0) {
+    const directory = stack.pop()!
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const candidate = path.join(directory, entry.name)
+      if (entry.name.startsWith('.modkeeper-stage-')) return candidate
+      if (entry.isDirectory()) stack.push(candidate)
+    }
+  }
+  throw new Error('Sync did not leave an observable staging object')
+}

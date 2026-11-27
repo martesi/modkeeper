@@ -1,5 +1,13 @@
 import { test as base } from '@playwright/test'
-import { cp, copyFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -12,6 +20,11 @@ interface ServerFixture {
     game: string
     archive: string
     successArchive: string
+    syncHookDir: string
+    pauseAtSyncBoundary: (boundary: string) => Promise<void>
+    waitForSyncBoundary: (boundary: string) => Promise<void>
+    releaseSyncBoundary: () => Promise<void>
+    crash: () => Promise<void>
     restart: () => Promise<void>
   }
 }
@@ -38,6 +51,8 @@ export const test = base.extend<ServerFixture>({
       const archive = path.join(root, 'fixture-mod.zip')
       await copyFile(path.resolve('e2e/server/fixture-mod.zip'), archive)
       const successArchive = path.resolve('e2e/server/fixture-success-mod.zip')
+      const syncHookDir = path.join(root, 'sync-hook')
+      await mkdir(syncHookDir)
       const port = await freePort()
       const url = `http://127.0.0.1:${port}`
       const env: NodeJS.ProcessEnv = {
@@ -51,6 +66,7 @@ export const test = base.extend<ServerFixture>({
         XDG_CACHE_HOME: path.join(root, 'cache'),
         MODKEEPER_SERVER_PORT: String(port),
         MODKEEPER_SERVER_HOST: '127.0.0.1',
+        MODKEEPER_E2E_SYNC_HOOK_DIR: syncHookDir,
       }
       delete env.VITE_E2E_MOCK
       delete env.VITE_E2E_TASK_PROGRESS
@@ -59,8 +75,8 @@ export const test = base.extend<ServerFixture>({
         path.resolve(
           'build/ci',
           process.platform === 'win32'
-            ? 'modkeeper-server.exe'
-            : 'modkeeper-server',
+            ? 'modkeeper-server-e2e.exe'
+            : 'modkeeper-server-e2e',
         )
       serverProcess = startServer(executable, env, url)
       await serverProcess.ready
@@ -70,9 +86,27 @@ export const test = base.extend<ServerFixture>({
         game,
         archive,
         successArchive,
-        restart: async () => {
+        syncHookDir,
+        pauseAtSyncBoundary: async (boundary) => {
+          await rm(path.join(syncHookDir, 'release'), { force: true })
+          await rm(path.join(syncHookDir, 'reached'), { force: true })
+          await writeFile(path.join(syncHookDir, 'pause-at'), boundary)
+        },
+        waitForSyncBoundary: async (boundary) =>
+          waitForFileContent(path.join(syncHookDir, 'reached'), boundary),
+        releaseSyncBoundary: async () =>
+          writeFile(path.join(syncHookDir, 'release'), 'continue'),
+        crash: async () => {
           if (!serverProcess) throw new Error('Server has not started')
-          await stopServer(serverProcess.child, serverProcess.closed)
+          const crashed = serverProcess
+          if (!crashed.child.kill('SIGKILL'))
+            throw new Error('Could not interrupt the real server process')
+          await crashed.closed
+          serverProcess = undefined
+        },
+        restart: async () => {
+          if (serverProcess)
+            await stopServer(serverProcess.child, serverProcess.closed)
           serverProcess = startServer(executable, env, url)
           await serverProcess.ready
         },
@@ -84,6 +118,19 @@ export const test = base.extend<ServerFixture>({
     })
   },
 })
+
+async function waitForFileContent(
+  pathname: string,
+  expected: string,
+): Promise<void> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const content = await readFile(pathname, 'utf8').catch(() => '')
+    if (content.trim() === expected) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`Server did not reach Sync boundary ${expected}`)
+}
 
 async function freePort(): Promise<number> {
   const server = createServer()

@@ -150,11 +150,17 @@ func syncLinks(links []purgeLink) error {
 // ValidatePurge runs the purge preflight without mutating anything, so callers
 // can reject a destructive operation before removing registrations.
 func ValidatePurge(l Layout) error {
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
 	_, err := planPurge(l)
 	return err
 }
 
 func Purge(l Layout, _ []models.Mod) error {
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
 	return purge(l, nil)
 }
 
@@ -163,6 +169,9 @@ func Purge(l Layout, _ []models.Mod) error {
 // the package-wide purge lock is held. A non-nil callback must not call Purge
 // or ValidatePurge; production callers should use Purge, which passes nil.
 func PurgeWithProgress(l Layout, _ []models.Mod, afterQuarantine func()) error {
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
 	return purge(l, afterQuarantine)
 }
 

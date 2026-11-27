@@ -21,7 +21,6 @@ func targetPath(l Layout, p string) string {
 	}
 	return pathKey(p)
 }
-func pathKey(p string) string { return filepath.ToSlash(filepath.Clean(p)) }
 func ancestors(p string) []string {
 	p = pathKey(p)
 	var out []string
@@ -259,18 +258,6 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 		}
 		return false
 	}
-	legacy := func(p string) bool {
-		raw, e := os.Readlink(p)
-		if e != nil {
-			return false
-		}
-		if !filepath.IsAbs(raw) {
-			raw = filepath.Join(filepath.Dir(p), raw)
-		}
-		resolved, e := filepath.EvalSymlinks(raw)
-		base, be := filepath.EvalSymlinks(l.LibraryRoot)
-		return e == nil && be == nil && within(base, resolved)
-	}
 	for _, id := range sortedKeys(files) {
 		for _, file := range files[id] {
 			parts := strings.Split(file, "/")
@@ -296,7 +283,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 					if err != nil && !os.IsNotExist(err) {
 						return DeploymentPlan{}, ioError(err)
 					}
-					if err == nil && !ownedDir(target) && !legacy(dest) {
+					if err == nil && !ownedDir(target) {
 						protected := false
 						for _, r := range ProtectedPaths(l.Rules) {
 							if within(r, target) {
@@ -332,7 +319,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 						if err != nil {
 							return err
 						}
-						selected[t] = DeploymentArtifact{t, s, kind, &h}
+						selected[t] = DeploymentArtifact{Target: t, Source: s, Kind: kind, Fingerprint: &h}
 						return nil
 					})
 					if err != nil {
@@ -368,7 +355,7 @@ func PlanWithKinds(mods []models.Mod, l Layout, fileKind, dirKind linker.Artifac
 		}
 		_, err := os.Lstat(filepath.Join(l.GameRoot, t))
 		if err == nil {
-			owned := legacy(filepath.Join(l.GameRoot, t)) || ownedDir(t)
+			owned := ownedDir(t)
 			for _, old := range state.Artifacts {
 				if within(old.Target, t) {
 					ok, e := recorded(l, old)

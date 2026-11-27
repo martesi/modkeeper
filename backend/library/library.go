@@ -560,6 +560,24 @@ func (s *Service) TakeStartupWarning() *string {
 }
 
 func strPtr(s string) *string { return &s }
+
+func releaseLibraryPins(l *Library) error {
+	if l == nil {
+		return nil
+	}
+	rules, err := spt.Discover(l.GameRoot)
+	if err != nil {
+		return err
+	}
+	return deployment.ReleaseLibraryPins(deployment.Layout{LibraryRoot: l.Root, GameRoot: l.GameRoot, Rules: rules})
+}
+
+func (s *Service) releasePinsAfterTransition(l *Library) {
+	if err := releaseLibraryPins(l); err != nil {
+		s.setWarning(fmt.Sprintf("Library transition completed, but releasing ownership handles for %q failed: %v", l.Root, err))
+	}
+}
+
 func (s *Service) tryBeginLibraryTransition() error {
 	if !s.libraryMu.TryLock() {
 		return models.Fail(models.LibraryBusy)
@@ -619,6 +637,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 						s.setWarning(err.Error())
 						return err
 					}
+					previous := s.active
 					if err := s.updateConfigAndSave(func(cfg *config.AppConfig) {
 						cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
 						cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
@@ -627,6 +646,9 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 					}
 					s.active = l
 					s.Registry.SetActive(l.manifest.ID, true)
+					if previous != nil && previous.manifest.ID != l.manifest.ID {
+						s.releasePinsAfterTransition(previous)
+					}
 					return nil
 				}
 				return loadErr
@@ -664,6 +686,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 				s.setWarning(err.Error())
 				return err
 			}
+			previous := s.active
 			if err := s.updateConfigAndSave(func(cfg *config.AppConfig) {
 				cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: root})
 				cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
@@ -672,6 +695,9 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 			}
 			s.active = l
 			s.Registry.SetActive(l.manifest.ID, true)
+			if previous != nil && previous.manifest.ID != l.manifest.ID {
+				s.releasePinsAfterTransition(previous)
+			}
 			return nil
 		}
 	}
@@ -682,6 +708,7 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	if e != nil {
 		return e
 	}
+	previous := s.active
 	if e = s.updateConfigAndSave(func(cfg *config.AppConfig) {
 		cfg.UpsertLibrary(config.KnownLibrary{ID: l.manifest.ID, LibraryRoot: l.Root})
 		cfg.AppState.ActiveLibraryID = strPtr(l.manifest.ID)
@@ -690,6 +717,9 @@ func (s *Service) CreateLibrary(in models.CreateLibraryInput) error {
 	}
 	s.active = l
 	s.Registry.SetActive(l.manifest.ID, true)
+	if previous != nil && previous.manifest.ID != l.manifest.ID {
+		s.releasePinsAfterTransition(previous)
+	}
 	return nil
 }
 func (s *Service) ActivateLibrary(id string) error {
@@ -715,6 +745,7 @@ func (s *Service) ActivateLibrary(id string) error {
 		s.setWarning(e.Error())
 		return e
 	}
+	previous := s.active
 	if e = s.updateConfigAndSave(func(cfg *config.AppConfig) {
 		cfg.AppState.ActiveLibraryID = strPtr(id)
 	}); e != nil {
@@ -722,6 +753,9 @@ func (s *Service) ActivateLibrary(id string) error {
 	}
 	s.active = l
 	s.Registry.SetActive(id, true)
+	if previous != nil && previous.manifest.ID != l.manifest.ID {
+		s.releasePinsAfterTransition(previous)
+	}
 	return nil
 }
 func (s *Service) RenameLibrary(id, name string) error {

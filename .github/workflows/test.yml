@@ -102,6 +102,7 @@ jobs:
             go build -trimpath -o build/ci/modkeeper .
             # Wails Linux CGO support files otherwise link GTK/WebKit in server builds.
             CGO_ENABLED=0 go build -trimpath -tags server -o build/ci/modkeeper-server .
+            CGO_ENABLED=0 go build -trimpath -tags server,e2e -o build/ci/modkeeper-server-e2e .
           '
 
       - name: Smoke-test server mode
@@ -252,6 +253,8 @@ jobs:
           go build -trimpath -o build/ci/modkeeper.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -trimpath -tags server -o build/ci/modkeeper-server.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -trimpath -tags server,e2e -o build/ci/modkeeper-server-e2e.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke-test server mode
         run: |
