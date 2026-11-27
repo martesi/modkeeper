@@ -83,3 +83,43 @@ file_id = ''
 	absent(t, l.Paths().Deployment)
 	absent(t, l.Paths().SyncIntent)
 }
+
+func TestForeignV2RecordDoesNotBypassLegacySafety(t *testing.T) {
+	l := fixture(t)
+	target := filepath.Join(l.GameRoot, "BepInEx", "plugins", "old.dll")
+	write(t, target, "old bytes")
+	old := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
+	legacy := `created_dirs = []
+[[artifacts]]
+target = 'BepInEx/plugins/old.dll'
+source = 'mods/old/BepInEx/plugins/old.dll'
+kind = 'copy'
+`
+	write(t, old, legacy)
+	foreign := "artifacts = []\ncreated_dirs = []\n"
+	write(t, l.Paths().Deployment, foreign)
+	m := mod(t, l, "new", map[string]string{"BepInEx/plugins/new.dll": "new bytes"})
+	_, err := Sync(context.Background(), l, []models.Mod{m}, nil)
+	code(t, err, models.FileCollision)
+	code(t, VerifyOwnership(l), models.FileCollision)
+	content(t, target, "old bytes")
+	content(t, old, legacy)
+	content(t, l.Paths().Deployment, foreign)
+	absent(t, l.Paths().SyncIntent)
+	absent(t, filepath.Join(l.GameRoot, "BepInEx", "plugins", "new.dll"))
+}
+
+func TestFirstUpgradeSyncRecoversAfterIntentOnlyCrash(t *testing.T) {
+	l := fixture(t)
+	old := filepath.Join(l.LibraryRoot, legacyDeploymentFilename)
+	legacy := "artifacts = []\ncreated_dirs = []\n"
+	write(t, old, legacy)
+	m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "payload"})
+	killSyncChildAt(t, l, "intent-persisted")
+	absent(t, l.Paths().Deployment)
+	content(t, old, legacy)
+	_, err := Sync(context.Background(), l, []models.Mod{m}, nil)
+	must(t, err)
+	content(t, old, legacy)
+	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll"), "payload")
+}

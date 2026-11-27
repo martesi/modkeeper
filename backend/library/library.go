@@ -870,7 +870,7 @@ func (s *Service) DeleteLibrary(id string, deleteFiles bool) error {
 		for _, dir := range []string{"mods", "staging", "backups"} {
 			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, dir))
 		}
-		for _, file := range []string{"manifest.toml", "cache.toml", filepath.Base(depLayout.Paths().Deployment)} {
+		for _, file := range []string{"manifest.toml", "cache.toml"} {
 			_ = os.Remove(filepath.Join(knownLibrary.LibraryRoot, file))
 		}
 		if entries, e := os.ReadDir(knownLibrary.LibraryRoot); e == nil && len(entries) == 0 {

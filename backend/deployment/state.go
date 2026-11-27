@@ -243,6 +243,12 @@ func LoadState(l Layout) (DeploymentState, error) {
 	if _, e = toml.DecodeFile(path, &state); e != nil {
 		return state, invalid(l, "deployment-v2.toml: "+e.Error())
 	}
+	// A present record is not proof of a completed upgrade. Reject foreign,
+	// partial or replaced v2 metadata before any planner or purge can use it.
+	id, err := fileIdentity(path)
+	if err != nil || state.FileID != id || !verifyDeploymentStateReceipt(l, state) {
+		return state, collision(path)
+	}
 	for i, p := range state.CreatedDirs {
 		if filepath.IsAbs(p) && within(l.GameRoot, p) {
 			rel, _ := filepath.Rel(l.GameRoot, p)
