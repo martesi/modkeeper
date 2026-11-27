@@ -532,10 +532,17 @@ func TestWindowsReconcilesLegacyBackslashCopyState(t *testing.T) {
 	for i := range state.CreatedDirs {
 		state.CreatedDirs[i] = filepath.FromSlash(state.CreatedDirs[i])
 	}
-	must(t, SaveState(l, state))
+	// Restore the known bytes before sealing the legacy-path record. Saving
+	// while the contents are foreign correctly drops the artifact's receipt.
 	write(t, target, "owned")
+	must(t, SaveState(l, state))
 	// No live directory identity survives a restart of a legacy deployment.
 	must(t, releaseLiveArtifactsForLibrary(l))
+	state, err = LoadState(l)
+	must(t, err)
+	if !verifyOwnershipReceipt(l, state.Artifacts[0], target) {
+		t.Fatal("legacy-path copy did not retain valid durable ownership")
+	}
 	must(t, Deploy(l, DeploymentPlan{}))
 	absent(t, target)
 	state, err = LoadState(l)

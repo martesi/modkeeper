@@ -125,7 +125,7 @@ jobs:
       - name: Playwright real-server journeys
         run: |
           set -o pipefail
-          nix develop .#e2e -c bun run test:e2e:server 2>&1 | tee "$RUNNER_TEMP/e2e-server.log"
+          nix develop .#e2e -c bun run test:e2e:server --reporter=list 2>&1 | tee "$RUNNER_TEMP/e2e-server.log"
 
       - name: Upload Linux E2E diagnostics
         if: failure()
@@ -277,7 +277,7 @@ jobs:
         run: bunx playwright install chromium
       - name: Playwright real-server journeys
         run: |
-          bun run test:e2e:server 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/e2e-server.log"
+          bun run test:e2e:server --reporter=list 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/e2e-server.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows diagnostics
         if: failure()
