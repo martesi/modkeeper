@@ -206,11 +206,11 @@ func writeDeploymentStateWithFileOps(l Layout, state DeploymentState, persist fu
 		if !owned {
 			return collision(path)
 		}
-		identity, err := fileIdentity(path)
+		previous, err := LoadState(l)
 		if err != nil {
-			return ioError(err)
+			return err
 		}
-		state.FileID = identity
+		state.FileID = previous.FileID
 	} else {
 		var file *os.File
 		info, err := os.Lstat(path)
@@ -271,12 +271,12 @@ func writeDeploymentStateWithFileOps(l Layout, state DeploymentState, persist fu
 	if err := sealDeploymentState(l, &state); err != nil {
 		return err
 	}
-	var data bytes.Buffer
-	if err := toml.NewEncoder(&data).Encode(state); err != nil {
+	data, err := encodeDeploymentState(state)
+	if err != nil {
 		return ioError(err)
 	}
 	if created {
-		if err := persist(current.file, data.Bytes()); err != nil {
+		if err := persist(current.file, data); err != nil {
 			_ = current.object.close()
 			_ = current.file.Close()
 			return ioError(fmt.Errorf("write new deployment state: %w", err))
@@ -288,7 +288,7 @@ func writeDeploymentStateWithFileOps(l Layout, state DeploymentState, persist fu
 		if _, err := current.file.Seek(0, 0); err != nil {
 			return ioError(fmt.Errorf("seek owned deployment state: %w", err))
 		}
-		if _, err := current.file.Write(data.Bytes()); err != nil {
+		if _, err := current.file.Write(data); err != nil {
 			return ioError(fmt.Errorf("write owned deployment state: %w", err))
 		}
 		if err := current.file.Sync(); err != nil {
@@ -315,4 +315,12 @@ func writeDeploymentStateWithFileOps(l Layout, state DeploymentState, persist fu
 	}
 	liveDeploymentStates.byPath[key] = current
 	return nil
+}
+
+// A signed state has one exact on-disk representation. Re-encoding the parsed
+// fields alone would authenticate a record containing edits we don't decode.
+func encodeDeploymentState(state DeploymentState) ([]byte, error) {
+	var data bytes.Buffer
+	err := toml.NewEncoder(&data).Encode(state)
+	return data.Bytes(), err
 }

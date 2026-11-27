@@ -2,6 +2,7 @@
 package deployment
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
@@ -240,8 +241,16 @@ func LoadState(l Layout) (DeploymentState, error) {
 	if !info.Mode().IsRegular() {
 		return state, invalid(l, "deployment-v2.toml is not a regular file")
 	}
-	if _, e = toml.DecodeFile(path, &state); e != nil {
+	data, e := os.ReadFile(path)
+	if e != nil {
 		return state, invalid(l, "deployment-v2.toml: "+e.Error())
+	}
+	if _, e = toml.Decode(string(data), &state); e != nil {
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
+	}
+	canonical, e := encodeDeploymentState(state)
+	if e != nil || !bytes.Equal(data, canonical) {
+		return state, collision(path)
 	}
 	// A present record is not proof of a completed upgrade. Reject foreign,
 	// partial or replaced v2 metadata before any planner or purge can use it.

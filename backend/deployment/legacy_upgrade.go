@@ -68,7 +68,7 @@ func checkLegacyDeployment(l Layout) error {
 		target := filepath.Join(l.GameRoot, a.Target)
 		_, err := os.Lstat(target)
 		if err == nil || isLink(target) {
-			return invalid(l, fmt.Sprintf("Legacy deployment still has %q. Back up or undeploy those files before upgrading; ModKeeper has not changed the game files.", target))
+			return invalid(l, fmt.Sprintf("Legacy deployment still has %q. Undeploy those files or move them out of the game folder after backing them up; ModKeeper has not changed the game files.", target))
 		}
 		if !os.IsNotExist(err) {
 			return ioError(fmt.Errorf("inspect legacy target %q: %w", target, err))

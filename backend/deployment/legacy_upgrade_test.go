@@ -123,3 +123,26 @@ func TestFirstUpgradeSyncRecoversAfterIntentOnlyCrash(t *testing.T) {
 	content(t, old, legacy)
 	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll"), "payload")
 }
+
+func TestSyncPreservesUnexpectedBytesInSignedV2State(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "payload"})
+	syncMods(t, l, m)
+	path := l.Paths().Deployment
+	state, err := LoadState(l)
+	must(t, err)
+	before, err := os.ReadFile(path)
+	must(t, err)
+	untrusted := append(before, []byte("\n# external edit must stay untouched\n")...)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	must(t, err)
+	_, err = f.Write(untrusted[len(before):])
+	must(t, err)
+	must(t, f.Close())
+
+	code(t, SaveState(l, state), models.FileCollision)
+	_, err = Sync(context.Background(), l, []models.Mod{m}, nil)
+	code(t, err, models.FileCollision)
+	content(t, path, string(untrusted))
+	content(t, filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll"), "payload")
+}
