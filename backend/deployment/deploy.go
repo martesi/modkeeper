@@ -3,11 +3,12 @@ package deployment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/martes/modkeeper/backend/linker"
 	"github.com/martes/modkeeper/backend/models"
 	"os"
 	"path/filepath"
-	"sort"
+	"reflect"
 	"strings"
 )
 
@@ -23,6 +24,20 @@ type ModFailure struct {
 type Report struct {
 	Failures []ModFailure
 	Deployed int
+}
+
+func ensureAbsentTarget(target, label string) error {
+	_, err := os.Lstat(target)
+	if err == nil {
+		return collision(label)
+	}
+	if os.IsNotExist(err) {
+		if isLink(target) {
+			return collision(label)
+		}
+		return nil
+	}
+	return ioError(err)
 }
 
 func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]DeploymentArtifact, error) {
@@ -52,6 +67,9 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 		}
 		_, e := os.Lstat(filepath.Join(l.GameRoot, a.Target))
 		if os.IsNotExist(e) {
+			if isLink(filepath.Join(l.GameRoot, a.Target)) {
+				return nil, collision(a.Target)
+			}
 			continue
 		}
 		if e != nil {
@@ -66,7 +84,8 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 		}
 		remove = append(remove, a)
 	}
-	for _, a := range plan.Artifacts {
+	for i := range plan.Artifacts {
+		a := plan.Artifacts[i]
 		if !contained(l.GameRoot, a.Target, false) {
 			return nil, collision(a.Target)
 		}
@@ -77,22 +96,13 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 		if err == nil {
 			owned := false
 			for _, old := range state.Artifacts {
-				if old.Target == a.Target {
+				if pathKey(old.Target) == pathKey(a.Target) {
 					ok, e := recorded(l, old)
 					if e != nil {
 						return nil, ioError(e)
 					}
 					owned = owned || ok
 				}
-			}
-			// Compatibility links are removed only after the full purge preflight.
-			if raw, e := os.Readlink(filepath.Join(l.GameRoot, a.Target)); e == nil {
-				if !filepath.IsAbs(raw) {
-					raw = filepath.Join(l.GameRoot, filepath.Dir(a.Target), raw)
-				}
-				resolved, e := filepath.EvalSymlinks(raw)
-				base, be := filepath.EvalSymlinks(l.LibraryRoot)
-				owned = owned || (e == nil && be == nil && within(base, resolved))
 			}
 			if !owned {
 				owned, err = replaceableCreatedDirectory(l, a.Target, state, remove)
@@ -103,6 +113,8 @@ func preflightState(l Layout, plan DeploymentPlan, state DeploymentState) ([]Dep
 			if !owned {
 				return nil, collision(a.Target)
 			}
+		} else if os.IsNotExist(err) && isLink(filepath.Join(l.GameRoot, a.Target)) {
+			return nil, collision(a.Target)
 		} else if !os.IsNotExist(err) {
 			return nil, ioError(err)
 		}
@@ -169,20 +181,58 @@ func replaceableCreatedDirectory(l Layout, target string, state DeploymentState,
 }
 
 func Preflight(l Layout, plan DeploymentPlan) error {
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
 	state, e := LoadState(l)
 	if e != nil {
 		return e
 	}
-	if _, e = preflightState(l, plan, state); e != nil {
-		return e
+	return preflight(l, plan, state)
+}
+
+func preflight(l Layout, plan DeploymentPlan, state DeploymentState) error {
+	if _, err := preflightState(l, plan, state); err != nil {
+		return err
 	}
-	_, e = planPurge(l)
-	return e
+	_, err := planPurge(l)
+	return err
 }
 func Deploy(l Layout, plan DeploymentPlan) error {
-	return deploy(l, plan, nil)
+	release, err := acquireMutationLock(l)
+	if err != nil {
+		return ioError(fmt.Errorf("lock deployment mutations: %w", err))
+	}
+	defer release()
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
+	state, err := LoadState(l)
+	if err != nil {
+		return err
+	}
+	if _, err := preflightState(l, plan, state); err != nil {
+		return err
+	}
+	purgeLinks, err := planPurge(l)
+	if err != nil {
+		return err
+	}
+	intentToken, err := saveSyncIntent(l, plan, state, purgeLinks)
+	if err != nil {
+		return err
+	}
+	if err := deployWithBoundary(l, plan, nil, nil, nil, intentToken); err != nil {
+		return err
+	}
+	return clearSyncIntent(l, intentToken)
 }
-func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
+
+func deployWithBoundary(l Layout, plan DeploymentPlan, beforePersist, afterPublication, afterStateSave func() error, syncToken string) error {
+	return deployWithBoundaryAndStateWriter(l, plan, beforePersist, afterPublication, afterStateSave, syncToken, writeDeploymentState, nil)
+}
+
+func deployWithBoundaryAndStateWriter(l Layout, plan DeploymentPlan, beforePersist, afterPublication, afterStateSave func() error, syncToken string, stateWriter func(Layout, DeploymentState) error, duringStaging func() error) error {
 	state, e := LoadState(l)
 	if e != nil {
 		return e
@@ -195,6 +245,13 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 	if _, e = planPurge(l); e != nil {
 		return e
 	}
+	// Do the last foreign-target check before removing old owned artifacts or
+	// pruning their directories. Sync assumes no external mutation while it
+	// runs; the later check before link creation remains defense in depth.
+	if _, e := preflightState(l, plan, state); e != nil {
+		return e
+	}
+	mutatedDirs := map[string]bool{}
 	for _, a := range remove {
 		if !contained(l.GameRoot, a.Target, false) {
 			return collision(a.Target)
@@ -209,33 +266,27 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 		if e = os.Remove(filepath.Join(l.GameRoot, a.Target)); e != nil {
 			return ioError(e)
 		}
-	}
-	desired := map[string]bool{}
-	for _, d := range plan.Directories {
-		desired[d] = true
+		mutatedDirs[filepath.Dir(filepath.Join(l.GameRoot, a.Target))] = true
+		forgetLiveArtifact(l, a.Target)
 	}
 	created := map[string]bool{}
-	sort.Slice(state.CreatedDirs, func(i, j int) bool { return len(state.CreatedDirs[i]) > len(state.CreatedDirs[j]) })
-	for _, d := range state.CreatedDirs {
-		if desired[d] {
-			created[d] = true
+	// Persisted paths are not proof that a directory is still ours. Remove an
+	// empty directory only while its process-local object pin still matches.
+	desiredDirs := map[string]bool{}
+	for _, dir := range plan.Directories {
+		desiredDirs[pathKey(dir)] = true
+	}
+	for _, dir := range state.CreatedDirs {
+		if desiredDirs[pathKey(dir)] {
+			created[pathKey(dir)] = true
 			continue
 		}
-		if IsProtected(d, l.Rules) {
-			continue
+		removed, err := removePinnedDirectory(l, dir)
+		if err != nil {
+			return ioError(fmt.Errorf("remove owned deployment directory %q: %w", dir, err))
 		}
-		p := filepath.Join(l.GameRoot, d)
-		entries, e := os.ReadDir(p)
-		if os.IsNotExist(e) {
-			continue
-		}
-		if e != nil {
-			return ioError(e)
-		}
-		if len(entries) == 0 {
-			if e = os.Remove(p); e != nil {
-				return ioError(e)
-			}
+		if removed {
+			mutatedDirs[filepath.Dir(filepath.Join(l.GameRoot, dir))] = true
 		}
 	}
 	for _, d := range plan.Directories {
@@ -248,6 +299,10 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 			if e = os.Mkdir(p, 0755); e != nil {
 				return ioError(e)
 			}
+			if e = pinCreatedDirectory(l, d); e != nil {
+				return ioError(fmt.Errorf("pin created deployment directory %q: %w", d, e))
+			}
+			mutatedDirs[filepath.Dir(p)] = true
 			if !IsProtected(d, l.Rules) {
 				created[d] = true
 			}
@@ -255,13 +310,13 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 			return ioError(e)
 		}
 	}
-	for _, a := range plan.Artifacts {
+	for i := range plan.Artifacts {
+		a := plan.Artifacts[i]
 		target := filepath.Join(l.GameRoot, a.Target)
 		if !contained(l.GameRoot, a.Target, false) {
 			return collision(a.Target)
 		}
-		_, e := os.Lstat(target)
-		if e == nil {
+		if e := ensureAbsentTarget(target, a.Target); e != nil {
 			keep := false
 			for _, old := range state.Artifacts {
 				if equal(old, a) {
@@ -270,22 +325,64 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 						return ioError(err)
 					}
 					keep = ok
+					if keep {
+						plan.Artifacts[i] = old
+					}
 				}
 			}
 			if keep {
 				continue
 			}
-			return collision(a.Target)
-		}
-		if !os.IsNotExist(e) {
-			return ioError(e)
+			return e
 		}
 		source, ok := sourcePath(l, a.Source, true)
 		if !ok {
 			return collision(a.Source)
 		}
-		if e = linker.Create(source, target, a.Kind); e != nil {
+		stage := ""
+		if a.Kind == linker.Copy {
+			stage = filepath.Join(l.GameRoot, stagePathForTarget(l.GameRoot, a.Target, syncToken))
+		}
+		switch a.Kind {
+		case linker.Copy, linker.Hardlink:
+			e = linker.CreateWithPublicationBoundary(source, target, a.Kind, stage, captureLiveArtifact(l, a.Target), duringStaging)
+		case linker.Symlink, linker.Junction:
+			e = linker.Create(source, target, a.Kind)
+			if e == nil {
+				_, e = captureLivePathArtifact(l, a.Target)(target)
+			}
+		default:
+			e = invalid(l, "artifact kind has no safe publication method")
+		}
+		if e != nil {
 			return ioError(e)
+		}
+		if a.Kind == linker.Copy {
+			fingerprint, fingerprintErr := liveObjectFingerprint(l, a.Target)
+			if fingerprintErr != nil {
+				return ioError(fingerprintErr)
+			}
+			if a.Fingerprint != nil && fingerprint != *a.Fingerprint {
+				return collision(a.Target)
+			}
+			a.Fingerprint = &fingerprint
+		}
+		plan.Artifacts[i] = a
+		mutatedDirs[filepath.Dir(target)] = true
+		if afterPublication != nil {
+			if err := afterPublication(); err != nil {
+				return err
+			}
+		}
+	}
+	for _, dir := range sortedKeys(mutatedDirs) {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			dir = filepath.Dir(dir)
+		} else if err != nil {
+			return ioError(fmt.Errorf("inspect game directory after deployment mutation %q: %w", dir, err))
+		}
+		if err := syncDirectoryDurably(dir); err != nil {
+			return ioError(fmt.Errorf("sync game directory after deployment mutation %q: %w", dir, err))
 		}
 	}
 	if beforePersist != nil {
@@ -293,8 +390,26 @@ func deploy(l Layout, plan DeploymentPlan, beforePersist func() error) error {
 			return e
 		}
 	}
-	return SaveState(l, DeploymentState{Artifacts: plan.Artifacts, CreatedDirs: sortedKeys(created), Method: plan.Method, TargetRuntime: plan.TargetRuntime})
+	newState := DeploymentState{Artifacts: plan.Artifacts, CreatedDirs: sortedKeys(created), Method: plan.Method, TargetRuntime: plan.TargetRuntime}
+	newState.SyncToken = syncToken
+	stateContent := DeploymentState{Artifacts: state.Artifacts, CreatedDirs: state.CreatedDirs, Method: state.Method, TargetRuntime: state.TargetRuntime}
+	newStateContent := DeploymentState{Artifacts: newState.Artifacts, CreatedDirs: newState.CreatedDirs, Method: newState.Method, TargetRuntime: newState.TargetRuntime}
+	if reflect.DeepEqual(stateContent, newStateContent) {
+		newState.SyncToken = state.SyncToken
+		newState.Receipt = state.Receipt
+		newState.FileID = state.FileID
+	}
+	if !reflect.DeepEqual(state, newState) {
+		if err := stateWriter(l, newState); err != nil {
+			return err
+		}
+	}
+	if afterStateSave != nil {
+		return afterStateSave()
+	}
+	return nil
 }
+
 func DeployStale(l Layout, mods []models.Mod) (bool, error) {
 	state, e := LoadState(l)
 	if e != nil {
@@ -336,10 +451,33 @@ func SyncWithMethod(ctx context.Context, l Layout, mods []models.Mod, method mod
 }
 
 func SyncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter) (Report, error) {
-	return syncWithPolicy(ctx, l, mods, policy, progress, probeSymlinkConsumer)
+	return syncWithPolicyAndHooks(ctx, l, mods, policy, progress, probeSymlinkConsumer, nil, e2eSyncBoundary(), writeDeploymentState)
 }
 
 func syncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter, probeLink func(Layout) error) (Report, error) {
+	return syncWithPolicyAndHooks(ctx, l, mods, policy, progress, probeLink, nil, nil, writeDeploymentState)
+}
+
+func syncWithBoundary(ctx context.Context, l Layout, mods []models.Mod, progress Reporter, beforeTargetCheck func(string) error) (Report, error) {
+	return syncWithHooks(ctx, l, mods, progress, beforeTargetCheck, nil)
+}
+
+func syncWithHooks(ctx context.Context, l Layout, mods []models.Mod, progress Reporter, beforeTargetCheck func(string) error, boundary func(string) error) (Report, error) {
+	return syncWithHooksAndStateWriter(ctx, l, mods, progress, beforeTargetCheck, boundary, writeDeploymentState)
+}
+
+func syncWithHooksAndStateWriter(ctx context.Context, l Layout, mods []models.Mod, progress Reporter, beforeTargetCheck func(string) error, boundary func(string) error, stateWriter func(Layout, DeploymentState) error) (Report, error) {
+	return syncWithPolicyAndHooks(ctx, l, mods, models.DeploymentPolicy{
+		TargetRuntime: models.TargetWindows, DeploymentMethod: models.DeploymentMethodCopyFirst,
+	}, progress, probeSymlinkConsumer, beforeTargetCheck, boundary, stateWriter)
+}
+
+func syncWithPolicyAndHooks(ctx context.Context, l Layout, mods []models.Mod, policy models.DeploymentPolicy, progress Reporter, probeLink func(Layout) error, beforeTargetCheck func(string) error, boundary func(string) error, stateWriter func(Layout, DeploymentState) error) (Report, error) {
+	release, err := acquireMutationLock(l)
+	if err != nil {
+		return Report{}, ioError(fmt.Errorf("lock sync mutations: %w", err))
+	}
+	defer release()
 	stage := func(s models.TaskProgressStage) error {
 		if e := ctx.Err(); e != nil {
 			return e
@@ -348,6 +486,9 @@ func syncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy mod
 			progress.Progress(s, nil)
 		}
 		return nil
+	}
+	if e := recoverSyncIntent(l); e != nil {
+		return Report{}, e
 	}
 	if e := stage(models.TaskStageSyncPlan); e != nil {
 		return Report{}, e
@@ -422,19 +563,121 @@ func syncWithPolicy(ctx context.Context, l Layout, mods []models.Mod, policy mod
 	if e = stage(models.TaskStageSyncPreflight); e != nil {
 		return Report{}, e
 	}
-	if e = Preflight(l, plan); e != nil {
+	state, e := LoadState(l)
+	if e != nil {
 		return Report{}, e
+	}
+	if e = preflight(l, plan, state); e != nil {
+		return Report{}, e
+	}
+	if len(plan.Artifacts) == 0 && len(plan.Directories) == 0 && len(state.Artifacts) == 0 && len(state.CreatedDirs) == 0 && hasCompletedUnpinnedSyncJournal(l) {
+		if e := stage(models.TaskStageSyncCleanup); e != nil {
+			return Report{}, e
+		}
+		purgeLinks, purgeErr := planPurge(l)
+		if purgeErr != nil {
+			return Report{}, purgeErr
+		}
+		if len(purgeLinks) == 0 {
+			// No target or state mutation is needed. Leave restart-unproven
+			// deployment and Sync records untouched.
+			if e := stage(models.TaskStageSyncPersist); e != nil {
+				return Report{}, e
+			}
+			return Report{Failures: []ModFailure{}, Deployed: 0}, nil
+		}
+	}
+	if len(plan.Artifacts) == 0 && len(plan.Directories) == 0 && len(state.Artifacts) == 0 && len(state.CreatedDirs) == 0 {
+		if _, stateErr := os.Lstat(l.Paths().Deployment); os.IsNotExist(stateErr) {
+			purgeLinks, purgeErr := planPurge(l)
+			if purgeErr != nil {
+				return Report{}, purgeErr
+			}
+			if len(purgeLinks) == 0 {
+				if e := stage(models.TaskStageSyncCleanup); e != nil {
+					return Report{}, e
+				}
+				// Record that the empty transaction completed without creating an
+				// ownership file. A later process can safely begin a distinct Sync.
+				token, intentErr := saveSyncIntent(l, plan, state, purgeLinks)
+				if intentErr != nil {
+					return Report{}, intentErr
+				}
+				if err := clearSyncIntent(l, token); err != nil {
+					return Report{}, err
+				}
+				if e := stage(models.TaskStageSyncPersist); e != nil {
+					return Report{}, e
+				}
+				return Report{Failures: []ModFailure{}, Deployed: 0}, nil
+			}
+		} else if !os.IsNotExist(stateErr) && stateErr != nil {
+			return Report{}, ioError(fmt.Errorf("inspect deployment state after empty Sync plan: %w", stateErr))
+		}
+	}
+	if beforeTargetCheck != nil && len(plan.Artifacts) > 0 {
+		if e = beforeTargetCheck(filepath.Join(l.GameRoot, plan.Artifacts[0].Target)); e != nil {
+			return Report{}, e
+		}
+	}
+	// Recheck targets after preflight and before the recorded purge/deploy
+	// operations can remove any existing artifacts or directories.
+	if _, e = preflightState(l, plan, state); e != nil {
+		return Report{}, e
+	}
+	purgeLinks, e := planPurge(l)
+	if e != nil {
+		return Report{}, e
+	}
+	intentToken, intentErr := saveSyncIntent(l, plan, state, purgeLinks)
+	if intentErr != nil {
+		return Report{}, intentErr
+	}
+	if boundary != nil {
+		if e = boundary("intent-persisted"); e != nil {
+			return Report{}, e
+		}
 	}
 	if e = stage(models.TaskStageSyncCleanup); e != nil {
 		return Report{}, e
 	}
-	if e = Purge(l, deployable); e != nil {
+	if e = purge(l, nil); e != nil {
 		return Report{}, e
 	}
 	if e = stage(models.TaskStageSyncDeploy); e != nil {
 		return Report{}, e
 	}
-	if e = deploy(l, plan, func() error { return stage(models.TaskStageSyncPersist) }); e != nil {
+	if boundary != nil {
+		if e = boundary("pre-publication"); e != nil {
+			return Report{}, e
+		}
+	}
+	if e = deployWithBoundaryAndStateWriter(l, plan, func() error {
+		if boundary != nil {
+			if err := boundary("pre-state-save"); err != nil {
+				return err
+			}
+		}
+		return stage(models.TaskStageSyncPersist)
+	}, func() error {
+		if boundary != nil {
+			return boundary("post-publication")
+		}
+		return nil
+	}, func() error {
+		if boundary != nil {
+			return boundary("state-saved")
+		}
+		return nil
+	}, intentToken, stateWriter, func() error {
+		if boundary != nil {
+			return boundary("during-staging")
+		}
+		return nil
+	}); e != nil {
+		return Report{}, e
+	}
+	if e = clearSyncIntent(l, intentToken); e != nil {
 		return Report{}, e
 	}
 	return Report{Failures: failures, Deployed: len(plan.Artifacts)}, nil

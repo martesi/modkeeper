@@ -248,6 +248,12 @@ func TestDeletingACrossMajorLibraryRefusesAReplacedDeployment(t *testing.T) {
 func deploymentLayout(t *testing.T) deployment.Layout {
 	t.Helper()
 	game := t.TempDir()
+	t.Cleanup(func() {
+		if err := deployment.CloseLiveDeploymentStates(); err != nil {
+			t.Errorf("close deployment pins: %v", err)
+		}
+	})
+
 	must(t, os.MkdirAll(filepath.Join(game, "SPT", "user", "mods"), 0755))
 	writeFile(t, filepath.Join(game, "SPT", "SPT.Server.exe"), "exe")
 	writeFile(t, filepath.Join(game, "EscapeFromTarkov.exe"), "exe")

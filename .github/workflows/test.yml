@@ -102,6 +102,7 @@ jobs:
             go build -trimpath -o build/ci/modkeeper .
             # Wails Linux CGO support files otherwise link GTK/WebKit in server builds.
             CGO_ENABLED=0 go build -trimpath -tags server -o build/ci/modkeeper-server .
+            CGO_ENABLED=0 go build -trimpath -tags server,e2e -o build/ci/modkeeper-server-e2e .
           '
 
       - name: Smoke-test server mode
@@ -124,7 +125,7 @@ jobs:
       - name: Playwright real-server journeys
         run: |
           set -o pipefail
-          nix develop .#e2e -c bun run test:e2e:server 2>&1 | tee "$RUNNER_TEMP/e2e-server.log"
+          nix develop .#e2e -c bun run test:e2e:server --reporter=list 2>&1 | tee "$RUNNER_TEMP/e2e-server.log"
 
       - name: Upload Linux E2E diagnostics
         if: failure()
@@ -253,6 +254,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -trimpath -tags server -o build/ci/modkeeper-server.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -trimpath -tags server,e2e -o build/ci/modkeeper-server-e2e.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke-test server mode
         run: |
           $env:MODKEEPER_SERVER_PORT = '18080'
@@ -274,7 +277,7 @@ jobs:
         run: bunx playwright install chromium
       - name: Playwright real-server journeys
         run: |
-          bun run test:e2e:server 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/e2e-server.log"
+          bun run test:e2e:server --reporter=list 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/e2e-server.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows diagnostics
         if: failure()

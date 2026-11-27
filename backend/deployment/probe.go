@@ -44,10 +44,11 @@ func probeMethods(l Layout) (linker.ArtifactKind, linker.ArtifactKind, error) {
 		}
 		return "", last
 	}
-	fk, e := probe(file, filepath.Join(target, "file"), []linker.ArtifactKind{linker.Copy, linker.Symlink, linker.Hardlink})
+	// The runtime selector only advertises methods with safe publication paths.
+	fk, e := probe(file, filepath.Join(target, "file"), []linker.ArtifactKind{linker.Copy, linker.Hardlink})
 	if e != nil {
 		return "", "", e
 	}
-	dk, e := probe(directory, filepath.Join(target, "directory"), []linker.ArtifactKind{linker.Copy, linker.Symlink, linker.Junction})
+	dk, e := probe(directory, filepath.Join(target, "directory"), []linker.ArtifactKind{linker.Copy})
 	return fk, dk, e
 }

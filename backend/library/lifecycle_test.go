@@ -2,6 +2,7 @@ package library
 
 import (
 	"errors"
+	"github.com/martes/modkeeper/backend/deployment"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,12 @@ import (
 func newServiceFixture(t *testing.T) (*Service, *testenv.Env) {
 	t.Helper()
 	env := testenv.New(t)
+	t.Cleanup(func() {
+		if err := deployment.CloseLiveDeploymentStates(); err != nil {
+			t.Errorf("close deployment pins: %v", err)
+		}
+	})
+
 	if err := os.RemoveAll(env.LibraryRoot); err != nil {
 		t.Fatal(err)
 	}

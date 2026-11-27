@@ -62,6 +62,6 @@ func TestDeploymentErrorsUseTheWireContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := LoadState(l)
-		testenv.RequireInvalidLibraryPrefix(t, err, l.LibraryRoot, "deployment.toml: ")
+		testenv.RequireInvalidLibraryPrefix(t, err, l.LibraryRoot, "deployment-v2.toml: ")
 	})
 }

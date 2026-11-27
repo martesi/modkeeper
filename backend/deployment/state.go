@@ -2,6 +2,7 @@
 package deployment
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
@@ -19,10 +20,10 @@ type Layout struct {
 	LibraryRoot, GameRoot string
 	Rules                 spt.Rules
 }
-type Paths struct{ Mods, Staging, Backups, Manifest, Cache, Deployment string }
+type Paths struct{ Mods, Staging, Backups, Manifest, Cache, Deployment, SyncIntent string }
 
 func (l Layout) Paths() Paths {
-	return Paths{filepath.Join(l.LibraryRoot, "mods"), filepath.Join(l.LibraryRoot, "staging"), filepath.Join(l.LibraryRoot, "backups"), filepath.Join(l.LibraryRoot, "manifest.toml"), filepath.Join(l.LibraryRoot, "cache.toml"), filepath.Join(l.LibraryRoot, "deployment.toml")}
+	return Paths{filepath.Join(l.LibraryRoot, "mods"), filepath.Join(l.LibraryRoot, "staging"), filepath.Join(l.LibraryRoot, "backups"), filepath.Join(l.LibraryRoot, "manifest.toml"), filepath.Join(l.LibraryRoot, "cache.toml"), filepath.Join(l.LibraryRoot, "deployment-v2.toml"), filepath.Join(l.LibraryRoot, "sync-intent.toml")}
 }
 
 type DeploymentArtifact struct {
@@ -30,12 +31,17 @@ type DeploymentArtifact struct {
 	Source      string              `toml:"source"`
 	Kind        linker.ArtifactKind `toml:"kind"`
 	Fingerprint *string             `toml:"fingerprint,omitempty"`
+	FileID      string              `toml:"file_id,omitempty"`
+	Receipt     string              `toml:"receipt,omitempty"`
 }
 type DeploymentState struct {
 	Artifacts     []DeploymentArtifact    `toml:"artifacts"`
 	CreatedDirs   []string                `toml:"created_dirs"`
 	Method        models.DeploymentMethod `toml:"method,omitempty"`
 	TargetRuntime models.TargetRuntime    `toml:"target_runtime,omitempty"`
+	SyncToken     string                  `toml:"sync_token,omitempty"`
+	FileID        string                  `toml:"file_id,omitempty"`
+	Receipt       string                  `toml:"receipt,omitempty"`
 }
 type DeploymentPlan struct {
 	Artifacts     []DeploymentArtifact
@@ -81,6 +87,7 @@ func safeRelative(p string) bool {
 	}
 	return true
 }
+func pathKey(p string) string { return filepath.ToSlash(filepath.Clean(p)) }
 func within(base, path string) bool {
 	rel, err := filepath.Rel(base, path)
 	return err == nil && (rel == "." || safeRelative(rel))
@@ -136,39 +143,29 @@ func sourcePath(l Layout, rel string, existing bool) (string, bool) {
 		check = filepath.Dir(check)
 	}
 }
+
+func isLink(path string) bool {
+	_, err := os.Readlink(path)
+	return err == nil
+}
 func fingerprint(p string) (string, error) {
 	f, e := os.Open(p)
 	if e != nil {
 		return "", e
 	}
 	defer f.Close()
+	return fingerprintFile(f)
+}
+
+func fingerprintFile(f *os.File) (string, error) {
 	h := blake3.New()
-	if _, e = io.Copy(h, f); e != nil {
+	if _, e := f.Seek(0, io.SeekStart); e != nil {
+		return "", e
+	}
+	if _, e := io.Copy(h, f); e != nil {
 		return "", e
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-func sameContents(a, b string) (bool, error) {
-	ma, e := os.Stat(a)
-	if os.IsNotExist(e) {
-		return false, nil
-	}
-	if e != nil {
-		return false, e
-	}
-	mb, e := os.Stat(b)
-	if e != nil {
-		return false, e
-	}
-	if !ma.Mode().IsRegular() || !mb.Mode().IsRegular() || ma.Size() != mb.Size() {
-		return false, nil
-	}
-	ha, e := fingerprint(a)
-	if e != nil {
-		return false, e
-	}
-	hb, e := fingerprint(b)
-	return ha == hb, e
 }
 func linkMatches(source, target string) bool {
 	raw, e := os.Readlink(target)
@@ -192,32 +189,22 @@ func recorded(l Layout, a DeploymentArtifact) (bool, error) {
 	if !contained(l.GameRoot, a.Target, false) {
 		return false, nil
 	}
-	source, ok := sourcePath(l, a.Source, false)
+	_, ok := sourcePath(l, a.Source, false)
 	if !ok {
 		return false, nil
 	}
 	target := filepath.Join(l.GameRoot, a.Target)
-	m, e := os.Lstat(target)
+	_, e := os.Lstat(target)
 	if os.IsNotExist(e) {
 		return false, nil
 	}
 	if e != nil {
 		return false, e
 	}
-	switch a.Kind {
-	case linker.Symlink, linker.Junction:
-		return linkMatches(source, target), nil
-	case linker.Hardlink:
-		sm, e := os.Stat(source)
-		return e == nil && m.Mode().IsRegular() && os.SameFile(sm, m), nil
-	case linker.Copy:
-		if !m.Mode().IsRegular() || a.Fingerprint == nil {
-			return false, nil
-		}
-		h, e := fingerprint(target)
-		return e == nil && h == *a.Fingerprint, e
+	if live, liveErr := liveArtifactMatches(l, a, target); liveErr != nil || live {
+		return live, liveErr
 	}
-	return false, nil
+	return verifyOwnershipReceipt(l, a, target), nil
 }
 func current(l Layout, a DeploymentArtifact) (bool, error) {
 	ok, e := recorded(l, a)
@@ -231,21 +218,46 @@ func current(l Layout, a DeploymentArtifact) (bool, error) {
 	if a.Kind == linker.Symlink || a.Kind == linker.Junction {
 		return true, nil
 	}
-	return sameContents(source, filepath.Join(l.GameRoot, a.Target))
+	sourceFingerprint, err := fingerprint(source)
+	if err != nil {
+		return false, err
+	}
+	targetFingerprint, err := fingerprint(filepath.Join(l.GameRoot, a.Target))
+	return err == nil && sourceFingerprint == targetFingerprint, err
 }
 func equal(a, b DeploymentArtifact) bool {
-	return a.Target == b.Target && a.Source == b.Source && a.Kind == b.Kind && ((a.Fingerprint == nil && b.Fingerprint == nil) || (a.Fingerprint != nil && b.Fingerprint != nil && *a.Fingerprint == *b.Fingerprint))
+	return pathKey(a.Target) == pathKey(b.Target) && pathKey(a.Source) == pathKey(b.Source) && a.Kind == b.Kind && ((a.Fingerprint == nil && b.Fingerprint == nil) || (a.Fingerprint != nil && b.Fingerprint != nil && *a.Fingerprint == *b.Fingerprint))
 }
 func LoadState(l Layout) (DeploymentState, error) {
-	state := DeploymentState{Artifacts: []DeploymentArtifact{}, CreatedDirs: []string{}}
-	_, e := toml.DecodeFile(l.Paths().Deployment, &state)
+	var state DeploymentState
+	path := l.Paths().Deployment
+	info, e := os.Lstat(path)
 	if os.IsNotExist(e) {
-		return state, nil
+		return DeploymentState{Artifacts: []DeploymentArtifact{}, CreatedDirs: []string{}}, checkLegacyDeployment(l)
 	}
 	if e != nil {
-		return state, invalid(l, "deployment.toml: "+e.Error())
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
 	}
-	migrated := false
+	if !info.Mode().IsRegular() {
+		return state, invalid(l, "deployment-v2.toml is not a regular file")
+	}
+	data, e := os.ReadFile(path)
+	if e != nil {
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
+	}
+	if _, e = toml.Decode(string(data), &state); e != nil {
+		return state, invalid(l, "deployment-v2.toml: "+e.Error())
+	}
+	canonical, e := encodeDeploymentState(state)
+	if e != nil || !bytes.Equal(data, canonical) {
+		return state, collision(path)
+	}
+	// A present record is not proof of a completed upgrade. Reject foreign,
+	// partial or replaced v2 metadata before any planner or purge can use it.
+	id, err := fileIdentity(path)
+	if err != nil || state.FileID != id || !verifyDeploymentStateReceipt(l, state) {
+		return state, collision(path)
+	}
 	for i, p := range state.CreatedDirs {
 		if filepath.IsAbs(p) && within(l.GameRoot, p) {
 			rel, _ := filepath.Rel(l.GameRoot, p)
@@ -254,40 +266,23 @@ func LoadState(l Layout) (DeploymentState, error) {
 			}
 		}
 	}
-	for i, a := range state.Artifacts {
-		if a.Kind != linker.Copy || a.Fingerprint != nil || !contained(l.GameRoot, a.Target, false) {
-			continue
-		}
-		source, ok := sourcePath(l, a.Source, true)
-		if !ok {
-			continue
-		}
-		target := filepath.Join(l.GameRoot, a.Target)
-		m, e := os.Lstat(target)
-		if e != nil || !m.Mode().IsRegular() {
-			continue
-		}
-		ok, e = sameContents(source, target)
-		if e != nil {
-			return state, ioError(e)
-		}
-		if ok {
-			h, e := fingerprint(target)
-			if e != nil {
-				return state, ioError(e)
-			}
-			state.Artifacts[i].Fingerprint = &h
-			migrated = true
-		}
-	}
-	if migrated {
-		if e := SaveState(l, state); e != nil {
-			return state, e
-		}
-	}
 	return state, nil
 }
-func SaveState(l Layout, state DeploymentState) error { return writeTOML(l.Paths().Deployment, state) }
+func SaveState(l Layout, state DeploymentState) error {
+	release, err := acquireMutationLock(l)
+	if err != nil {
+		return ioError(fmt.Errorf("lock deployment state mutation: %w", err))
+	}
+	defer release()
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
+	return saveState(l, state)
+}
+
+func saveState(l Layout, state DeploymentState) error {
+	return writeDeploymentState(l, state)
+}
 func writeTOML(path string, value any) error {
 	f, e := os.CreateTemp(filepath.Dir(path), ".deployment-write-")
 	if e != nil {
@@ -306,40 +301,39 @@ func writeTOML(path string, value any) error {
 	if e == nil {
 		e = os.Rename(name, path)
 	}
+	if e == nil {
+		e = syncDirectoryDurably(filepath.Dir(path))
+	}
 	return ioError(e)
 }
 
 // VerifyOwnership checks that every recorded artifact still matches the state
 // the library owns. A replaced or missing artifact blocks destructive deletes.
 func VerifyOwnership(l Layout) error {
+	release, lockErr := acquireMutationLock(l)
+	if lockErr != nil {
+		return ioError(fmt.Errorf("lock ownership verification: %w", lockErr))
+	}
+	defer release()
+	if err := CheckNoPendingSync(l); err != nil {
+		return err
+	}
+	return verifyOwnership(l)
+}
+
+func verifyOwnership(l Layout) error {
 	state, err := LoadState(l)
 	if err != nil {
 		return err
 	}
 	for _, artifact := range state.Artifacts {
 		target := resolveRecorded(l.GameRoot, artifact.Target)
-		source := resolveRecorded(l.LibraryRoot, artifact.Source)
-		info, statErr := os.Lstat(target)
-		if statErr != nil {
-			return models.Fail("FileOrDirectoryNotFound", target)
+		owned, ownershipErr := recorded(l, artifact)
+		if ownershipErr != nil {
+			return ioError(ownershipErr)
 		}
-		switch artifact.Kind {
-		case linker.Symlink:
-			if info.Mode()&os.ModeSymlink == 0 {
-				return models.Fail("InvalidLibrary", target, "recorded symlink was replaced")
-			}
-			linkTarget, linkErr := os.Readlink(target)
-			if linkErr != nil || filepath.Clean(linkTarget) != filepath.Clean(source) {
-				return models.Fail("InvalidLibrary", target, "symlink target changed")
-			}
-		case linker.Copy:
-			if artifact.Fingerprint == nil {
-				return models.Fail("InvalidLibrary", target, "unverifiable copy")
-			}
-			current, hashErr := fingerprint(target)
-			if hashErr != nil || current != *artifact.Fingerprint {
-				return models.Fail("InvalidLibrary", target, "deployed file changed")
-			}
+		if !owned {
+			return models.Fail("InvalidLibrary", target, "artifact ownership is not pinned in this process")
 		}
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 	"github.com/martes/modkeeper/backend/spt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,11 @@ func fixture(t *testing.T) Layout {
 	t.Helper()
 	root := t.TempDir()
 	l := Layout{LibraryRoot: filepath.Join(root, "repo"), GameRoot: filepath.Join(root, "game")}
+	t.Cleanup(func() {
+		if err := releasePinsForMissingLibrary(l); err != nil {
+			t.Errorf("release live deployment state: %v", err)
+		}
+	})
 	for _, p := range []string{l.LibraryRoot, l.GameRoot, l.Paths().Mods, l.Paths().Staging, l.Paths().Backups} {
 		must(t, os.MkdirAll(p, 0755))
 	}
@@ -24,6 +30,93 @@ func fixture(t *testing.T) Layout {
 	must(t, e)
 	return l
 }
+
+func TestCloseLiveDeploymentStatesClosesPinnedFiles(t *testing.T) {
+	l := fixture(t)
+	l.LibraryRoot = filepath.Join(t.TempDir(), "alternate-library")
+	must(t, os.MkdirAll(l.LibraryRoot, 0755))
+	t.Cleanup(func() {
+		if err := releaseLiveDeploymentState(l); err != nil {
+			t.Errorf("release live deployment state: %v", err)
+		}
+	})
+	if err := saveState(l, DeploymentState{Artifacts: []DeploymentArtifact{}, CreatedDirs: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := CloseLiveDeploymentStates(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(l.Paths().Deployment); err != nil {
+		t.Fatalf("remove state file after releasing its live pin: %v", err)
+	}
+}
+
+func TestReleaseLibraryPinsIsScopedAndKeepsOtherLibraryPins(t *testing.T) {
+	first := fixture(t)
+	second := fixture(t)
+	firstMod := mod(t, first, "first", map[string]string{"BepInEx/plugins/first.dll": "first"})
+	secondMod := mod(t, second, "second", map[string]string{"BepInEx/plugins/second.dll": "second"})
+	syncMods(t, first, firstMod)
+	syncMods(t, second, secondMod)
+	if err := ReleaseLibraryPins(first); err != nil {
+		t.Fatal(err)
+	}
+	if owned, err := verifyLiveDeploymentState(first); err != nil || owned {
+		t.Fatalf("released state ownership = (%v, %v), want false", owned, err)
+	}
+	if owned, err := verifyLiveDeploymentState(second); err != nil || !owned {
+		t.Fatalf("other library state ownership = (%v, %v), want true", owned, err)
+	}
+	if owned, err := liveObjectMatches(first, DeploymentArtifact{Target: "BepInEx/plugins/first.dll"}, filepath.Join(first.GameRoot, "BepInEx/plugins/first.dll")); err != nil || owned {
+		t.Fatalf("released artifact pin = (%v, %v), want false", owned, err)
+	}
+	if owned, err := liveObjectMatches(second, DeploymentArtifact{Target: "BepInEx/plugins/second.dll"}, filepath.Join(second.GameRoot, "BepInEx/plugins/second.dll")); err != nil || !owned {
+		t.Fatalf("other artifact pin = (%v, %v), want true", owned, err)
+	}
+	if liveSyncJournalFor(first.Paths().SyncIntent) != nil {
+		t.Fatal("released library retained a journal pin")
+	}
+	if liveSyncJournalFor(second.Paths().SyncIntent) == nil {
+		t.Fatal("release closed another library's journal pin")
+	}
+	if err := ReleaseLibraryPins(second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleaseLibraryPinsRefusesAnActiveSyncTransaction(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "active", map[string]string{"BepInEx/plugins/active.dll": "payload"})
+	_, err := syncWithHooks(context.Background(), l, []models.Mod{m}, nil, nil, func(boundary string) error {
+		if boundary == "pre-publication" {
+			return errors.New("interrupt before publication")
+		}
+		return nil
+	})
+	if err == nil {
+		t.Fatal("interrupted Sync unexpectedly succeeded")
+	}
+	if err := ReleaseLibraryPins(l); err == nil {
+		t.Fatal("released pins while a Sync transaction was pending")
+	}
+	if liveSyncJournalFor(l.Paths().SyncIntent) == nil {
+		t.Fatal("pending transaction journal pin was released")
+	}
+	key := syncJournalKey(l.Paths().SyncIntent)
+	liveSyncJournals.Lock()
+	journal := liveSyncJournals.byPath[key]
+	delete(liveSyncJournals.byPath, key)
+	liveSyncJournals.Unlock()
+	if journal != nil {
+		if err := journal.object.close(); err != nil {
+			t.Error(err)
+		}
+		if err := journal.file.Close(); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
 func must(t *testing.T, e error) {
 	t.Helper()
 	if e != nil {
@@ -76,19 +169,44 @@ func TestCollisionDetection(t *testing.T) {
 	code(t, e, "FileCollision")
 	absent(t, filepath.Join(l.GameRoot, "BepInEx"))
 }
-func testRecursiveLinkingLogic(t *testing.T) {
+func testRecursiveDeploymentLogic(t *testing.T) {
 	l := fixture(t)
 	a := mod(t, l, "a", map[string]string{"SPT/user/mods/CommonDir/A.txt": "a"})
 	b := mod(t, l, "b", map[string]string{"SPT/user/mods/CommonDir/B.txt": "b"})
-	p, e := PlanWithKinds([]models.Mod{a, b}, l, linker.Symlink, linker.Symlink)
+	p, e := PlanWithKinds([]models.Mod{a, b}, l, linker.Copy, linker.Copy)
 	must(t, e)
 	must(t, Deploy(l, p))
 	for _, name := range []string{"A.txt", "B.txt"} {
 		info, e := os.Lstat(filepath.Join(l.GameRoot, "SPT/user/mods/CommonDir", name))
 		must(t, e)
-		if info.Mode()&os.ModeSymlink == 0 {
-			t.Fatal("expected file links in shared real directory")
+		if info.Mode()&os.ModeSymlink != 0 {
+			t.Fatal("copy deployment unexpectedly created a symlink")
 		}
+	}
+}
+
+func TestDeploymentPublishesSymlinkWithoutReplacingTargets(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "source"})
+	plan, err := PlanWithKinds([]models.Mod{m}, l, linker.Symlink, linker.Symlink)
+	must(t, err)
+	must(t, Deploy(l, plan))
+	target := filepath.Join(l.GameRoot, "SPT/user/mods/A")
+	if info, err := os.Lstat(target); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("target is not a published symlink: info=%v err=%v", info, err)
+	}
+	content(t, filepath.Join(target, "file"), "source")
+}
+
+func TestRuntimeProbeSelectsOnlySafePublicationKinds(t *testing.T) {
+	l := fixture(t)
+	fileKind, directoryKind, err := probeMethods(l)
+	must(t, err)
+	if fileKind != linker.Copy && fileKind != linker.Hardlink {
+		t.Fatalf("file probe selected unsafe publication kind %q", fileKind)
+	}
+	if directoryKind != linker.Copy {
+		t.Fatalf("directory probe selected unsupported publication kind %q", directoryKind)
 	}
 }
 func TestPurgeRemovesDeactivatedMods(t *testing.T) {
@@ -97,7 +215,14 @@ func TestPurgeRemovesDeactivatedMods(t *testing.T) {
 	syncMods(t, l, m)
 	m.Enabled = false
 	syncMods(t, l, m)
-	absent(t, filepath.Join(l.GameRoot, "SPT/user/mods/A"))
+	modDir := filepath.Join(l.GameRoot, "SPT/user/mods/A")
+	entries, err := os.ReadDir(modDir)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err == nil && len(entries) != 0 {
+		t.Fatalf("deactivated mod directory is not empty: %v", entries)
+	}
 	content(t, filepath.Join(l.Paths().Mods, "a/SPT/user/mods/A/file"), "a")
 	s, e := LoadState(l)
 	must(t, e)
@@ -128,7 +253,7 @@ func testCopyDeploymentReusesOwnedDirectoriesAndNormalizesLegacyPaths(t *testing
 		}
 	}
 }
-func testLegacyCopyDeploymentFingerprintsAreMigratedOnLoad(t *testing.T) {
+func testLegacyCopyDeploymentFingerprintsAreNotAdoptedOnLoad(t *testing.T) {
 	l := fixture(t)
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	syncMods(t, l, m)
@@ -141,11 +266,12 @@ func testLegacyCopyDeploymentFingerprintsAreMigratedOnLoad(t *testing.T) {
 	s, e = LoadState(l)
 	must(t, e)
 	for _, a := range s.Artifacts {
-		if a.Fingerprint == nil || len(*a.Fingerprint) != 64 {
-			t.Fatal(a)
+		if a.Fingerprint != nil {
+			t.Fatalf("legacy copy was adopted from matching bytes: %#v", a)
 		}
 	}
-	syncMods(t, l, m)
+	_, e = Sync(context.Background(), l, []models.Mod{m}, nil)
+	code(t, e, "FileCollision")
 }
 func testCopyDeploymentMergesIntoExistingGameDirectory(t *testing.T) {
 	l := fixture(t)
@@ -169,6 +295,53 @@ func testUnownedDeploymentTargetIsPreservedAndBlocksSync(t *testing.T) {
 	_, e := Sync(context.Background(), l, []models.Mod{m}, nil)
 	code(t, e, "FileCollision")
 	content(t, filepath.Join(l.GameRoot, "SPT/user/mods/A/keep"), "user")
+}
+
+func TestSameByteReplacementIsNotAdoptedByRecordedDeploymentState(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "identical bytes"})
+	syncMods(t, l, m)
+	target := filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll")
+	stateBefore, err := os.ReadFile(l.Paths().Deployment)
+	must(t, err)
+	must(t, os.Remove(target))
+	write(t, target, "identical bytes")
+	_, err = Sync(context.Background(), l, []models.Mod{m}, nil)
+	code(t, err, "FileCollision")
+	content(t, target, "identical bytes")
+	stateAfter, err := os.ReadFile(l.Paths().Deployment)
+	must(t, err)
+	if string(stateAfter) != string(stateBefore) {
+		t.Fatal("same-byte replacement changed persisted deployment state")
+	}
+}
+
+func TestLiveOwnershipPinRejectsSameAndDifferentByteMetadataClones(t *testing.T) {
+	for _, replacement := range []string{"original bytes", "different bytes"} {
+		t.Run(replacement, func(t *testing.T) {
+			l := fixture(t)
+			m := mod(t, l, "a", map[string]string{"BepInEx/plugins/a.dll": "original bytes"})
+			syncMods(t, l, m)
+			target := filepath.Join(l.GameRoot, "BepInEx/plugins/a.dll")
+			originalInfo, err := os.Stat(target)
+			must(t, err)
+			stateBefore, err := os.ReadFile(l.Paths().Deployment)
+			must(t, err)
+			must(t, os.Remove(target))
+			write(t, target, replacement)
+			must(t, os.Chmod(target, originalInfo.Mode().Perm()))
+			must(t, os.Chtimes(target, originalInfo.ModTime(), originalInfo.ModTime()))
+
+			_, err = Sync(context.Background(), l, []models.Mod{m}, nil)
+			code(t, err, "FileCollision")
+			content(t, target, replacement)
+			stateAfter, err := os.ReadFile(l.Paths().Deployment)
+			must(t, err)
+			if string(stateAfter) != string(stateBefore) {
+				t.Fatal("replacement changed deployment state")
+			}
+		})
+	}
 }
 func testUntrackedFileSafetyInSharedFolder(t *testing.T) {
 	l := fixture(t)
@@ -245,6 +418,7 @@ func TestRemovingAModRefusesADeploymentPathRedirectedWithinTheGameRoot(t *testin
 	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "a"})
 	syncMods(t, l, m)
 	p := filepath.Join(l.GameRoot, "SPT/user/mods/A")
+	forgetLiveArtifact(l, "SPT/user/mods/A/file")
 	must(t, os.Rename(p, p+"-old"))
 	other := filepath.Join(l.GameRoot, "other")
 	write(t, filepath.Join(other, "file"), "foreign")
@@ -262,9 +436,13 @@ func testSyncRefusesRedirectedRecordedDirectoriesWhenArtifactsAreMissing(t *test
 	syncMods(t, l, m)
 	s, e := LoadState(l)
 	must(t, e)
+	for _, artifact := range s.Artifacts {
+		forgetLiveArtifact(l, artifact.Target)
+	}
 	s.Artifacts = nil
 	must(t, SaveState(l, s))
 	p := filepath.Join(l.GameRoot, "SPT/user/mods/A")
+	must(t, releaseLiveArtifactsForLibrary(l))
 	must(t, os.Rename(p, p+"-old"))
 	outside := t.TempDir()
 	must(t, os.Symlink(outside, p))
@@ -292,6 +470,216 @@ func TestDurableRecordsRoundTrip(t *testing.T) {
 		t.Fatal(string(data))
 	}
 }
+
+func TestWindowsReconcilesLegacyBackslashCopyState(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("legacy native-separator state is Windows-specific")
+	}
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "owned"})
+	plan, err := PlanWithKinds([]models.Mod{m}, l, linker.Copy, linker.Copy)
+	must(t, err)
+	must(t, Deploy(l, plan))
+
+	state, err := LoadState(l)
+	must(t, err)
+	if len(state.CreatedDirs) == 0 {
+		t.Fatal("expected the copy deployment to record created directories")
+	}
+	for i := range state.Artifacts {
+		state.Artifacts[i].Target = filepath.FromSlash(state.Artifacts[i].Target)
+		state.Artifacts[i].Source = filepath.FromSlash(state.Artifacts[i].Source)
+	}
+	for i := range state.CreatedDirs {
+		state.CreatedDirs[i] = filepath.FromSlash(state.CreatedDirs[i])
+	}
+	legacyDirs := append([]string(nil), state.CreatedDirs...)
+	if !strings.Contains(strings.Join(legacyDirs, ""), `\`) {
+		t.Fatalf("expected native backslashes in legacy directories: %#v", legacyDirs)
+	}
+	must(t, SaveState(l, state))
+
+	target := filepath.Join(l.GameRoot, filepath.FromSlash(plan.Artifacts[0].Target))
+	write(t, target, "foreign replacement")
+	code(t, Preflight(l, plan), "FileCollision")
+	content(t, target, "foreign replacement")
+	write(t, target, "owned")
+	must(t, Preflight(l, plan))
+	must(t, Deploy(l, plan))
+	content(t, target, "owned")
+	state, err = LoadState(l)
+	must(t, err)
+	for _, legacyDir := range legacyDirs {
+		if !containsPath(state.CreatedDirs, legacyDir) {
+			t.Fatalf("created directory %q was lost after reconciliation: %#v", legacyDir, state.CreatedDirs)
+		}
+		if _, err := os.Stat(filepath.Join(l.GameRoot, legacyDir)); err != nil {
+			t.Fatalf("created directory %q disappeared: %v", legacyDir, err)
+		}
+	}
+
+	wantForeign := "do not adopt"
+	write(t, target, wantForeign)
+	code(t, Preflight(l, plan), "FileCollision")
+	content(t, target, wantForeign)
+
+	state, err = LoadState(l)
+	must(t, err)
+	for i := range state.Artifacts {
+		state.Artifacts[i].Target = filepath.FromSlash(state.Artifacts[i].Target)
+		state.Artifacts[i].Source = filepath.FromSlash(state.Artifacts[i].Source)
+	}
+	for i := range state.CreatedDirs {
+		state.CreatedDirs[i] = filepath.FromSlash(state.CreatedDirs[i])
+	}
+	// Restore the known bytes before sealing the legacy-path record. Saving
+	// while the contents are foreign correctly drops the artifact's receipt.
+	write(t, target, "owned")
+	must(t, SaveState(l, state))
+	// No live directory identity survives a restart of a legacy deployment.
+	must(t, releaseLiveArtifactsForLibrary(l))
+	state, err = LoadState(l)
+	must(t, err)
+	if !verifyOwnershipReceipt(l, state.Artifacts[0], target) {
+		t.Fatal("legacy-path copy did not retain valid durable ownership")
+	}
+	must(t, Deploy(l, DeploymentPlan{}))
+	absent(t, target)
+	state, err = LoadState(l)
+	must(t, err)
+	if len(state.Artifacts) != 0 || len(state.CreatedDirs) != 0 {
+		t.Fatalf("cleanup retained deployment ownership: %+v", state)
+	}
+	leafDir := filepath.Dir(filepath.FromSlash(plan.Artifacts[0].Target))
+	if !containsPath(legacyDirs, leafDir) {
+		t.Fatalf("expected created leaf directory %q in legacy records: %#v", leafDir, legacyDirs)
+	}
+	if info, err := os.Lstat(filepath.Join(l.GameRoot, leafDir)); err != nil || !info.IsDir() {
+		t.Fatalf("ambiguous empty directory was not preserved after cleanup: %q (%v)", leafDir, err)
+	}
+}
+
+func TestPreflightRefusesRecordedDanglingLink(t *testing.T) {
+	l, root, _ := purgeFixture(t)
+	source := filepath.Join(l.Paths().Mods, "a", "SPT", "user", "mods", "A", "file")
+	write(t, source, "library source")
+	link := filepath.Join(root, "A", "file")
+	must(t, os.MkdirAll(filepath.Dir(link), 0755))
+	danglingTarget := filepath.Join(t.TempDir(), "missing-target")
+	must(t, os.Symlink(danglingTarget, link))
+	must(t, SaveState(l, DeploymentState{
+		Artifacts: []DeploymentArtifact{{
+			Target: filepath.ToSlash(filepath.Join(l.Rules.ServerMods, "A", "file")),
+			Source: filepath.ToSlash(filepath.Join("a", "SPT", "user", "mods", "A", "file")),
+			Kind:   linker.Symlink,
+		}},
+		CreatedDirs: []string{filepath.ToSlash(filepath.Join(l.Rules.ServerMods, "A"))},
+	}))
+
+	code(t, Preflight(l, DeploymentPlan{}), "FileCollision")
+	must(t, Purge(l, nil))
+	got, err := os.Readlink(link)
+	must(t, err)
+	if got != danglingTarget {
+		t.Fatalf("dangling link target changed: got %q, want %q", got, danglingTarget)
+	}
+	absent(t, danglingTarget)
+}
+
+func TestDeployRefusesUnrecordedDanglingLink(t *testing.T) {
+	l := fixture(t)
+	m := mod(t, l, "a", map[string]string{"SPT/user/mods/A/file": "library"})
+	plan, err := PlanWithKinds([]models.Mod{m}, l, linker.Copy, linker.Copy)
+	must(t, err)
+	target := filepath.Join(l.GameRoot, filepath.FromSlash(plan.Artifacts[0].Target))
+	must(t, os.MkdirAll(filepath.Dir(target), 0755))
+	danglingTarget := filepath.Join(t.TempDir(), "missing-target")
+	must(t, os.Symlink(danglingTarget, target))
+
+	if runtime.GOOS == "windows" {
+		if _, err := os.Lstat(target); err == nil {
+			t.Skip("Windows Lstat exposes dangling links directly")
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat dangling Windows link: %v", err)
+		}
+		if !isLink(target) {
+			t.Fatal("Readlink fallback did not detect the dangling Windows link")
+		}
+		info, kind, err := inspectLink(target)
+		if err != nil || info == nil || kind != linker.Symlink {
+			t.Fatalf("reparse-point inspection = (%v, %q, %v), want a symlink", info, kind, err)
+		}
+	}
+	code(t, ensureAbsentTarget(target, plan.Artifacts[0].Target), "FileCollision")
+	code(t, Deploy(l, plan), "FileCollision")
+	got, err := os.Readlink(target)
+	must(t, err)
+	if got != danglingTarget {
+		t.Fatalf("dangling link changed: got %q, want %q", got, danglingTarget)
+	}
+}
+
+func TestSyncPostPreflightCollisionPreservesExistingDeploymentAndState(t *testing.T) {
+	l := fixture(t)
+	oldMod := mod(t, l, "old", map[string]string{"SPT/user/mods/Old/file.dll": "old contents"})
+	syncMods(t, l, oldMod)
+	oldTarget := filepath.Join(l.GameRoot, "SPT/user/mods/Old/file.dll")
+	state, err := LoadState(l)
+	must(t, err)
+	if len(state.Artifacts) == 0 || len(state.CreatedDirs) == 0 {
+		t.Fatalf("initial Sync did not record an artifact and created directories: %+v", state)
+	}
+	stateBefore, err := os.ReadFile(l.Paths().Deployment)
+	must(t, err)
+	compatSource := filepath.Join(l.Paths().Mods, "legacy", "compat.txt")
+	write(t, compatSource, "legacy source")
+	compatLink := filepath.Join(l.GameRoot, "SPT/user/mods/Legacy/compat.txt")
+	must(t, os.MkdirAll(filepath.Dir(compatLink), 0755))
+	must(t, os.Symlink(compatSource, compatLink))
+	newMod := mod(t, l, "new", map[string]string{"SPT/user/mods/New/file.dll": "new contents"})
+	foreignTarget := filepath.Join(t.TempDir(), "foreign-missing-target")
+	var inserted string
+	_, err = syncWithBoundary(context.Background(), l, []models.Mod{newMod}, nil, func(path string) error {
+		inserted = path
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		return os.Symlink(foreignTarget, path)
+	})
+	code(t, err, "FileCollision")
+	got, err := os.Readlink(inserted)
+	must(t, err)
+	if got != foreignTarget {
+		t.Fatalf("inserted link target = %q, want %q", got, foreignTarget)
+	}
+	compatGot, err := os.Readlink(compatLink)
+	must(t, err)
+	if compatGot != compatSource {
+		t.Fatalf("purgeable compatibility link changed: got %q, want %q", compatGot, compatSource)
+	}
+	content(t, oldTarget, "old contents")
+	for _, dir := range state.CreatedDirs {
+		info, err := os.Stat(filepath.Join(l.GameRoot, dir))
+		if err != nil || !info.IsDir() {
+			t.Fatalf("pre-existing created directory %q was not preserved: %v", dir, err)
+		}
+	}
+	stateAfter, err := os.ReadFile(l.Paths().Deployment)
+	must(t, err)
+	if string(stateAfter) != string(stateBefore) {
+		t.Fatalf("deployment state changed after target collision: before %q, after %q", stateBefore, stateAfter)
+	}
+}
+
+func containsPath(paths []string, target string) bool {
+	for _, path := range paths {
+		if pathKey(path) == pathKey(target) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRuntimeTargetResolution(t *testing.T) {
 	l := fixture(t)
 	l.Rules.ServerExe = "SPT_Runtime/SPT.Server.exe"

@@ -1275,6 +1275,12 @@ func TestAppSurfaceEndToEnd(t *testing.T) {
 	env := testenv.New(t)
 	sink := &captureSink{}
 	app := NewAppAt(filepath.Join(t.TempDir(), "config.toml"))
+	t.Cleanup(func() {
+		if err := deployment.CloseLiveDeploymentStates(); err != nil {
+			t.Errorf("close deployment pins: %v", err)
+		}
+	})
+
 	if app.InitErr != nil {
 		t.Fatalf("NewAppAt: %v", app.InitErr)
 	}

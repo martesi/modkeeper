@@ -2,6 +2,7 @@ package library
 
 import (
 	"archive/zip"
+	"github.com/martes/modkeeper/backend/deployment"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,12 @@ import (
 // remove the mod and reconcile the deployment away.
 func TestSpt416ImportsDeploysAndRemovesMods(t *testing.T) {
 	env := testenv.New(t)
+	t.Cleanup(func() {
+		if err := deployment.CloseLiveDeploymentStates(); err != nil {
+			t.Errorf("close deployment pins: %v", err)
+		}
+	})
+
 	svc, err := New(filepath.Join(env.Root, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
